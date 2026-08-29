@@ -1,87 +1,223 @@
 # Roadmap: Relationship Microscope (этапы 0–5) и дальше
 
-Первый MVP — не breakup-app и не couples-app, а общий исследовательский инструмент: **Relationship Microscope**. Ретроспективные (ex) данные выбраны как test bench, existing couples — как долгосрочный бизнес. Обоснование выбора и поправки — в конце.
+Первый MVP — не breakup-app и не couples-app, а общий исследовательский инструмент: **Relationship Microscope**. Retrospective/ex данные — удобный test bench; existing couples остаются кандидатом на долгосрочный recurring business. Это рабочая стратегия, а не доказанный вывод.
+
+Системные свойства: [invariants](invariants.md). Запрещённые действия: [safety policy](safety-policy.md). Что считается доказанным: [evaluation contract](evaluation-contract.md). Что пока только гипотеза: [research hypotheses](research-hypotheses.md).
 
 ## Форма MVP
 
-Без mobile. Вход: один длинный chat export (Telegram/WhatsApp) или несколько выбранных конфликтных эпизодов. Выход: **ровно 3 findings**, каждый строго:
+Без mobile. Вход: длинный chat export (Telegram/WhatsApp) или несколько выбранных эпизодов. Выход: **0–3 publishable findings**.
 
 ```
 Finding
-├── observable behavior        (из BehaviorOntology, не диагноз)
-├── interaction sequence       (траектория A↔B)
-├── occurrences                (сколько раз, за какой период)
-├── evidence                   (конкретные сообщения/spans)
-├── counterevidence            (контрпримеры, если есть)
-├── uncertainty                (confidence + что неизвестно)
-└── "Это похоже на ваш опыт?"  (IPR-петля)
+├── observable behavior
+├── interaction sequence / scope
+├── occurrences + temporal range
+├── supporting evidence spans
+├── strongest counterevidence
+├── provenance
+├── calibrated uncertainty
+└── IPR-style participant feedback (не ground truth)
 ```
 
-Чего в MVP НЕТ: relationship score, attachment diagnosis, personality type, «ваши отношения токсичны», breakup probability (инвариант №25), AI-ex, dashboard, 80 графиков sentiment.
+Ноль findings — допустимый и желательный исход, если evidence threshold не пройден. Чего в MVP нет: relationship score, attachment diagnosis, personality type, «ваши отношения токсичны», breakup probability, AI-ex, dashboard ради dashboard и sentiment-графики как суррогат понимания.
 
-После findings — одна функция сверх анализа: **Replay** одного эпизода (original → пауза перед эскалацией → пользователь пишет альтернативу → 2–3 варианта системы → объяснение поведенческой разницы).
+После findings — одна функция сверх анализа: **Replay** одного эпизода (original → пауза перед выбранным transition → пользователь пишет альтернативу → 2–3 варианта системы → объяснение observable behavioral difference).
 
-## Этапы
+## Этап 0 — BehaviorOntology v0
 
-**Этап 0 — BehaviorOntology v0.** Не обучать модель. Собрать 15–25 наблюдаемых действий на базе couple-литературы: CIRS (blame, pressure for change, withdrawal, avoidance…) + SPAFF/SSIRS + BOLT-стиль multi-label + repair-категории (humor, affection, self-disclosure, understanding, taking responsibility). Каждое действие: operational definition + положительные/отрицательные примеры + tricky cases («ну ты дебил 😂❤️»).
+Не обучать модель. Собрать 15–25 наблюдаемых действий на базе couple-литературы: CIRS (blame, pressure for change, withdrawal, avoidance…), SPAFF/SSIRS, BOLT-style multi-label, repair-категории.
 
-**Этап 1 — Synthetic evaluation corpus** в стиле LongMemEval: длинные timestamped отношения с planted ground truth (episodes, patterns, counterexamples, изменившиеся предпочтения/границы). Сценарии — из relationship profiles (traits, tendencies, latent conflicts, event schedule), не «Claude, сгенерируй ссору». На этом же корпусе валидировать кандидат-метрики траекторий (см. SSG-оговорку ниже).
+Для каждого label:
 
-**Этап 2 — Microscope**: real chat → 3 evidence-grounded findings. Pipeline: parser (готовый opensource) → episode segmentation → multi-label annotation → pattern/trajectory mining → evidence+counterevidence retrieval → findings. Выход хоть HTML.
+- operational definition;
+- inclusion/exclusion criteria;
+- positive/negative examples;
+- tricky/context-dependent cases;
+- relation to соседним labels;
+- human annotation guide.
 
-**Этап 3 — IPR-коррекция**: под каждым finding и под гипотезами об отдельных моментах — «именно так / частично / совсем нет / я чувствовал другое / важное происходило вне чата» + свободный ответ «что происходило на самом деле». Это одновременно: калибровка самоуверенности, рост полезности отчёта, собственный размеченный dataset.
+Цель этапа — не «идеальная психология», а auditable vocabulary для E0/E1.
 
-**Этап 4 — Replay** одного эпизода (см. выше). Для ex-сценария — обучение для следующих отношений; для будущей couples-поверхности — «применить в следующем разговоре».
+## Этап 1 — Synthetic corpus / E0 mechanical fidelity
 
-**Этап 5 — 10–20 реальных историй.** Почти вручную, качество отчёта важнее автоматизации.
+Synthetic corpus строится в стиле LongMemEval: timestamped history с planted episodes, patterns, counterexamples, knowledge changes и unsupported candidates.
 
-### Метрики этапа 5
+Обязательно включить не только конфликты:
 
-1. **Discovery**: «Узнали ли вы что-то важное и убедительное, чего раньше не понимали?» + «Покажите конкретное место анализа, которое изменило понимание».
-2. **Uniqueness**: этого не дал бы обычный ChatGPT с тем же экспортом.
-3. **Evidence acceptance**: доля findings с ответом «да/частично» в IPR-петле; доля «в переписке отсутствует важный контекст» (это не провал, а калибровка).
-4. **Action**: прошёл ли пользователь Replay.
-5. **Willingness to pay** (поправка к исходной дорожке — проба была потеряна в третьей итерации): после полученной ценности реальная оплата следующего анализа/пакета, не «а вы бы заплатили?».
+- successful repair;
+- boring normality;
+- affection;
+- playful insults / inside jokes;
+- healthy disagreement;
+- boundary respected;
+- support offered;
+- support declined without conflict.
 
-Гейт на переход к couples: люди стабильно говорят «этого я сам не видел, но evidence действительно подтверждает» И метрика 5 ненулевая.
+Synthetic corpus проверяет **механику**: segmentation, retrieval recall, temporal ordering, counterexample recovery, provenance, abstention. Он **не валидирует construct** и не может доказать, что придуманная нами trajectory metric психологически значима.
 
-## Consent-протокол для донорских архивов (обязателен с этапа 5)
+## Этап 2 — Microscope alpha
 
-Архив содержит данные двух людей; анализируем по запросу одного. Минимум:
-- explicit informed consent донора + понятное описание, что и как обрабатывается;
-- local-first pipeline: parsing/segmentation/статистика локально; наружу — минимально необходимый контекст; raw-архив после компиляции удаляется или остаётся у донора;
-- псевдонимизация второго лица в любых хранимых артефактах; никакие фрагменты не попадают в обучающие наборы (инвариант №14);
-- позиционирование: «инструмент саморефлексии на собственной копии переписки», не «модель/клон человека X» — GDPR-риск обработки данных второго лица это не снимает полностью (special categories!), но существенно снижает и продуктово, и юридически;
-- право донора на полное удаление, включая производные аннотации.
-
-## После гейта: перенос на existing couples
+Pipeline:
 
 ```
-Detect → Explain → Private reflection → Shared handoff → Micro-intervention → Measure outcome → Learn
+parser (готовый OSS)
+  → episode segmentation
+  → multi-label annotation candidates
+  → pattern / trajectory candidates
+  → active evidence + counterevidence retrieval
+  → faithfulness checks
+  → calibrated publication gate
+  → 0–3 findings
 ```
 
-- Продуктовая грамматика интервенций — Observe → Understand → Respond (OurRelationship/IBCT, RCT 742 пары).
-- UX — private-per-partner пространства + explicit handoff (верифицированный образец: Harmony).
-- Mutual desire matching — один из primitives (safe-reveal как у Mojo/Couplet), не позиционирование.
-- **Дизайн экспериментов — JITAI/MRT**: цикл «micro-intervention → outcome → update» формально является just-in-time adaptive intervention; для оценки эффектов использовать micro-randomized trial методологию, не изобретать свою. Целевой proprietary dataset: `context → interaction pattern → intervention → outcome → human correction`.
-- Persona simulator — последним, только после compliance-гейта (инвариант №21) и с exit trajectory + retirement ritual (№18, №23).
+Выход может быть HTML/локальным отчётом. Mobile здесь не нужен.
 
-## Обоснование порядка и поправки к третьей итерации
+До UI-polish обязателен strong-baseline harness: один архив прогоняется через A/B/C из [evaluation contract](evaluation-contract.md).
 
-**Почему Microscope first (а не couples mutual discovery, как во второй итерации):**
-1. Матчинг-механика commodity трижды (Mojo/Couplet/Spicer+AI) — эксперимент с ней малоинформативен; проверять надо уникальное — evidence engine.
-2. Ретроспективные данные — лучший test bench: завершённые эпизоды, один пользователь, есть у кого спросить «правда ли это», ничего не вмешивается в живой конфликт.
-3. Регуляторно: Microscope без companion-чата в основном вне скоупа SB 243 — наименее регулируемая точка входа (в отличие от REMI/Closure-класса).
+## Этап 2.5 — Living Couple Sanity Set
 
-**Поправки, внесённые при верификации (29.08.2026):**
-- **SSG-оговорка**: State Space Grids — representation и UI-примитив, но в [статье 2024](https://www.tandfonline.com/doi/full/10.1080/19312458.2024.2413973) метрики гибкости/attractors не показали связи с outcome; кандидат-метрики валидировать самим на synthetic corpus (этап 1).
-- **Deliberate-practice оговорка**: RCT-база — про тренировку терапевтов; перенос на пары — открытый вопрос эксперимента, не факт.
-- **Willingness-to-pay** возвращён в метрики этапа 5.
-- **Revol и «Closer»** из конкурентной карты убраны как неверифицированные (см. [landscape](landscape-2026-08.md) §7); вывод о commoditization держится на подтверждённых продуктах.
-- **Holdout replay / persona eval**: LLM-judge недостаточен ([PersonaEval](https://openreview.net/forum?id=wZbkQStAXj)) — blind human eval + психометрия персоны (InCharacter-метод).
+До основного retrospective user study провести sanity check на **5–10 действующих парах**, включая довольные отношения и обычные неконфликтные периоды.
 
-## Открытые вопросы (могут убить/оправдать части продукта)
+Цель не доказать effectiveness, а поймать distribution failure:
 
-1. Персонализированная симуляция помогает двигаться дальше — или создаёт более качественный объект привязанности? (A/B/C дизайн: generic assistant / style-matched stateless / style+state+boundaries; primary: Δ urge_to_contact; secondary: EHARS-attachment, usage trajectory; adverse: рост использования.)
-2. Deliberate practice на собственных эпизодах > generic psychoeducation по skill transfer? (Arm A generic / Arm B personalized; оценка на unseen scenarios, blinded.)
-3. Проходит ли evidence-grounded анализ порог «сам не видел, но подтверждаю» + оплату? (этап 5.)
+- benign sarcasm → false hostility;
+- healthy pause → false withdrawal;
+- playful insult → false contempt;
+- disagreement → false pathology;
+- отсутствие сообщений → ложная интерпретация намерений.
+
+Если ontology/pipeline систематически патологизирует normality, Stage 5 не начинается до исправления.
+
+## Этап 3 — IPR-style correction
+
+Под finding и, выборочно, под episode-level hypothesis:
+
+- именно так;
+- частично;
+- совсем не так;
+- я воспринимал это иначе;
+- важное происходило вне чата;
+- свободный комментарий.
+
+Этот feedback не является truth label сам по себе. Хранятся отдельные оси из evaluation contract: `participant_resonance`, `missing_context`, `partner_corroboration` (если этично/доступно), `observational_correctness`, `evidence_fidelity`.
+
+Польза петли: меньше самоуверенности, richer context и будущий research dataset без подмены resonance на accuracy.
+
+## Этап 4 — Replay
+
+Один выбранный эпизод:
+
+```
+original interaction
+       ↓
+pause before transition
+       ↓
+user alternative
+       ↓
+2–3 candidate responses
+       ↓
+observable-behavior comparison
+       ↓
+(optional later) real-world practice
+```
+
+Для retrospective/ex surface Replay — deliberate-practice hypothesis для будущих отношений. Для living couples — потенциальная preparation/intervention capability, но перенос проверяется отдельно.
+
+## Этап 5 — 10–20 real histories: E1 + E2
+
+Почти вручную; качество и falsification важнее автоматизации.
+
+### E1 — construct validity
+
+- blind human annotation по BehaviorOntology;
+- inter-rater agreement;
+- evidence fidelity;
+- trajectory reconstruction correctness;
+- calibration / risk-coverage;
+- false-positive audit на benign/ambiguous episodes.
+
+### E2 — product validity
+
+1. **Discovery:** пользователь может указать конкретный finding, который действительно изменил понимание, а не просто звучал умно.
+2. **Participant resonance:** отдельно от correctness.
+3. **Missing-context rate:** сигнал границ источника, не автоматический failure.
+4. **Baseline win:** C (Microscope) сравнивается blind с A generic frontier LLM и B strong evidence-first prompt.
+5. **Action:** пользователь завершил Replay / practice.
+6. **Willingness to pay:** реальная one-shot оплата **полного Microscope report + Replay** после teaser/демонстрации ценности. Не продавать «ещё один анализ бывшего» как бесконечный rumination loop.
+
+Гейт на следующий product phase: Microscope даёт измеримую добавочную ценность против B, publication calibration приемлема, Living Couple Sanity Set не показывает патологизации normality и WTP ненулевая.
+
+## Data governance для донорских архивов
+
+Research consent и legal/data-governance analysis — разные вещи.
+
+### Research consent
+
+- explicit informed consent донора;
+- понятное описание обработки, рисков и deletion;
+- отдельное согласие на исследовательское использование производных annotations, если оно вообще допускается;
+- никакого обучения общей модели по умолчанию.
+
+### Data-governance matrix
+
+До Stage 5 для каждого режима заполняется матрица:
+
+| Поле | Пример вопроса |
+|---|---|
+| mode | Microscope / Replay / coach / simulator |
+| jurisdiction | где пользователь и где processing |
+| data subject | донор / второй участник / третьи лица |
+| data category | обычные данные / возможные special categories |
+| processing location | local / server / vendor |
+| legal basis | какая правовая база заявляется |
+| Art. 9 condition | если обрабатываются special categories |
+| Art. 14 transparency | что требуется, если данные получены не от самого data subject |
+| retention | raw / derived / logs и сроки |
+| deletion | как удаляется raw + derived + backups |
+
+Для GDPR reference: [Regulation (EU) 2016/679](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng). Псевдонимизация и local-first уменьшают риск, но не превращают данные второго человека в «данные только пользователя».
+
+## Regulatory boundary: SB 243 + EU transparency
+
+[California SB 243, §22601(b)(2)(A)](https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202520260SB243) исключает bot, **used only** для перечисленных утилитарных задач, включая “productivity and analysis related to source information”. Поэтому source-analysis Microscope имеет сильнейший аргумент на exclusion; расширение capability требует новой оценки.
+
+```
+Microscope/source analysis → strongest exclusion case
+Replay                    → review boundary
+persistent coach          → companion-like risk grows
+persona simulator         → companion-like by design
+```
+
+[EU AI Act Article 50](https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng) — общий transparency layer, а не только simulator gate.
+
+Это research architecture, не юридическое заключение; перед реальным запуском legal basis и jurisdiction-specific obligations проверяются отдельно.
+
+## После гейта: existing couples
+
+```
+Detect → Explain → Private reflection → Shared handoff
+      → Micro-intervention → Measure outcome → Learn
+```
+
+- Product grammar: Observe → Understand → Respond (OurRelationship/IBCT).
+- Private-per-partner spaces + explicit granular handoff; никаких auto-share private reflections.
+- Mutual desire matching — commodity primitive, а не позиционирование.
+- JITAI/MRT — кандидат-рамка для `micro-intervention → proximal outcome → update`.
+- Proprietary dataset hypothesis: `context → dyadic state → hypothesis → evidence/counterevidence → human correction → intervention → outcome`.
+- При coercion/IPV safety state совместная mediation-петля не запускается; см. [safety policy](safety-policy.md).
+- Persona simulator — только после отдельного safety/compliance/recovery gate.
+
+### Monetization split
+
+- **Breakup/Microscope:** one-shot report/course-like package; exit-compatible.
+- **Existing couples:** subscription потенциально легитимна, потому что ценность может продолжаться через новые contexts/interventions/outcomes; всё равно не оптимизировать engagement ценой wellbeing.
+
+## Почему Microscope first
+
+1. Secret matching и chat-import analysis уже commoditized по подтверждённому landscape.
+2. Retrospective archive даёт длинную историю и одного доступного участника для test bench.
+3. Source-information analysis имеет более чистую capability boundary, чем companion/persona mode.
+4. Но retrospective data создаёт selection bias, поэтому Living Couple Sanity Set встроен **до** основного product gate.
+
+Текущие спорные предположения не дублируются здесь: см. [research-hypotheses.md](research-hypotheses.md).

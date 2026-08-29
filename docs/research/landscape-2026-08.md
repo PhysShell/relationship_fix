@@ -1,10 +1,10 @@
 # Конкурентная карта — август 2026
 
-Скан рынка + верификация утверждений из внутренних research-веток по первоисточникам (29.08.2026).
+Скан рынка + верификация утверждений из research-веток по первоисточникам (29.08.2026).
 
-Статусы: ✅ подтверждено по первоисточнику · ⚠️ подтверждено с оговоркой · ❌ не удалось верифицировать.
+Статусы: ✅ подтверждено по доступному первоисточнику/официальной странице · ⚠️ подтверждено с оговоркой · ❌ не удалось верифицировать.
 
-Главный вывод: **оба исходных «вау-механизма» (secret mutual matching и chat-import → analysis / ex-simulation) commoditized.** Незанятая территория — evidence-grounded model of dyadic interaction + experimentation loop (см. конец документа).
+Главный устойчивый вывод: **secret mutual matching, chat-import → analysis и ex-simulation уже существуют как продуктовые категории.** Более глубокая комбинация `longitudinal dyadic hypothesis → active evidence/counterevidence → human correction → intervention outcome learning` остаётся **differentiation hypothesis**, а не доказанной «незанятой территорией».
 
 ---
 
@@ -12,79 +12,117 @@
 
 | Продукт | Статус | Что делает | Что утащить |
 |---|---|---|---|
-| [Mojo Upgrade](https://mojoupgrade.com) ([обзор](https://emira.io/articles/what-is-mojo-upgrade), [8 аналогов](https://emira.io/articles/mojo-upgrade-alternatives)) | ✅ | Бесплатная веб-анкета: оба отвечают раздельно, раскрываются только совпадения, «no» не показывается никогда; ранжирование «Yep» по энтузиазму | Safe-reveal UX + приоритизация по mutual enthusiasm. Существует 10+ лет бесплатно → механика желанна И commodity |
-| [Couplet](https://couplet.love/) | ✅ | Свайп по 500+ идеям, каждый приватно на своём телефоне, показываются только взаимные «да»; mood-инструмент | Подтверждение: «Tinder для желаний» занят. Не строить позиционирование на матчинге |
-| [Spicer](https://spicer.app/) | ✅ | Матчинг Yes/Maybe/No + **AI генерирует пошаговые инструкции для выбранного Match** (режимы Vanilla/Spicy/Adventurous) | «AI поверх матчей» тоже уже занят — дифференциация должна быть глубже (state, progression, evidence) |
+| [Mojo Upgrade](https://mojoupgrade.com) | ✅ | Оба отвечают отдельно; раскрываются только совпадения | Safe-reveal UX + mutual enthusiasm |
+| [Couplet](https://couplet.love/) | ✅ | Приватный swipe по идеям, reveal взаимных «да» | Подтверждение, что «Tinder для желаний» не позиционирование |
+| [Spicer](https://spicer.app/) | ✅ | Yes/Maybe/No matching + AI guidance поверх match | Даже «AI поверх совпадения» недостаточно для differentiation |
 
-Вывод: mutual matching — один из primitives нашей couples-поверхности, не core value proposition.
+Вывод: matching остаётся полезным primitive будущей couples-surface, но не core moat.
 
-## 2. Chat import → relationship analysis — commodity, и почти весь без evidence
-
-| Продукт | Статус | Что делает | Что важно |
-|---|---|---|---|
-| [Mosaic](https://www.mosaicchats.com/chat-analysis) | ✅ | WhatsApp/iMessage/Instagram/Telegram → sentiment, patterns, compatibility, timeline + AI-coach, знающий историю | Прямой конкурент по ingestion. Выдаёт скоры/категории без evidence |
-| [Lucen](https://lucen.app/whatsapp-chat-analyzer) | ✅ | «Decode mixed signals, spot red flags, get next steps» по переписке | Анти-паттерн: red flags и предсказания без валидации |
-| [No Contact](https://nocontact.app/) | ✅ | Breakup-recovery (250k+ загрузок, 4.7): Conversation Analyzer принимает полную историю переписки; abuse awareness; no-contact streak | Спрос на «загрузить архив и понять, что произошло» доказан массовым продуктом |
-| Chat Analyzer / LoveLog / ChatRecap-класс в сторах | ✅ | Compatibility score, red flags, «predict relationship futures» | Целый класс продуктов делает выводы без evidence — наше позиционирование «показываем сообщения, а не скоры» бьёт прямо сюда |
-
-## 3. Ex-simulation — commodity И регулируемая зона
+## 2. Chat import → relationship analysis — commodity category
 
 | Продукт | Статус | Что делает | Что важно |
 |---|---|---|---|
-| [Closure](https://closure.ink/) ([разбор 404media](https://www.404media.co/closure-ink-ai-chatbot-ghosted-ex/)) | ✅ | Чат с AI-версией человека, ушедшего в no-contact (ex, друг, рекрутер); onboarding: тип отношений, как познакомились, как закончилось | Прямой prior art breakup-симулятора. Нет exit trajectory, нет cooldown. Публичная реакция: [«unhealthy and wrong in so many ways»](https://www.dailydot.com/news/closure-app-chatbot-ghosting-ex/) — и валидация спроса, и репутационный риск |
-| [REMI](https://play.google.com/store/apps/details?id=com.soyremi.remi&hl=en_US) | ✅ | Импорт WhatsApp/Telegram → анализ динамики, attachment patterns, «почему закончилось» → **симуляция бывшего по его тону** | «Upload ex → talk to simulated ex» уже категория ([Futurism об AI-клонах бывших](https://futurism.com/ai-exes)); рядом [Speak to your ex](https://apps.apple.com/us/app/-/id6743363031) |
+| [Mosaic](https://www.mosaicchats.com/chat-analysis) | ✅ | Импорт популярных мессенджеров → sentiment/patterns/timeline + AI coach | Прямой prior art ingestion + relationship report |
+| [Lucen](https://lucen.app/whatsapp-chat-analyzer) | ✅ | Mixed signals / red flags / next steps по переписке | Пример популярного «framework verdict» UX |
+| [No Contact](https://nocontact.app/) | ✅ | Breakup recovery + Conversation Analyzer для полной истории | Подтверждает спрос на «загрузить архив и понять, что произошло» |
+| Chat Analyzer / LoveLog / ChatRecap-class | ✅ как класс | Compatibility/red flags/relationship-future claims | Не повторять score-first продукт без evaluation discipline |
 
-Регуляторный контекст (подробно в [invariants](invariants.md) №21): такие продукты — «companion chatbots» по [SB 243](https://www.gunder.com/en/news-insights/insights/client-insight-california-sb-243-new-compliance-requirements-for-operators-of-ai-companion-chatbots) (действует с 01.01.2026, private right of action $1000/нарушение) и попадают под [EU AI Act Art. 50](https://artificialintelligenceact.eu/article/50/) (со 02.08.2026: disclosure + машиночитаемая маркировка синтетики).
+## 3. Ex-simulation — commodity и регулируемая capability
 
-## 4. AI-коучи для пар — перенаселённая категория
+| Продукт | Статус | Что делает | Что важно |
+|---|---|---|---|
+| [Closure](https://closure.ink/) | ✅ | AI-версия человека, ушедшего в no-contact | Прямой prior art simulator; reputational/safety risk |
+| [REMI](https://play.google.com/store/apps/details?id=com.soyremi.remi&hl=en_US) | ✅ | Импорт WhatsApp/Telegram → relationship analysis → симуляция бывшего по тону | `upload ex → simulate ex` уже существует |
+
+Регуляторная граница теперь вынесена в [safety-policy.md](safety-policy.md) и [science-map.md](science-map.md): source-information analysis и relationship-sustaining companion capability — не одно и то же.
+
+## 4. AI-коучи и mediation для пар — плотная категория
 
 | Продукт | Статус | Что важно |
 |---|---|---|
-| [Flamme](https://www.flamme.app/flammeai) | ✅ | AI love coach + daily questions; основан 2023 |
-| [Maia](https://www.ourmaia.com/) | ✅ | Построен с LMFT, позиционирование через clinical grounding |
-| [Harmony](https://talkharmony.app/) | ✅ | **У каждого партнёра свой login и приватное пространство + shared space; live-сопровождение сложного разговора** (фиксирует эскалирующие формулировки, предлагает переформулировки; pre-session: общий фокус + приватные цели каждого) — механику private-per-partner + handoff утащить в couples UX |
-| CoupleWork, OurRitual, Resolve, Ember, BetterCouple, Lasting и ещё ~10 | ✅ (как класс) | «У нас AI-коуч для пары» — 21-е место в списке. Differentiation обязателен с первого дня |
+| [Flamme](https://www.flamme.app/flammeai) | ✅ | AI love coach + daily questions |
+| [Maia](https://www.ourmaia.com/) | ✅ | Clinical/LMFT-informed positioning |
+| [Harmony](https://talkharmony.app/) | ✅ | Private-per-partner пространства + shared space + guidance вокруг сложного разговора |
+| [Connected](https://www.connectedcouples.app/) | ✅ | Daily tools, check-ins, assessments, conflict repair, personalized AI insights; Gottman/attachment/EFT framing | Market drift: framework-informed pattern/repair UX уже продаётся |
+| [Relationship Ref](https://apps.apple.com/us/app/relationship-ref-ai-mediator/id6752880675) | ✅ | Real-time AI mediation/de-escalation; заявляет Gottman + NVC + EFT | Прямой adjacent prior art JIT conflict intervention; «AI mediator» не moat |
+| [Delulu AI](https://apps.apple.com/kz/app/delulu-ai-relationship-app/id6477724552) | ✅ | Memories, recurring relationship patterns/stats, chat upload, AI guidance | Longitudinal-sounding claims тоже появляются в consumer apps; особенно важна наша evaluation discipline |
 
-## 5. Evidence-based программы (жанровые образцы)
+Отдельный близкий механический prior art: **Conflict Analyzer** в обзоре [Connected](https://www.connectedcouples.app/blog/best-relationship-apps-therapist-ranked) — короткая запись разговора с dual consent → структурированная рефлексия.
+
+## 5. Evidence-based / structured intervention programs
 
 | Продукт/программа | Статус | Что утащить |
 |---|---|---|
-| [Blueheart](https://apps.apple.com/us/app/blueheart-relationship-health/id1473815579) ([case studies](https://www.tandfonline.com/doi/full/10.1080/14681994.2022.2026316)) | ✅ | Sensate focus как приложение: levels на неделю = психообразование + guided touch + разговорные сессии. Жанр для intimacy-программ |
-| [OurRelationship](https://pubmed.ncbi.nlm.nih.gov/32134290/) | ✅ | IBCT-грамматика **Observe → Understand → Respond**, каждый сначала отдельно → структурированная совместная беседа. RCT: 742 пары, улучшения по 5 доменам (Mdn \|d\| = 0.46), эффект держится 4 месяца. Утащить как продуктовую грамматику интервенций |
-| Paired, Agapé, Coral (из ранних веток) | ✅ | Market validation категории couples apps; Paired — вопросы/quizzes, Agapé — private answer → shared reveal, Coral — intimacy programs |
+| [Blueheart](https://apps.apple.com/us/app/blueheart-relationship-health/id1473815579) | ✅ | Sensate-focus-like structured digital program; жанровый образец intimacy flow |
+| [OurRelationship](https://pubmed.ncbi.nlm.nih.gov/32134290/) | ✅ | IBCT grammar Observe → Understand → Respond; individual reflection → structured joint work |
+| Paired / Agapé / Coral | ✅ как market class | Validation, что couples wellness/intimacy program — реальная категория, но не наша уникальность |
 
-## 6. Between-session / therapist-facing платформы
+## 6. Between-session / therapist-facing
 
 | Продукт | Статус | Что важно |
 |---|---|---|
-| [Quenza](https://www.talkspace.com/blog/ai-tools-for-therapists/) | ✅ | Лидер категории «homework/assessments между сессиями»: assign → complete → report. Workflow принят терапевтами — не изобретать заново; аудитория — потенциальный B2B-канал |
-| Therachat, BridgeCalm, Mediyn | ✅ (как класс) | Категория растёт; **никто не делает практику на материале реальной истории клиента** — gap для therapist bridge жив |
+| [Quenza](https://www.talkspace.com/blog/ai-tools-for-therapists/) | ✅ | Assign → complete → report; полезный workflow prior art для B2B bridge |
+| Therachat / BridgeCalm / Mediyn-class | ✅ как класс | Between-session homework/assessment существует; personalized practice на собственных эпизодах остаётся исследовательской гипотезой, не доказанным gap |
 
-## 7. Не удалось верифицировать (⚠️ дисциплина: не цитировать как факт)
+## 7. Не удалось верифицировать — не цитировать как факт
+
+### Первый фантомный кластер
 
 | Утверждение | Статус | Комментарий |
 |---|---|---|
-| **Revol** — «living model of you + partner + relationship» ($20/мес; memories, recurring loops, emotional triggers, repair opportunities) | ❌ | Два целевых поиска — не находится ни по имени, ни по описанию. Либо микроскопический/переименованный продукт, либо конфабуляция ранней research-сессии. До подтверждения из карты убран |
-| **Closer** — запись реальных разговоров с согласия обоих, разделение говорящих, темы во времени | ❌ | Под именем «Closer» — множество несвязанных couples-приложений; описанного не нашлось. Ближайший верифицированный аналог механики — **Conflict Analyzer** ([обзор терапевта](https://www.connectedcouples.app/blog/best-relationship-apps-therapist-ranked)): короткая запись разговора с dual consent → структурированная рефлексия. Механику держать как «существует, кандидат на future surface» |
+| **Revol** — «living model of you + partner + relationship» | ❌ | Целевые поиски по имени/описанию не дали проверяемого продукта |
+| **Closer** — запись реальных разговоров, speaker separation, longitudinal themes | ❌ | Под этим именем находятся несвязанные apps; заявленный продукт не подтверждён |
 
-Ирония, зафиксированная как урок: в research-ветке с принципом «label without rationale = invalid finding» два самых тревожных конкурентных утверждения оказались без проверяемого источника. Вывод о commoditization при этом выживает — он держится на подтверждённых Couplet/Spicer/REMI/No Contact/Harmony/Mosaic.
+### Второй фантомный кластер
+
+Следующие имена появились в четвёртом memo как якобы прямые evidence-first конкуренты, но повторная проверка по точным названиям/описаниям не подтвердила соответствующие сущности:
+
+- **Together** — якобы quote-linked relationship insights;
+- **Reloveo** — якобы deterministic metrics before LLM + quoted evidence;
+- **Deluly** — якобы recurring conflict loops + timestamps; **не путать с верифицированным Delulu AI выше**;
+- **Memori** — якобы evidence-grounded second brain for relational work;
+- **Analyze Romantic Relationships** — якобы evidence-first OSS repository.
+
+Статус всех пяти: **❌ не использовать как market fact до появления проверяемого первоисточника.**
+
+### Урок №2
+
+Это уже второй independent hallucinated competitor cluster. Поэтому market claim имеет право попасть в вывод только если:
+
+1. сущность разрешается в первоисточник/официальный store/repository;
+2. конкретная capability видна в этом источнике, а не только в поисковом snippet;
+3. вывод не зависит от одного микроскопического продукта.
+
+Именно поэтому финальный target называется **differentiation hypothesis**, а не «незанятая территория».
 
 ---
 
-## Незанятая территория (наш target)
+## 8. Differentiation hypothesis
 
-У рынка массово есть: скоры, red flags, категоризации личности, AI-коучи, симуляции. У рынка почти нет:
+Мы **не утверждаем**, что на рынке отсутствует evidence-grounded analysis. Проверяем более глубокую комбинацию:
 
 ```
-PATTERN P17
-Когда A поднимает проблему отсутствия внимания:
-A: request/pressure → B: explanation → A: criticism → B: withdrawal → A: intensified demand
-
-наблюдалось: 8 эпизодов / 14 месяцев
-evidence: [конкретные сообщения]
-counterexamples: [2 эпизода, где цепочка оборвалась — в обоих B сначала подтвердил переживание]
-confidence: medium
-[Это похоже на ваш опыт?] Да / Частично / Нет / Отсутствует важный контекст
+longitudinal falsifiable hypothesis
+          ↓
+supporting evidence
+          ↓
+ACTIVE counterevidence search
+          ↓
+calibrated uncertainty / abstention
+          ↓
+human correction (resonance ≠ truth)
+          ↓
+intervention
+          ↓
+observed outcome
+          ↓
+model update
 ```
 
-— т.е. **evidence-grounded model of dyadic interaction** + **experimentation loop** (observe → hypothesize → show evidence → ask human → intervene → observe outcome → update). Второе формально является JITAI (см. [science-map](science-map.md) → INTERVENTION).
+Target: **auditable longitudinal dyadic experimentation engine**.
+
+Потенциальный proprietary asset — не архивы переписок сами по себе, а структурированные tuples:
+
+`context + dyadic state + hypothesis + evidence/counterevidence + human correction + intervention + outcome`.
+
+Рыночный сигнал в пользу строгой epistemic discipline: [The Gottman Institute о AI relationship advice](https://www.gottman.com/blog/dating-coach-ai-relationship-advice/) подчёркивает смешение research-grounded constructs с generic LLM advice и ограничения AI как замены реальному attunement. Это не доказательство нашего moat, но сильный аргумент не продавать «AI знает ваши отношения» без measurement и provenance.
