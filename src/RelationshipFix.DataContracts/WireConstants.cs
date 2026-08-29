@@ -7,11 +7,25 @@ namespace RelationshipFix.DataContracts;
 public static class WireSchema
 {
     public const string SourceMessageV1 = "rf.source-message.v1";
+
+    /// <summary>Исторический utterance-only контракт. Заморожен навсегда; читается и мигрируется, не пишется.</summary>
     public const string AnnotationV1 = "rf.annotation.v1";
+
+    /// <summary>Текущий контракт аннотаций: target-union (utterance | derived unit с provenance).</summary>
+    public const string AnnotationV2 = "rf.annotation.v2";
+
     public const string FindingV1 = "rf.finding.v1";
     public const string RunManifestV1 = "rf.run-manifest.v1";
     public const string OntologyV1 = "rf.ontology.v1";
     public const string SliceMetricsV1 = "rf.slice-metrics.v1";
+}
+
+public static class TargetKindWire
+{
+    public const string Utterance = "utterance";
+    public const string Turn = "turn";
+    public const string Exchange = "exchange";
+    public const string Episode = "episode";
 }
 
 public static class AnnotationDecisionWire

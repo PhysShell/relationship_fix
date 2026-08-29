@@ -10,9 +10,10 @@
 - **Три разметчика на подмножестве** (adjudication set): при двух несогласных не видно, кто ошибся; при трёх различимы systematic (чинить определение) и idiosyncratic (чинить инструктаж) расхождения.
 - Adjudicated-решения пишутся в `data/gold/<ontology-version>/`, сырые слои каждого разметчика — в `data/annotations/<ontology-version>/<annotator>.jsonl`. Gold иммутабелен; новая версия онтологии = новый слой (см. ADR-0002 §7).
 
-## 2. Единицы и контекст
+## 2. Единицы, цели и контекст
 
-- Разметка v0 ведётся на единице **utterance** (ключ — message_id); labels с `allowed_units: [turn, exchange]` (например `B.WITHDRAWAL`) на utterance **технически недоступны** — валидатор отвергает до сохранения.
+- Контракт аннотаций — `rf.annotation.v2`: цель задаётся **AnnotationTarget** (utterance → message_id; turn/exchange/episode → provenance-aware DerivedUnitRef с segmentation_version, составом сообщений и hash'ем состава — см. ADR-0002 §4.1). Kind цели и есть единица анализа — отдельного поля unit нет, рассинхрон невозможен.
+- **Pilot v0 размечает только utterance-цели**; labels с `allowed_units: [turn, exchange]` (например `B.WITHDRAWAL`) технически недоступны — валидатор отвергает до сохранения. Turn/exchange-разметка откроется вместе с первым segmentation-алгоритмом (и его версией в DerivedUnitRef).
 - **Контекстное окно фиксировано протоколом**: разметчик видит ±10 сообщений вокруг единицы (или границы эпизода, если он короче). Менять окно между сессиями нельзя — agreement перестаёт быть сравнимым.
 
 ## 3. Решения разметчика
@@ -25,10 +26,12 @@
 
 Multi-label разрешён (одна реплика может нести request + blame).
 
-## 4. Метрика согласия
+## 4. Метрика согласия и estimability
 
 - **Krippendorff's alpha, per label, бинарно** (label присутствует/отсутствует на единице) — не сырой % agreement: на скошенных labels два человека получают 90% согласия, молча соглашаясь «здесь ничего нет».
 - Пороги фиксируются ДО разметки: α < 0.67 → label уходит на доработку определения (или в v0.1-retired); целевой рабочий уровень α ≥ 0.8.
+- **Отчёт по каждому label × stratum обязан содержать**: `n_units`, `n_positive_A`, `n_positive_B`, `positive_union`, `prevalence`, `alpha`, `bootstrap CI`, `estimability_status ∈ {passed | failed | underpowered_not_estimable}`. При prevalence уровня 1/80 α нестабилен или неинформативен — **underpowered не считается ни успехом, ни провалом label**; это сигнал «нужно больше label-relevant случаев в Challenge Set». Natural Set НИКОГДА не обогащается positives — иначе он перестаёт показывать натуральные base rates.
+- Рядом с α публикуется **positive agreement** (согласие именно на positives) — как диагностика, не замена α: одно число умеет прятать ситуацию «прекрасно согласны на negatives, но не умеем одинаково находить positives».
 - Расчёт — версионированным Python-скриптом от pinned-артефактов (ADR-0001 §Python), не интерактивным notebook.
 
 ## 5. Два страта gold-корпуса
@@ -37,6 +40,20 @@ Multi-label разрешён (одна реплика может нести requ
 - **Natural Set** — случайная выборка, сохраняющая base rates (большинство единиц — none_observed).
 
 Публикуются **обе** метрики: `α_challenge` и `α_natural`. Возможный исход «natural .91 / challenge .43» означает: онтология работает на очевидном и ломается там, где нужна. Challenge-α не используется для утверждений о «реальном» disagreement — мы сами насыпали туда худшее.
+
+## 5.1 Последовательность: micro-pilot до расширения
+
+```
+engineering foundation
+   → micro-pilot текущих 6 labels (2 разметчика × ~20 challenge + ~20 natural units)
+   → доработка definitions/protocol по результатам
+   → расширение онтологии по функциональным пробелам
+   → полный exercise (50–100 units, 3-й разметчик на adjudication set)
+```
+
+Цель micro-pilot — не acceptance и не красивый α, а **сломать протокол и определения до того, как ошибки размножатся на 15 labels**: если уже на шести выяснится, что validation vs repair, blame vs pressure или avoidance vs none_observed люди понимают по-разному, это меняет дизайн следующих labels.
+
+Кандидаты следующей партии (по функциональным пробелам, не все сразу): NEUTRAL_REQUEST, TAKING_RESPONSIBILITY, PERSPECTIVE_SOLICITATION, SUPPORT_OFFER, SUPPORT_RESPONSE, AFFECTION_WARMTH, HUMOR_PLAY, SELF_DISCLOSURE_VULNERABILITY, BOUNDARY_EXPRESSION, BOUNDARY_ACKNOWLEDGEMENT. Отдельное намерение: **вынести TAKING_RESPONSIBILITY из repair** — «Да, я действительно забыл тебе написать» — наблюдаемое принятие ответственности, но не обязательно repair attempt; repair-функция в конфликтном контексте потом выводится как candidate (`taking_responsibility + conflict context → repair_attempt?`) — простые observations снизу, более сильные claims сверху.
 
 ## 6. Источники эпизодов v0
 

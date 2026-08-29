@@ -1,0 +1,1 @@
+{"schema_version":"rf.annotation.v2","target":{"kind":"exchange","unit_id":"ex-017","segmentation_version":"seg-v0.1","member_message_ids":["m041","m042","m043"],"members_sha256":"711970de22c6828916a53ef21eb270da7dee518fea871c547c4128b94d846837"},"annotator_id":"annotator-b","decision":"abstained","abstention_reason":"insufficient_context","note":"exchange boundary unclear"}

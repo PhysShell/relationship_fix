@@ -113,7 +113,7 @@ dotnet run --project src/RelationshipFix.Cli -- \
 dotnet run --project src/RelationshipFix.Cli -- validate-ontology data/ontology/behavior-v0.1.json
 ```
 
-Slice — детерминированный rule-stub (не LLM и не «анализ отношений»): его работа — прогнать весь контракт данных: 0–3-дисциплина решений (`assigned` / `none_observed` / `abstained(reason)`), evidence-спаны в code points c sha256-проверкой источника, манифест запуска с git/ontology/dataset-хэшами.
+Slice — детерминированный rule-stub (не LLM и не «анализ отношений»): его работа — прогнать весь контракт данных: решения `assigned` / `none_observed` / `abstained(reason)`, evidence-спаны в code points c sha256-проверкой источника, манифест запуска с git/ontology/dataset-хэшами. Аннотации пишутся в `rf.annotation.v2`: цель — union (utterance по message_id | turn/exchange/episode через provenance-aware DerivedUnitRef с segmentation_version и hash'ем состава); v1 заморожен и мигрируется (ADR-0002 §4.1).
 
 ## Главные нерешённые вопросы
 

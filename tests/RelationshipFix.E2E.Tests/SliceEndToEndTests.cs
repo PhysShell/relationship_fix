@@ -40,8 +40,11 @@ public class SliceEndToEndTests
             metrics.SpansValid.ShouldBe(metrics.SpansChecked);
 
             // Playful insult «ну ты дебил 😂❤️» (m005) не должен получить blame:
-            var annotations = Jsonl.ReadAllLines<AnnotationDto>(Path.Combine(outDir, "annotations.jsonl"));
-            annotations.Single(a => a.MessageId == "m005").Decision.ShouldBe("none_observed");
+            var annotations = Jsonl.ReadAllLines<AnnotationV2Dto>(Path.Combine(outDir, "annotations.jsonl"));
+            var m005 = annotations.Single(a => a.Target.MessageId == "m005");
+            m005.SchemaVersion.ShouldBe(WireSchema.AnnotationV2);
+            m005.Target.Kind.ShouldBe("utterance");
+            m005.Decision.ShouldBe("none_observed");
 
             // Артефакты запуска (ADR-0003) на месте и парсятся канонически.
             var manifest = RelationshipJson.Deserialize<RunManifestDto>(
@@ -66,6 +69,6 @@ public class SliceEndToEndTests
         var dir = AppContext.BaseDirectory;
         while (dir is not null && !File.Exists(Path.Combine(dir, "RelationshipFix.slnx")))
             dir = Path.GetDirectoryName(dir);
-        return dir ?? throw new InvalidOperationException("RelationshipFix.sln not found above test directory.");
+        return dir ?? throw new InvalidOperationException("RelationshipFix.slnx not found above test directory.");
     }
 }

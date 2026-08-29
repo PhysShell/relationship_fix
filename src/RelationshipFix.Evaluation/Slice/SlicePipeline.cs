@@ -48,7 +48,7 @@ public static class SlicePipeline
         foreach (var annotation in annotations)
         {
             foreach (var issue in OntologyValidator.ValidateAnnotation(ontology, annotation))
-                issues.Add($"{annotation.MessageId}: {issue}");
+                issues.Add($"{Describe(annotation.Target)}: {issue}");
 
             annotation.Decision.Switch(
                 assigned: a =>
@@ -60,7 +60,7 @@ public static class SlicePipeline
                         if (CodePointText.TryVerifySpan(source.Text, span, out var failure))
                             spansValid++;
                         else
-                            issues.Add($"{annotation.MessageId}: span integrity failed — {failure}");
+                            issues.Add($"{Describe(annotation.Target)}: span integrity failed — {failure}");
                     }
                 },
                 noneObserved: _ => { },
@@ -96,9 +96,16 @@ public static class SlicePipeline
         return new SliceResult(outDirectory, metrics, issues);
     }
 
+    private static string Describe(AnnotationTarget target) =>
+        target.Switch(
+            utterance: u => (string)u.MessageId,
+            turn: t => $"turn:{t.Ref.UnitId}",
+            exchange: e => $"exchange:{e.Ref.UnitId}",
+            episode: e => $"episode:{e.Ref.UnitId}");
+
     private static SliceMetricsDto BuildMetrics(
         IReadOnlyList<UnitAnnotation> annotations,
-        IReadOnlyList<AnnotationDto> dtos,
+        IReadOnlyList<AnnotationV2Dto> dtos,
         int spansChecked,
         int spansValid,
         int issueCount)

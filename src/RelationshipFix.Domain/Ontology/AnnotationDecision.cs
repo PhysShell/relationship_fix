@@ -23,9 +23,18 @@ public partial record AnnotationDecision
     public sealed record Abstained(AbstentionReason Reason, string? Note) : AnnotationDecision;
 }
 
-/// <summary>Аннотация одной единицы анализа (v0: единица = utterance, ключ = MessageId).</summary>
+/// <summary>
+/// Аннотация одной единицы анализа. Единица определяется целью (AnnotationTarget):
+/// kind цели и есть unit — отдельного поля нет, рассинхрон невозможен по построению.
+/// </summary>
 public sealed record UnitAnnotation(
-    MessageId MessageId,
-    UnitOfAnalysis Unit,
+    AnnotationTarget Target,
     AnnotatorId Annotator,
-    AnnotationDecision Decision);
+    AnnotationDecision Decision)
+{
+    public UnitOfAnalysis Unit => Target.Switch(
+        utterance: _ => UnitOfAnalysis.Utterance,
+        turn: _ => UnitOfAnalysis.Turn,
+        exchange: _ => UnitOfAnalysis.Exchange,
+        episode: _ => UnitOfAnalysis.Episode);
+}

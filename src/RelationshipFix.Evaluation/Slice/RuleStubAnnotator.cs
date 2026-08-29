@@ -36,8 +36,7 @@ public sealed class RuleStubAnnotator : ISliceAnnotator
         if (CodePointText.CountCodePoints(message.Text) < 2)
         {
             return new UnitAnnotation(
-                message.Id,
-                UnitOfAnalysis.Utterance,
+                new AnnotationTarget.Utterance(message.Id),
                 Id,
                 new AnnotationDecision.Abstained(
                     AbstentionReason.InsufficientContext,
@@ -73,7 +72,7 @@ public sealed class RuleStubAnnotator : ISliceAnnotator
             ? new AnnotationDecision.Assigned(labels.ToImmutable(), evidence.ToImmutable())
             : new AnnotationDecision.NoneObserved();
 
-        return new UnitAnnotation(message.Id, UnitOfAnalysis.Utterance, Id, decision);
+        return new UnitAnnotation(new AnnotationTarget.Utterance(message.Id), Id, decision);
     }
 }
 

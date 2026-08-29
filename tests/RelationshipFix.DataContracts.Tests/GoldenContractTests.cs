@@ -121,6 +121,54 @@ public class GoldenContractTests
                 json => RelationshipJson.Deserialize<AnnotationDto>(json)
             },
             {
+                "annotation.v2/assigned-utterance.json",
+                () => new AnnotationV2Dto
+                {
+                    SchemaVersion = "rf.annotation.v2",
+                    Target = new AnnotationTargetDto { Kind = "utterance", MessageId = "m001" },
+                    AnnotatorId = "annotator-a",
+                    Decision = "assigned",
+                    Labels = ["B.BLAME_CRITICISM"],
+                    Evidence =
+                    [
+                        new EvidenceSpanDto
+                        {
+                            MessageId = "m001",
+                            StartCodePoint = 3,
+                            LengthCodePoints = 6,
+                            QuotedText = "всегда",
+                            SourceTextSha256 = "2587c11593bbf9a31376aab3a1da832075a53d272ed7353f19360b8ed91233ed",
+                        },
+                    ],
+                },
+                json => RelationshipJson.Deserialize<AnnotationV2Dto>(json)
+            },
+            {
+                "annotation.v2/abstained-exchange.json",
+                () => new AnnotationV2Dto
+                {
+                    SchemaVersion = "rf.annotation.v2",
+                    Target = new AnnotationTargetDto
+                    {
+                        Kind = "exchange",
+                        UnitId = "ex-017",
+                        SegmentationVersion = "seg-v0.1",
+                        MemberMessageIds = ["m041", "m042", "m043"],
+                        MembersSha256 = RelationshipFix.Domain.Ontology.DerivedUnitRef.ComputeMembersSha256(
+                        [
+                            RelationshipFix.Domain.Evidence.MessageId.Create("m041"),
+                            RelationshipFix.Domain.Evidence.MessageId.Create("m042"),
+                            RelationshipFix.Domain.Evidence.MessageId.Create("m043"),
+                        ]),
+                    },
+                    AnnotatorId = "annotator-b",
+                    Decision = "abstained",
+                    AbstentionReason = "insufficient_context",
+                    Note = "exchange boundary unclear",
+                },
+                json => RelationshipJson.Deserialize<AnnotationV2Dto>(json)
+            },
+            {
                 "finding.v1/published.json",
                 () => new FindingDto
                 {
@@ -202,6 +250,6 @@ internal static class RepoPaths
         var dir = AppContext.BaseDirectory;
         while (dir is not null && !File.Exists(Path.Combine(dir, "RelationshipFix.slnx")))
             dir = Path.GetDirectoryName(dir);
-        return dir ?? throw new InvalidOperationException("RelationshipFix.sln not found above test directory.");
+        return dir ?? throw new InvalidOperationException("RelationshipFix.slnx not found above test directory.");
     }
 }

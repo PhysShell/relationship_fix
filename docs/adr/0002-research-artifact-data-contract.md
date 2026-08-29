@@ -28,7 +28,16 @@
 
 Каждая самостоятельная запись несёт namespaced id: `rf.source-message.v1`, `rf.annotation.v1`, `rf.finding.v1`, `rf.run-manifest.v1`, `rf.ontology.v1`, `rf.slice-metrics.v1`. Версии артефактов расходятся независимо. Breaking change = новый id (`…v2`) + явная миграция v1→v2; «десериализатор вроде съел» миграцией не считается.
 
-### 5. Temporal provenance
+### 4.1. Addendum (2026-08-29): rf.annotation.v2 — target union и derived-unit provenance
+
+`rf.annotation.v1` был utterance-centric (`message_id` как ключ), тогда как онтология уже знает turn/exchange/episode. v2 вводит **AnnotationTarget**:
+
+- `utterance` → `{kind, message_id}` (source fact);
+- `turn | exchange | episode` → `{kind, unit_id, segmentation_version, member_message_ids, members_sha256}`.
+
+Turn/exchange — **не source facts**: их границы выводит segmentation-алгоритм, поэтому одного `unit_id` мало — иначе смена алгоритма тихо переписывает, что означал «exchange-17». `members_sha256` = SHA-256 от UTF-8 байтов member-id, соединённых `\n`, в исходном порядке (состав не сортируется); id не содержат control-символов (валидация VO). Маппинг проверяет hash при чтении и отвергает: смешанные формы (utterance с derived-полями и наоборот), неизвестный kind, битый hash — всё громким `FormatException`.
+
+Дисциплина версии: **v1 заморожен навсегда** (читается legacy-путём), миграция `AnnotationV1ToV2` тривиальна (`message_id → target{kind: utterance}`) и покрыта тестом — это первый реальный прогон правила §4. Пишется только v2.
 
 `timestamp_resolution`: `exact_instant` | `local_time_with_assumed_zone` | `local_time_unknown_zone`. Экспорт без надёжной timezone не превращается в притворно точный Instant. NodaTime-типы (`Instant`/`LocalDateTime`) сериализуются ISO-8601.
 

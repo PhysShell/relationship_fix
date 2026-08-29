@@ -1,0 +1,1 @@
+{"schema_version":"rf.annotation.v2","target":{"kind":"utterance","message_id":"m001"},"annotator_id":"annotator-a","decision":"assigned","labels":["B.BLAME_CRITICISM"],"evidence":[{"message_id":"m001","start_code_point":3,"length_code_points":6,"quoted_text":"всегда","source_text_sha256":"2587c11593bbf9a31376aab3a1da832075a53d272ed7353f19360b8ed91233ed"}]}
