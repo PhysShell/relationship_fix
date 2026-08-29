@@ -101,6 +101,11 @@ data/
   contracts/                      golden wire fixtures (замороженные байты контракта)
 docs/adr/                         ADR-0001 (пакеты/границы), ADR-0002 (data contract), ADR-0003 (run provenance)
 docs/annotation-protocol-v0.md    протокол разметки: α per label, challenge/natural страты, abstention
+docs/pilot-v0-instructions.md     инструкция разметчика micro-pilot
+data/pilot/v0/                    annotation-pilot-v0: 40 items (20 challenge + 20 natural, слепые страты),
+                                  manifest (5 active labels + B.WITHDRAWAL deferred/not_applicable), responses/
+research/python/                  uv-проект (stdlib-only): agreement (α, CI, positive agreement, confusion pairs,
+                                  estimability), validate_items; гейтящие числа — только отсюда
 ```
 
 Запуск (нужен .NET 10 SDK):

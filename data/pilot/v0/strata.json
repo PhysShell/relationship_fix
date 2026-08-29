@@ -1,0 +1,16 @@
+{
+  "schema_version": "rf.pilot-strata.v1",
+  "note": "Файл для фасилитатора и analysis-скрипта. Разметчикам НЕ показывается: знание страты якорит решения.",
+  "strata": {
+    "pc-01": "challenge", "pc-02": "challenge", "pc-03": "challenge", "pc-04": "challenge",
+    "pc-05": "challenge", "pc-06": "challenge", "pc-07": "challenge", "pc-08": "challenge",
+    "pc-09": "challenge", "pc-10": "challenge", "pc-11": "challenge", "pc-12": "challenge",
+    "pc-13": "challenge", "pc-14": "challenge", "pc-15": "challenge", "pc-16": "challenge",
+    "pc-17": "challenge", "pc-18": "challenge", "pc-19": "challenge", "pc-20": "challenge",
+    "pn-01": "natural", "pn-02": "natural", "pn-03": "natural", "pn-04": "natural",
+    "pn-05": "natural", "pn-06": "natural", "pn-07": "natural", "pn-08": "natural",
+    "pn-09": "natural", "pn-10": "natural", "pn-11": "natural", "pn-12": "natural",
+    "pn-13": "natural", "pn-14": "natural", "pn-15": "natural", "pn-16": "natural",
+    "pn-17": "natural", "pn-18": "natural", "pn-19": "natural", "pn-20": "natural"
+  }
+}

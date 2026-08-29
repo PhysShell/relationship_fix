@@ -1,0 +1,31 @@
+{
+  "schema_version": "rf.pilot-manifest.v1",
+  "pilot_id": "annotation-pilot-v0",
+  "ontology_version": "behavior-v0.1",
+  "ontology_sha256": "3c067acc1685c42f6f26b6581c10e56bb806ab8137a517dca0d77f01ac5a67c3",
+  "unit_of_analysis": "utterance",
+  "active_labels": [
+    "B.BLAME_CRITICISM",
+    "B.PRESSURE_FOR_CHANGE",
+    "B.VALIDATION",
+    "B.REPAIR_ATTEMPT",
+    "B.AVOIDANCE_TOPIC_SHIFT"
+  ],
+  "deferred_labels": {
+    "B.WITHDRAWAL": {
+      "pilot_status": "deferred_until_exchange_segmentation",
+      "estimability_status": "not_applicable",
+      "reason": "allowed_units [turn, exchange] не входят в utterance-only sampling frame; это 'не искали', а не 'не нашли'"
+    }
+  },
+  "items_file": "items.jsonl",
+  "strata_file": "strata.json",
+  "responses_dir": "responses/",
+  "annotators": ["annotator-1", "annotator-2"],
+  "instructions": "docs/pilot-v0-instructions.md",
+  "blind_rules": [
+    "разметчики не видят strata.json",
+    "разметчики не видят слои друг друга до сдачи обоих",
+    "обсуждение items запрещено до заморозки обоих слоёв"
+  ]
+}

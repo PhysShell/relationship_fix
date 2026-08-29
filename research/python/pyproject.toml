@@ -1,0 +1,9 @@
+[project]
+name = "rf-pilot-metrics"
+version = "0.1.0"
+description = "Read-only analytical consumer of relationship_fix pilot artifacts (ADR-0001 §Python): agreement metrics, estimability, confusion analysis."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false

@@ -30,7 +30,7 @@ Multi-label разрешён (одна реплика может нести requ
 
 - **Krippendorff's alpha, per label, бинарно** (label присутствует/отсутствует на единице) — не сырой % agreement: на скошенных labels два человека получают 90% согласия, молча соглашаясь «здесь ничего нет».
 - Пороги фиксируются ДО разметки: α < 0.67 → label уходит на доработку определения (или в v0.1-retired); целевой рабочий уровень α ≥ 0.8.
-- **Отчёт по каждому label × stratum обязан содержать**: `n_units`, `n_positive_A`, `n_positive_B`, `positive_union`, `prevalence`, `alpha`, `bootstrap CI`, `estimability_status ∈ {passed | failed | underpowered_not_estimable}`. При prevalence уровня 1/80 α нестабилен или неинформативен — **underpowered не считается ни успехом, ни провалом label**; это сигнал «нужно больше label-relevant случаев в Challenge Set». Natural Set НИКОГДА не обогащается positives — иначе он перестаёт показывать натуральные base rates.
+- **Отчёт по каждому label × stratum обязан содержать**: `n_units`, `n_positive_A`, `n_positive_B`, `positive_union`, `prevalence`, `alpha`, `bootstrap CI`, `estimability_status ∈ {passed | failed | underpowered_not_estimable | not_applicable}`. При prevalence уровня 1/80 α нестабилен или неинформативен — **underpowered не считается ни успехом, ни провалом label**; это сигнал «нужно больше label-relevant случаев в Challenge Set». Natural Set НИКОГДА не обогащается positives — иначе он перестаёт показывать натуральные base rates. **`not_applicable` — принципиально другая причина, чем underpowered**: единицы label'а вообще не входили в sampling frame (например, turn/exchange-only label в utterance-pilot). Underpowered = «единицы были применимы, но positives мало»; not_applicable = «не искали». Смешивать эти два состояния запрещено.
 - Рядом с α публикуется **positive agreement** (согласие именно на positives) — как диагностика, не замена α: одно число умеет прятать ситуацию «прекрасно согласны на negatives, но не умеем одинаково находить positives».
 - Расчёт — версионированным Python-скриптом от pinned-артефактов (ADR-0001 §Python), не интерактивным notebook.
 
@@ -45,11 +45,13 @@ Multi-label разрешён (одна реплика может нести requ
 
 ```
 engineering foundation
-   → micro-pilot текущих 6 labels (2 разметчика × ~20 challenge + ~20 natural units)
+   → micro-pilot: 5 активных utterance-capable labels (2 разметчика × 20 challenge + 20 natural units)
    → доработка definitions/protocol по результатам
    → расширение онтологии по функциональным пробелам
    → полный exercise (50–100 units, 3-й разметчик на adjudication set)
 ```
+
+**B.WITHDRAWAL в micro-pilot не участвует** — его `allowed_units: [turn, exchange]` не входят в utterance-only sampling frame: `pilot_status = deferred_until_exchange_segmentation`, в отчёте `estimability_status = not_applicable` (не underpowered — см. §4). Фактический состав pilot: B.BLAME_CRITICISM, B.PRESSURE_FOR_CHANGE, B.VALIDATION, B.REPAIR_ATTEMPT, B.AVOIDANCE_TOPIC_SHIFT. Пакет pilot: [docs/pilot-v0-instructions.md](pilot-v0-instructions.md) + `data/pilot/v0/`.
 
 Цель micro-pilot — не acceptance и не красивый α, а **сломать протокол и определения до того, как ошибки размножатся на 15 labels**: если уже на шести выяснится, что validation vs repair, blame vs pressure или avoidance vs none_observed люди понимают по-разному, это меняет дизайн следующих labels.
 

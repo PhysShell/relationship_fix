@@ -5,3 +5,6 @@ obj/
 .idea/
 TestResults/
 artifacts/
+__pycache__/
+.venv/
+*.pyc
