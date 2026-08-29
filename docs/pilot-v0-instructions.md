@@ -4,7 +4,8 @@
 
 ## Что вы размечаете
 
-- Файл `data/pilot/v0/items.jsonl` — 40 коротких эпизодов (ru/en). В каждом эпизоде размечается **только одно сообщение** — указанное в `target_message_id`. Остальные сообщения — контекст: читайте их, они влияют на решение.
+- **Ваш личный файл** `data/pilot/v0/presentation/annotator-N.jsonl` (номер скажет фасилитатор) — 40 коротких эпизодов (ru/en) с id вида `item-3f9a2c`. У каждого разметчика свой набор id и свой порядок — это нормально. В каждом эпизоде размечается **только одно сообщение** — указанное в `target_message_id`. Остальные сообщения — контекст: читайте их, они влияют на решение.
+- Не открывайте `items.jsonl`, `strata.json`, `presentation-map/` и файл второго разметчика — работайте только со своим presentation-файлом.
 - Перед началом прочитайте определения пяти активных labels в [онтологии](../data/ontology/behavior-v0.1.json): `B.BLAME_CRITICISM`, `B.PRESSURE_FOR_CHANGE`, `B.VALIDATION`, `B.REPAIR_ATTEMPT`, `B.AVOIDANCE_TOPIC_SHIFT` — включая inclusion/exclusion criteria и примеры.
 - `B.WITHDRAWAL` в этом pilot **не используется**: он определён на уровне turn/exchange, а вы размечаете отдельные сообщения. Не пытайтесь его ставить.
 
@@ -24,9 +25,8 @@
 
 ## Правила процесса
 
-- Идите по items в порядке файла. До сдачи слоя можно возвращаться и править свои решения; после сдачи — нет.
+- Идите по items **в порядке вашего файла**. До сдачи слоя можно возвращаться и править свои решения; после сдачи — нет.
 - **Не обсуждайте items со вторым разметчиком** и не показывайте друг другу решения, пока фасилитатор не подтвердит, что оба слоя сданы.
-- Не открывайте `strata.json` и чужой файл в `responses/`.
 - Ориентируйтесь только на текст и контекст эпизода. Не додумывайте историю пары сверх написанного; если решение зависит от недоступной истории — это `insufficient_context`.
 
 ## Формат записи
@@ -34,13 +34,15 @@
 Одна строка JSON на item, файл `data/pilot/v0/responses/annotator-N.jsonl` (ваш номер скажет фасилитатор; имена в данные не пишем):
 
 ```json
-{"schema_version":"rf.pilot-response.v1","item_id":"pc-01","annotator_id":"annotator-1","decision":"assigned","labels":["B.BLAME_CRITICISM"],"quotes":[{"label":"B.BLAME_CRITICISM","quote":"вечно так"}]}
-{"schema_version":"rf.pilot-response.v1","item_id":"pn-02","annotator_id":"annotator-1","decision":"none_observed"}
-{"schema_version":"rf.pilot-response.v1","item_id":"pc-16","annotator_id":"annotator-1","decision":"abstained","abstention_reason":"ambiguous_between_labels","note":"validation vs none: маркер есть, признания нет"}
+{"schema_version":"rf.pilot-response.v1","item_id":"item-3f9a2c","annotator_id":"annotator-1","decision":"assigned","labels":["B.BLAME_CRITICISM"],"quotes":[{"label":"B.BLAME_CRITICISM","quote":"вечно так"}]}
+{"schema_version":"rf.pilot-response.v1","item_id":"item-b04e11","annotator_id":"annotator-1","decision":"none_observed"}
+{"schema_version":"rf.pilot-response.v1","item_id":"item-77c2d9","annotator_id":"annotator-1","decision":"abstained","abstention_reason":"ambiguous_between_labels","note":"колеблюсь между X и Y, потому что…"}
 ```
+
+Используйте `item_id` **из вашего presentation-файла** (вида `item-XXXXXX`).
 
 Поля: `labels`/`quotes` — только при `assigned`; `abstention_reason` (+`note`) — только при `abstained`. На каждый из 40 item — ровно одна строка.
 
 ## Что будет с результатами
 
-Фасилитатор посчитает согласие (Krippendorff α per label, по стратам, с CI), positive agreement и разберёт расхождения по парам (blame↔pressure, validation↔repair, avoidance↔none и т.п.). По итогам будут меняться **определения онтологии**, не ваши решения. Ваш слой сохраняется как есть, под анонимным id, навсегда.
+Расхождения между слоями будут проанализированы после заморозки обоих слоёв. По итогам будут меняться **определения онтологии**, не ваши решения. Ваш слой сохраняется как есть, под анонимным id, навсегда.

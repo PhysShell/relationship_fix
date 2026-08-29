@@ -86,6 +86,47 @@ def validate(pilot_dir: Path, ontology_path: Path) -> list[str]:
     if uncovered:
         issues.append(f"manifest: labels neither active nor deferred: {sorted(uncovered)}")
 
+    # --- presentation layer (если сгенерирован) ---
+    presentation_dir = pilot_dir / "presentation"
+    if presentation_dir.exists():
+        checksums_path = presentation_dir / "checksums.json"
+        checksums = (json.loads(checksums_path.read_text(encoding="utf-8"))["sha256"]
+                     if checksums_path.exists() else {})
+        orders: dict[str, list[str]] = {}
+        for annotator in manifest.get("presentation", {}):
+            file = presentation_dir / f"{annotator}.jsonl"
+            map_file = pilot_dir / "presentation-map" / f"{annotator}.json"
+            if not file.exists() or not map_file.exists():
+                issues.append(f"presentation: files for {annotator} missing (run metrics.presentation)")
+                continue
+            content = file.read_text(encoding="utf-8")
+            actual_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            expected_sha = checksums.get(f"presentation/{annotator}.jsonl")
+            if expected_sha and expected_sha != actual_sha:
+                issues.append(f"presentation/{annotator}: sha256 mismatch — файл менялся после генерации")
+            mapping = json.loads(map_file.read_text(encoding="utf-8"))["map"]
+            if set(mapping.values()) != set(ids):
+                issues.append(f"presentation-map/{annotator}: не покрывает canonical items 1:1")
+            presented = load_jsonl(file)
+            orders[annotator] = [mapping.get(p["item_id"], "?") for p in presented]
+            for p in presented:
+                for canonical in ids:
+                    if canonical in p["item_id"] or canonical in p["target_message_id"]:
+                        issues.append(f"presentation/{annotator}: canonical id '{canonical}' протёк в '{p['item_id']}'")
+        annotators = list(orders)
+        if len(annotators) >= 2 and orders[annotators[0]] == orders[annotators[1]]:
+            issues.append("presentation: порядки разметчиков идентичны — blind ordering не работает")
+
+    # --- eligibility (информационно: гейтит agreement, не валидация пакета) ---
+    eligibility_path = pilot_dir / "eligibility.json"
+    if eligibility_path.exists():
+        records = json.loads(eligibility_path.read_text(encoding="utf-8")).get("annotators", {})
+        pending = [a for a, r in records.items() if not all(v is True for v in r.values())]
+        if pending:
+            print(f"eligibility: НЕ заполнено для {pending} — agreement-отчёт будет отказывать до заполнения")
+    else:
+        issues.append("eligibility.json отсутствует")
+
     counts = Counter(strata.values())
     print(f"items: {len(items)}; strata: {dict(counts)}; "
           f"languages: {dict(Counter(i['language'] for i in items))}")

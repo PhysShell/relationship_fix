@@ -21,11 +21,30 @@
   "items_file": "items.jsonl",
   "strata_file": "strata.json",
   "responses_dir": "responses/",
-  "annotators": ["annotator-1", "annotator-2"],
+  "annotators": [
+    "annotator-1",
+    "annotator-2"
+  ],
   "instructions": "docs/pilot-v0-instructions.md",
   "blind_rules": [
-    "разметчики не видят strata.json",
+    "разметчик работает ТОЛЬКО со своим файлом presentation/annotator-N.jsonl (opaque ids, свой порядок)",
+    "разметчики не видят strata.json, canonical items.jsonl и presentation-map/",
     "разметчики не видят слои друг друга до сдачи обоих",
-    "обсуждение items запрещено до заморозки обоих слоёв"
+    "обсуждение items запрещено до заморозки обоих слоёв",
+    "после выдачи пакета reshuffle presentation запрещён"
+  ],
+  "presentation": {
+    "annotator-1": {
+      "seed": "rf-pilot-v0/annotator-1/2026-08-29"
+    },
+    "annotator-2": {
+      "seed": "rf-pilot-v0/annotator-2/2026-08-29"
+    }
+  },
+  "eligibility_criteria": [
+    "did_not_author_ontology",
+    "fluent_ru",
+    "fluent_en",
+    "has_not_seen_items"
   ]
 }

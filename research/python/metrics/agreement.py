@@ -203,22 +203,68 @@ def validate_responses(items: list[dict], responses: list[dict], layer: str, act
     return issues
 
 
+def check_eligibility(pilot_dir: Path, annotators: list[str]) -> str | None:
+    """Eligibility записывается фасилитатором ДО выдачи пакета (protocol §1): четыре
+    булевых поля, без демографии. Отчёт не строится, пока это не сделано."""
+    path = pilot_dir / "eligibility.json"
+    if not path.exists():
+        return f"MISSING: {path} — заполните eligibility до выдачи пакета (protocol §1)."
+    records = json.loads(path.read_text(encoding="utf-8")).get("annotators", {})
+    required = ("did_not_author_ontology", "fluent_ru", "fluent_en", "has_not_seen_items")
+    for annotator in annotators:
+        record = records.get(annotator)
+        if record is None:
+            return f"eligibility.json: нет записи для {annotator}."
+        for field in required:
+            if record.get(field) is not True:
+                return f"eligibility.json: {annotator}.{field} != true — разметчик не проходит критерии pilot."
+    return None
+
+
+def remap_layer(pilot_dir: Path, annotator: str, responses: list[dict]) -> tuple[list[dict], list[str]]:
+    """Ответы приходят в opaque presentation-ids; facilitator-map возвращает их
+    в canonical пространство. Без map (legacy/тесты) ids считаются canonical."""
+    map_path = pilot_dir / "presentation-map" / f"{annotator}.json"
+    if not map_path.exists():
+        return responses, []
+    mapping = json.loads(map_path.read_text(encoding="utf-8"))["map"]
+    issues = []
+    remapped = []
+    for response in responses:
+        item_id = response["item_id"]
+        if item_id in mapping:
+            remapped.append({**response, "item_id": mapping[item_id]})
+        else:
+            issues.append(f"{annotator}: item_id '{item_id}' не из presentation-набора этого разметчика")
+            remapped.append(response)
+    return remapped, issues
+
+
 def run(pilot_dir: Path) -> int:
     manifest = json.loads((pilot_dir / "pilot-manifest.json").read_text(encoding="utf-8"))
     items = load_jsonl(pilot_dir / manifest["items_file"])
     strata = json.loads((pilot_dir / manifest["strata_file"]).read_text(encoding="utf-8"))["strata"]
     active = set(manifest["active_labels"])
 
+    eligibility_problem = check_eligibility(pilot_dir, manifest["annotators"])
+    if eligibility_problem:
+        print(eligibility_problem, file=sys.stderr)
+        return 2
+
     layers = {}
+    remap_issues: list[str] = []
     for annotator in manifest["annotators"]:
         path = pilot_dir / manifest["responses_dir"] / f"{annotator}.jsonl"
         if not path.exists():
             print(f"MISSING LAYER: {path} — pilot не завершён, отчёт не строится.", file=sys.stderr)
             return 2
-        layers[annotator] = load_jsonl(path)
+        responses, issues = remap_layer(pilot_dir, annotator, load_jsonl(path))
+        layers[annotator] = responses
+        remap_issues.extend(issues)
 
     (a_id, b_id) = manifest["annotators"][:2]
-    issues = (validate_responses(items, layers[a_id], a_id, active)
+    issues = (remap_issues
+              + validate_responses(items, layers[a_id], a_id, active)
               + validate_responses(items, layers[b_id], b_id, active))
     if issues:
         print("RESPONSE VALIDATION FAILED:", file=sys.stderr)

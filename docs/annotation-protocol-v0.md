@@ -7,6 +7,7 @@
 ## 1. Роли
 
 - **Разметчики ≠ авторы онтологии.** Минимум один разметчик — наивный (не участвовал в написании определений): гайд обязан работать без телепатии intended meaning.
+- **Eligibility фиксируется до выдачи пакета** в `data/pilot/v0/eligibility.json` — четыре булевых поля per annotator: `did_not_author_ontology`, `fluent_ru`, `fluent_en` (корпус двуязычный: слабый английский превратит α_en в статистическую декорацию), `has_not_seen_items`. Никакой демографии и персональных данных. Agreement-скрипт отказывается строить отчёт без заполненного eligibility.
 - **Три разметчика на подмножестве** (adjudication set): при двух несогласных не видно, кто ошибся; при трёх различимы systematic (чинить определение) и idiosyncratic (чинить инструктаж) расхождения.
 - Adjudicated-решения пишутся в `data/gold/<ontology-version>/`, сырые слои каждого разметчика — в `data/annotations/<ontology-version>/<annotator>.jsonl`. Gold иммутабелен; новая версия онтологии = новый слой (см. ADR-0002 §7).
 
@@ -14,6 +15,8 @@
 
 - Контракт аннотаций — `rf.annotation.v2`: цель задаётся **AnnotationTarget** (utterance → message_id; turn/exchange/episode → provenance-aware DerivedUnitRef с segmentation_version, составом сообщений и hash'ем состава — см. ADR-0002 §4.1). Kind цели и есть единица анализа — отдельного поля unit нет, рассинхрон невозможен.
 - **Pilot v0 размечает только utterance-цели**; labels с `allowed_units: [turn, exchange]` (например `B.WITHDRAWAL`) технически недоступны — валидатор отвергает до сохранения. Turn/exchange-разметка откроется вместе с первым segmentation-алгоритмом (и его версией в DerivedUnitRef).
+- **Blind presentation layer.** Canonical id (`pc-*`/`pn-*`) и блочный порядок items протекают стратой, поэтому разметчик никогда не видит canonical-файлы: каждому выдаётся свой `presentation/annotator-N.jsonl` с opaque ids (`item-XXXXXX`, детерминированно из per-annotator seed в manifest) и независимым перемешанным порядком — иначе fatigue/priming/adaptation коррелированы между разметчиками. Facilitator-only `presentation-map/` возвращает ответы в canonical пространство при скоринге. После выдачи пакета reshuffle запрещён; canonical items.jsonl/strata.json при этом иммутабельны и не менялись.
+- **Ожидаемые confusion-пары не сообщаются разметчикам** (полной слепоты всё равно нет — `confusable_with` виден в онтологии, — но специально повторять ожидаемые failure modes перед exercise значит подсказывать «здесь думай между этими двумя»). Конкретные пары — предмет facilitator-анализа: label↔label матрица, label↔NONE_OBSERVED, ASSIGNED↔ABSTAINED(ambiguous_between_labels).
 - **Контекстное окно фиксировано протоколом**: разметчик видит ±10 сообщений вокруг единицы (или границы эпизода, если он короче). Менять окно между сессиями нельзя — agreement перестаёт быть сравнимым.
 
 ## 3. Решения разметчика
