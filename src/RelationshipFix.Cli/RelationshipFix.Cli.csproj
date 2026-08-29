@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>relationship-fix</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RelationshipFix.Evaluation\RelationshipFix.Evaluation.csproj" />
+    <ProjectReference Include="..\RelationshipFix.AI.Anthropic\RelationshipFix.AI.Anthropic.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Spectre.Console" />
+  </ItemGroup>
+</Project>

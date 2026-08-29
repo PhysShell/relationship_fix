@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- ADR-0002: единственный проект, которому разрешена сериализация wire-артефактов. -->
+  <ItemGroup>
+    <ProjectReference Include="..\RelationshipFix.Domain\RelationshipFix.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="NodaTime" />
+    <PackageReference Include="NodaTime.Serialization.SystemTextJson" />
+  </ItemGroup>
+</Project>

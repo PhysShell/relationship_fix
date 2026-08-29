@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Evaluation harness: slice pipeline, ontology validation, provenance (ADR-0003). -->
+  <ItemGroup>
+    <ProjectReference Include="..\RelationshipFix.Domain\RelationshipFix.Domain.csproj" />
+    <ProjectReference Include="..\RelationshipFix.DataContracts\RelationshipFix.DataContracts.csproj" />
+    <ProjectReference Include="..\RelationshipFix.AI.Abstractions\RelationshipFix.AI.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="NodaTime" />
+  </ItemGroup>
+</Project>

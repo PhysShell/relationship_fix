@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- ADR-0001: единственный provider-адаптер стартового набора. -->
+  <ItemGroup>
+    <ProjectReference Include="..\RelationshipFix.AI.Abstractions\RelationshipFix.AI.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Anthropic" />
+  </ItemGroup>
+</Project>

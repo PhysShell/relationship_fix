@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- ADR-0001: Domain = Thinktecture + NodaTime + BCL. Ничего больше без ADR. -->
+  <ItemGroup>
+    <PackageReference Include="Thinktecture.Runtime.Extensions" />
+    <PackageReference Include="NodaTime" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+{"schema_version":"rf.source-message.v1","message_id":"m001","author":"a","timestamp_resolution":"exact_instant","timestamp_utc":"2026-08-01T18:00:00Z","text":"Ты всегда обо всём забываешь."}
+{"schema_version":"rf.source-message.v1","message_id":"m002","author":"b","timestamp_resolution":"exact_instant","timestamp_utc":"2026-08-01T18:01:10Z","text":"ок"}
+{"schema_version":"rf.source-message.v1","message_id":"m003","author":"b","timestamp_resolution":"exact_instant","timestamp_utc":"2026-08-01T18:04:32Z","text":"Прости, я правда затупил 😔"}
+{"schema_version":"rf.source-message.v1","message_id":"m004","author":"a","timestamp_resolution":"exact_instant","timestamp_utc":"2026-08-01T18:05:00Z","text":"Понимаю, ты не нарочно. Просто мне важно."}
+{"schema_version":"rf.source-message.v1","message_id":"m005","author":"b","timestamp_resolution":"exact_instant","timestamp_utc":"2026-08-01T18:05:40Z","text":"ну ты дебил 😂❤️"}
+{"schema_version":"rf.source-message.v1","message_id":"m006","author":"a","timestamp_resolution":"exact_instant","timestamp_utc":"2026-08-02T09:12:00Z","text":"You never listen to me when I am tired."}
+{"schema_version":"rf.source-message.v1","message_id":"m007","author":"b","timestamp_resolution":"exact_instant","timestamp_utc":"2026-08-02T09:13:05Z","text":"I'm sorry, you're right. Let me try again."}
+{"schema_version":"rf.source-message.v1","message_id":"m008","author":"a","timestamp_resolution":"exact_instant","timestamp_utc":"2026-08-02T09:14:00Z","text":"."}
+{"schema_version":"rf.source-message.v1","message_id":"m009","author":"b","timestamp_resolution":"local_time_with_assumed_zone","timestamp_local":"2026-08-02T14:20:00","assumed_zone_id":"Asia/Almaty","text":"Я понимаю 😔, но мне тоже тяжело."}
+{"schema_version":"rf.source-message.v1","message_id":"m010","author":"a","timestamp_resolution":"local_time_unknown_zone","timestamp_local":"2026-08-02T14:32:00","text":"Ладно. Кстати, ты видела, что придумали соседи? 🇰🇿"}

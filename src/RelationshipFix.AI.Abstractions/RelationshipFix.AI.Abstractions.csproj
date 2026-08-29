@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Провайдеро-независимые LLM-абстракции. Никаких provider SDK (архитектурный тест). -->
+</Project>

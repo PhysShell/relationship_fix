@@ -1,0 +1,15 @@
+<Project>
+  <!-- ADR-0001: central package management; добавление новой зависимости = правка этого файла = видимое решение. -->
+  <ItemGroup>
+    <PackageVersion Include="Thinktecture.Runtime.Extensions" Version="10.5.0" />
+    <PackageVersion Include="NodaTime" Version="3.3.3" />
+    <PackageVersion Include="NodaTime.Serialization.SystemTextJson" Version="1.4.0" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.11" />
+    <PackageVersion Include="Spectre.Console" Version="0.57.2" />
+    <PackageVersion Include="Anthropic" Version="12.44.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="FsCheck.Xunit.v3" Version="3.4.0" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.4" />
+  </ItemGroup>
+</Project>

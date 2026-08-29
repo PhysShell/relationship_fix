@@ -1,6 +1,6 @@
 # relationship_fix — Relationship Engine (research)
 
-Статус: **research**. Кода пока нет — здесь фиксируется продуктовый, научный, safety- и evaluation-фундамент.
+Статус: **research → этап 0–2 roadmap'а**. В репозитории: research-фундамент (docs/) + первый исполняемый каркас на .NET 10 — BehaviorOntology v0.1, data contract с property-тестами и уродливый vertical slice.
 
 ## Концепция
 
@@ -78,6 +78,42 @@ model update
 - IPR-style feedback пользователя измеряет субъективное соответствие и missing context, но не превращается автоматически в ground truth.
 - Persona simulator — последний по порядку, а не первый; recovery value проверяется до realism.
 - Breakup-surface не оптимизируется на бесконечный retention; monetization не должна поощрять rumination.
+
+## Engineering
+
+```
+src/
+  RelationshipFix.Domain          типы (Thinktecture VO/SmartEnum/Union + NodaTime): онтология,
+                                  evidence spans, source messages, finding decisions
+  RelationshipFix.DataContracts   канонический JSON (ADR-0002), wire DTO, явный маппинг,
+                                  code-point утилиты, JSONL
+  RelationshipFix.Evaluation      ontology loader/validator, slice pipeline, provenance (ADR-0003)
+  RelationshipFix.AI.Abstractions IModelClient / capabilities (provider-free)
+  RelationshipFix.AI.Anthropic    минимальный адаптер официального SDK
+  RelationshipFix.Cli             relationship-fix slice | validate-ontology
+tests/
+  Architecture.Tests              границы ADR-0001 как падающие тесты (ArchUnitNET + reflection)
+  DataContracts.Tests             FsCheck property-тесты Unicode-спанов + golden fixtures + roundtrip
+  E2E.Tests                       vertical slice сквозняком на repo-fixture
+data/
+  ontology/behavior-v0.1.json     6 draft-лейблов с двуязычными примерами (machine-readable constraints)
+  fixtures/slice-001/             входной fixture (ru/en, эмодзи, все timestamp-резолюции)
+  contracts/                      golden wire fixtures (замороженные байты контракта)
+docs/adr/                         ADR-0001 (пакеты/границы), ADR-0002 (data contract), ADR-0003 (run provenance)
+docs/annotation-protocol-v0.md    протокол разметки: α per label, challenge/natural страты, abstention
+```
+
+Запуск (нужен .NET 10 SDK):
+
+```bash
+dotnet test --solution RelationshipFix.slnx          # 32 теста: architecture + contracts + e2e
+dotnet run --project src/RelationshipFix.Cli -- \
+  slice --messages data/fixtures/slice-001/messages.jsonl \
+        --ontology data/ontology/behavior-v0.1.json --out runs/demo-001
+dotnet run --project src/RelationshipFix.Cli -- validate-ontology data/ontology/behavior-v0.1.json
+```
+
+Slice — детерминированный rule-stub (не LLM и не «анализ отношений»): его работа — прогнать весь контракт данных: 0–3-дисциплина решений (`assigned` / `none_observed` / `abstained(reason)`), evidence-спаны в code points c sha256-проверкой источника, манифест запуска с git/ontology/dataset-хэшами.
 
 ## Главные нерешённые вопросы
 

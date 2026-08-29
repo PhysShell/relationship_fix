@@ -1,0 +1,176 @@
+{
+  "schema_version": "rf.ontology.v1",
+  "ontology_version": "behavior-v0.1",
+  "labels": [
+    {
+      "id": "B.BLAME_CRITICISM",
+      "canonical_name": "Blame / criticism",
+      "plain_language_name_en": "Blaming or criticizing the partner",
+      "plain_language_name_ru": "Обвинение или критика партнёра",
+      "operational_definition": "Высказывание приписывает партнёру вину или негативно характеризует его личность/паттерн поведения в целом (генерализация), а не описывает конкретный эпизод и его эффект. Маркеры: генерализующие кванторы (всегда/никогда), оценка личности вместо поведения, сарказм с враждебной окраской.",
+      "allowed_units": ["utterance", "turn"],
+      "directionality": "other_directed",
+      "inclusion_criteria": [
+        "генерализация поведения партнёра (всегда/никогда/опять ты)",
+        "негативная характеристика личности, а не конкретного действия",
+        "приписывание вины за состояние/событие"
+      ],
+      "exclusion_criteria": [
+        "жалоба на конкретный эпизод без генерализации (это может быть B.PRESSURE_FOR_CHANGE или ничего)",
+        "игровое оскорбление с явными маркерами юмора/привязанности в контексте пары",
+        "самокритика"
+      ],
+      "examples": [
+        { "language": "ru", "text": "Ты всегда обо всём забываешь.", "unit": "utterance", "verdict": "positive", "rationale": "генерализующий квантор + приписывание вины" },
+        { "language": "ru", "text": "ну ты дебил 😂❤️", "unit": "utterance", "verdict": "negative", "rationale": "формально оскорбление, но маркеры юмора и привязанности; в паре с историей playful insults это не критика — канонический confusable-случай" },
+        { "language": "en", "text": "You never listen to me.", "unit": "utterance", "verdict": "positive", "rationale": "generalizing quantifier targeting the partner" },
+        { "language": "en", "text": "I hate that we missed the bus today.", "unit": "utterance", "verdict": "negative", "rationale": "frustration about an event, not an attribution of blame to the partner" },
+        { "language": "ru", "text": "Опять ты со своими шуточками…", "unit": "utterance", "verdict": "ambiguous", "rationale": "может быть и упрёком, и игрой — решает контекст и просодические маркеры (эмодзи, история пары)" }
+      ],
+      "confusable_with": ["B.PRESSURE_FOR_CHANGE"],
+      "evidence_required": true,
+      "source_frameworks": ["CIRS (blame)", "SPAFF (criticism)"],
+      "status": "draft"
+    },
+    {
+      "id": "B.PRESSURE_FOR_CHANGE",
+      "canonical_name": "Pressure for change",
+      "plain_language_name_en": "Pressuring the partner to change",
+      "plain_language_name_ru": "Давление с требованием измениться",
+      "operational_definition": "Высказывание требует, настаивает или повторно добивается изменения поведения партнёра (просьба с нажимом, ультиматум, повторение требования), без негативной характеристики личности.",
+      "allowed_units": ["utterance", "turn"],
+      "directionality": "other_directed",
+      "inclusion_criteria": [
+        "явное требование/настаивание на изменении поведения",
+        "повторение просьбы с эскалацией нажима",
+        "условия/ультиматумы"
+      ],
+      "exclusion_criteria": [
+        "однократная нейтральная просьба без нажима",
+        "критика личности без требования (это B.BLAME_CRITICISM)"
+      ],
+      "examples": [
+        { "language": "ru", "text": "Сколько можно повторять — убери за собой, я серьёзно.", "unit": "utterance", "verdict": "positive", "rationale": "повторное требование с нажимом" },
+        { "language": "ru", "text": "Можешь завтра забрать посылку?", "unit": "utterance", "verdict": "negative", "rationale": "нейтральная разовая просьба" },
+        { "language": "en", "text": "I need you to actually start calling when you are late. Every time.", "unit": "utterance", "verdict": "positive", "rationale": "insistent demand for behavior change" },
+        { "language": "en", "text": "Could you grab milk on the way home?", "unit": "utterance", "verdict": "negative", "rationale": "ordinary request, no pressure" }
+      ],
+      "confusable_with": ["B.BLAME_CRITICISM"],
+      "evidence_required": true,
+      "source_frameworks": ["CIRS (pressure for change)"],
+      "status": "draft"
+    },
+    {
+      "id": "B.VALIDATION",
+      "canonical_name": "Validation",
+      "plain_language_name_en": "Acknowledging the partner's experience",
+      "plain_language_name_ru": "Признание переживания партнёра",
+      "operational_definition": "Высказывание явно признаёт переживание/точку зрения партнёра как понятную или значимую (не обязательно соглашаясь с выводами). Маркеры: называние эмоции партнёра, «понимаю/вижу/слышу», подтверждение права на реакцию.",
+      "allowed_units": ["utterance", "turn"],
+      "directionality": "other_directed",
+      "inclusion_criteria": [
+        "явное признание эмоции или позиции партнёра",
+        "перефразирование переживания партнёра без обесценивания"
+      ],
+      "exclusion_criteria": [
+        "формальное «понятно» без содержания признания",
+        "согласие с фактом без отклика на переживание",
+        "сарказм («ну конечно, тебе виднее»)"
+      ],
+      "examples": [
+        { "language": "ru", "text": "Понимаю, звучит обидно, я бы тоже разозлилась.", "unit": "utterance", "verdict": "positive", "rationale": "признание эмоции + нормализация" },
+        { "language": "ru", "text": "Понятно.", "unit": "utterance", "verdict": "negative", "rationale": "формальный маркер без признания переживания" },
+        { "language": "en", "text": "I get why that hurt — it makes sense you were upset.", "unit": "utterance", "verdict": "positive", "rationale": "explicit acknowledgement of the partner's emotion" },
+        { "language": "en", "text": "Ok noted.", "unit": "utterance", "verdict": "negative", "rationale": "acknowledgement of information, not of experience" }
+      ],
+      "confusable_with": ["B.REPAIR_ATTEMPT"],
+      "evidence_required": true,
+      "source_frameworks": ["ESConv (affirmation/reflection)", "BOLT (reflection)"],
+      "status": "draft"
+    },
+    {
+      "id": "B.REPAIR_ATTEMPT",
+      "canonical_name": "Repair attempt",
+      "plain_language_name_en": "Attempt to de-escalate / repair",
+      "plain_language_name_ru": "Попытка снизить накал / починить контакт",
+      "operational_definition": "Действие, направленное на прекращение негативной петли: извинение, принятие части ответственности, юмор-разрядка, явное предложение перезапустить разговор. Успешность repair — свойство ПЕРЕХОДА (T.*), не этого label: здесь кодируется только попытка.",
+      "allowed_units": ["utterance", "turn"],
+      "directionality": "other_directed",
+      "inclusion_criteria": [
+        "извинение или принятие части ответственности",
+        "явное предложение остановиться/начать заново",
+        "разряжающий юмор, адресованный напряжению (не партнёру)"
+      ],
+      "exclusion_criteria": [
+        "«извини, но…» с немедленной контратакой",
+        "уступка под давлением без признания ('ладно, как скажешь')"
+      ],
+      "examples": [
+        { "language": "ru", "text": "Прости, я правда затупил. Давай сначала?", "unit": "utterance", "verdict": "positive", "rationale": "извинение + предложение перезапуска" },
+        { "language": "ru", "text": "Извини конечно, но это ты всё начала.", "unit": "utterance", "verdict": "negative", "rationale": "форма извинения, содержание — контратака" },
+        { "language": "en", "text": "I'm sorry, that came out wrong — let me try again.", "unit": "utterance", "verdict": "positive", "rationale": "apology + restart offer" },
+        { "language": "en", "text": "Fine. Whatever you say.", "unit": "utterance", "verdict": "negative", "rationale": "capitulation/withdrawal marker, not repair" }
+      ],
+      "confusable_with": ["B.VALIDATION"],
+      "evidence_required": true,
+      "source_frameworks": ["Gottman/Driver (repair attempts)"],
+      "status": "draft"
+    },
+    {
+      "id": "B.WITHDRAWAL",
+      "canonical_name": "Withdrawal",
+      "plain_language_name_en": "Withdrawing from the exchange",
+      "plain_language_name_ru": "Уход из обмена",
+      "operational_definition": "Участник прекращает содержательное участие в активном обмене: перестаёт отвечать по теме, резко сокращает ответы, замолкает после прямого обращения. В тексте наблюдаем ТОЛЬКО на уровне turn/exchange (латентность, падение длины, non-uptake) — одиночная реплика не может быть withdrawal.",
+      "allowed_units": ["turn", "exchange"],
+      "directionality": "dyadic",
+      "inclusion_criteria": [
+        "прекращение ответов по активной теме после прямого обращения",
+        "резкое падение длины/содержательности ответов внутри конфликтного обмена"
+      ],
+      "exclusion_criteria": [
+        "нормальная пауза вне активного конфликта (сон, работа)",
+        "явно объявленный таймаут с обещанием вернуться (это repair-семейство)"
+      ],
+      "examples": [
+        { "language": "ru", "text": "[обмен: A задаёт три вопроса по конфликту, B отвечает «ок», «не знаю», затем молчит 6 часов]", "unit": "exchange", "verdict": "positive", "rationale": "non-uptake + падение длины + латентность внутри активного конфликта" },
+        { "language": "ru", "text": "[обмен: B не отвечает ночью, утром отвечает развёрнуто]", "unit": "exchange", "verdict": "negative", "rationale": "обычная пауза, не уход" },
+        { "language": "en", "text": "[exchange: A raises the issue twice, B replies 'k' and changes app]", "unit": "exchange", "verdict": "positive", "rationale": "minimal replies + disengagement during active conflict" },
+        { "language": "en", "text": "[exchange: B says 'I need an hour, then let's talk' and returns]", "unit": "exchange", "verdict": "negative", "rationale": "announced timeout with explicit return — not withdrawal" }
+      ],
+      "confusable_with": ["B.AVOIDANCE_TOPIC_SHIFT"],
+      "evidence_required": true,
+      "source_frameworks": ["CIRS (withdrawal)"],
+      "status": "draft"
+    },
+    {
+      "id": "B.AVOIDANCE_TOPIC_SHIFT",
+      "canonical_name": "Avoidance / topic shift",
+      "plain_language_name_en": "Avoiding the topic / shifting away",
+      "plain_language_name_ru": "Избегание темы / увод разговора",
+      "operational_definition": "Участник остаётся в разговоре, но уводит его от поднятой темы: смена темы без отклика, отшучивание от сути, откладывание без обязательства вернуться.",
+      "allowed_units": ["utterance", "turn"],
+      "directionality": "dyadic",
+      "inclusion_criteria": [
+        "смена темы сразу после поднятого вопроса без отклика на него",
+        "отшучивание от содержания вопроса (не от напряжения)",
+        "неопределённое откладывание («потом как-нибудь»)"
+      ],
+      "exclusion_criteria": [
+        "ответ по теме с последующим естественным переходом",
+        "явный перенос с обязательством («давай вечером, сейчас встреча»)"
+      ],
+      "examples": [
+        { "language": "ru", "text": "[сразу после вопроса партнёра о деньгах] Кстати, ты видела, что придумали соседи?", "unit": "utterance", "verdict": "positive", "rationale": "смена темы непосредственно после поднятого вопроса, без отклика на него" },
+        { "language": "ru", "text": "Давай вечером обсудим, сейчас правда встреча.", "unit": "utterance", "verdict": "negative", "rationale": "явный перенос с обязательством" },
+        { "language": "ru", "text": "Кстати, ты видела, что придумали соседи?", "unit": "utterance", "verdict": "ambiguous", "rationale": "без контекста не решается: смена темы — avoidance только если ей непосредственно предшествовал поднятый вопрос" },
+        { "language": "en", "text": "[right after the partner raised the budget issue] Anyway — did you see the game last night?", "unit": "utterance", "verdict": "positive", "rationale": "topic shift immediately following the partner's raised concern, no uptake" },
+        { "language": "en", "text": "Let's talk tonight, I'm in a meeting right now.", "unit": "utterance", "verdict": "negative", "rationale": "explicit deferral with commitment" }
+      ],
+      "confusable_with": ["B.WITHDRAWAL"],
+      "evidence_required": true,
+      "source_frameworks": ["CIRS (avoidance)"],
+      "status": "draft"
+    }
+  ]
+}

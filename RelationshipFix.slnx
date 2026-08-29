@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RelationshipFix.AI.Abstractions/RelationshipFix.AI.Abstractions.csproj" />
+    <Project Path="src/RelationshipFix.AI.Anthropic/RelationshipFix.AI.Anthropic.csproj" />
+    <Project Path="src/RelationshipFix.Cli/RelationshipFix.Cli.csproj" />
+    <Project Path="src/RelationshipFix.DataContracts/RelationshipFix.DataContracts.csproj" />
+    <Project Path="src/RelationshipFix.Domain/RelationshipFix.Domain.csproj" />
+    <Project Path="src/RelationshipFix.Evaluation/RelationshipFix.Evaluation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RelationshipFix.Architecture.Tests/RelationshipFix.Architecture.Tests.csproj" />
+    <Project Path="tests/RelationshipFix.DataContracts.Tests/RelationshipFix.DataContracts.Tests.csproj" />
+    <Project Path="tests/RelationshipFix.E2E.Tests/RelationshipFix.E2E.Tests.csproj" />
+  </Folder>
+</Solution>
