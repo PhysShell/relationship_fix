@@ -138,8 +138,11 @@ func (a *app) labels(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	selected := r.Form["labels"]
-	selected = validLabels(selected)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	selected := validLabels(r.Form["labels"])
 	if len(selected) == 0 {
 		state := session.EnsureItem(s, item.ID)
 		render(w, r, views.ItemPage(s.PresentationLanguage, item, index, len(catalog.Items), "labels", catalog.Labels, state.Labels, state.OriginalRevealed, localized(s.PresentationLanguage, "Выберите хотя бы одну категорию.", "Select at least one category.")))
