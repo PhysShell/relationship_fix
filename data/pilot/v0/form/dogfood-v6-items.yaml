@@ -1,0 +1,110 @@
+schema_version: rf.dogfood-items.v1
+dogfood_id: annotation-ux-v6
+status: debug_only_not_scientific_evidence
+language: ru
+included_in_scientific_pilot: false
+purpose: >-
+  Fresh challenge cases for UX/ontology dogfooding after the original three prototype
+  items became familiar to the primary tester. These items MUST NOT be merged into
+  data/pilot/v0/items.jsonl or treated as gold/pilot evidence.
+
+presentation:
+  tally_form_id: kdP6do
+  tally_form_revision: v6
+  page_numbers: [5, 6, 7, 8, 9, 10]
+  note: >-
+    These six debug items are currently RU-only even if the respondent selected English
+    for the first three multilingual prototype items.
+  decision_model:
+    - assigned
+    - none_observed
+    - abstained
+  active_labels:
+    - B.BLAME_CRITICISM
+    - B.PRESSURE_FOR_CHANGE
+    - B.VALIDATION
+    - B.REPAIR_ATTEMPT
+    - B.AVOIDANCE_TOPIC_SHIFT
+  assigned_evidence_ui: >-
+    One debug textarea. For every selected label, respondent writes
+    LABEL = «shortest exact quote». This deliberately differs from the full one-field-per-label
+    UX retained on prototype items 1-3.
+
+items:
+  - item_id: dg-04
+    probe: blame_vs_specific_episode_or_causal_description
+    messages:
+      - author: a
+        text: "Я проснулась от холода."
+      - author: b
+        text: "Ты вчера оставил окно открытым, и утром в комнате было холодно."
+        target: true
+    design_note: >-
+      Tests whether the current blame definition cleanly distinguishes a concrete episode
+      and causal attribution from generalized/person-level criticism. No expected answer is
+      frozen; disagreement may reveal an ontology contradiction.
+
+  - item_id: dg-05
+    probe: substantive_validation_vs_acknowledgement
+    messages:
+      - author: a
+        text: "Мне было страшно одной ждать результаты обследования."
+      - author: b
+        text: "Понимаю, почему тебе было страшно. Это правда тяжёлое ожидание."
+        target: true
+    design_note: >-
+      Positive-boundary probe for substantive acknowledgement of the partner's experience,
+      contrasted with bare acknowledgement such as «Понятно.»
+
+  - item_id: dg-06
+    probe: repair_deescalation_vs_avoidance
+    messages:
+      - author: a
+        text: "Мы опять кричим друг на друга, это уже никуда не ведёт."
+      - author: b
+        text: "Стоп. Я сейчас злой и говорю лишнее. Давай на час разойдёмся и вернёмся к этому в девять."
+        target: true
+    design_note: >-
+      Tests the v5/v6 boundary that a concrete, explicitly bounded pause can be an observable
+      repair/de-escalation move rather than avoidance.
+
+  - item_id: dg-07
+    probe: playful_insult_vs_blame_criticism
+    messages:
+      - author: a
+        text: "Я случайно купил билеты не на тот день 🤦"
+      - author: b
+        text: "гений планирования 😂❤️ люблю тебя, катастрофа"
+        target: true
+    design_note: >-
+      Tests whether affectionate/playful markers prevent automatic overcoding of criticism.
+
+  - item_id: dg-08
+    probe: sarcasm_with_insufficient_relational_context
+    messages:
+      - author: a
+        text: "Я опять всё испортил."
+      - author: b
+        text: "Ну ты гений."
+        target: true
+    design_note: >-
+      Deliberately under-contextualized sarcasm probe. Intended to exercise a genuine
+      none_observed-vs-abstained boundary rather than reward guessing tone or intent.
+
+  - item_id: dg-09
+    probe: multilabel_repair_plus_pressure
+    messages:
+      - author: a
+        text: "Я опять забыл предупредить, что задержусь."
+      - author: b
+        text: "Я не должна была на тебя орать, прости. Но мне правда нужно, чтобы ты начал писать, когда задерживаешься. Каждый раз."
+        target: true
+    design_note: >-
+      Multi-label boundary probe: apology/taking responsibility co-occurs with an explicit
+      demand for future behavior change. Tests whether «but» alone incorrectly cancels repair
+      and whether pressure is distinguished from blame.
+
+methodological_rule: >-
+  Do not add expected labels after seeing a respondent's answer and then call them gold.
+  If these cases are ever promoted into a scientific corpus, preregister/freeze their role,
+  independently annotate them, and preserve this dogfood artifact as historical provenance.
