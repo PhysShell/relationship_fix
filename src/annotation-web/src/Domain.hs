@@ -20,6 +20,7 @@ module Domain
   , abstentionCode
   , parseAbstentionReason
   , abstentionName
+  , abstentionRequiresNote
   , Message (..)
   , Presentation (..)
   , Item (..)
@@ -182,6 +183,14 @@ abstentionName lang reason = case reason of
   SourceCorrupted -> tr lang "Источник повреждён" "Source corrupted"
   LanguageUnsupported -> tr lang "Язык не поддерживается" "Language unsupported"
   OtherReason -> tr lang "Другая причина" "Other"
+
+-- | Reasons that are meaningless without a note: both say "the categories or
+-- the unit were the problem" without saying how, which is unusable in
+-- adjudication unless the annotator writes it down.
+abstentionRequiresNote :: AbstentionReason -> Bool
+abstentionRequiresNote AmbiguousBetweenLabels = True
+abstentionRequiresNote OtherReason = True
+abstentionRequiresNote _ = False
 
 data Message = Message
   { messageAuthor :: Text
