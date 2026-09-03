@@ -4,41 +4,53 @@ Server-rendered, JavaScript-free dogfood UI for the Relationship Fix annotation 
 
 ## Why this exists
 
-The Tally prototype was useful for discovering UX and ontology problems, but multilingual presentation required duplicating presentation blocks while answer blocks needed stable IDs. That made the form increasingly hard to reason about and made `presentation_language` only partially true.
+The Tally prototype was useful for discovering UX and ontology problems, but multilingual presentation required duplicating presentation blocks while answer blocks needed stable IDs. That made `presentation_language` only partially true and made the instrument increasingly difficult to audit.
 
 This app makes the boundary explicit:
 
 - `presentation_language` controls all respondent-facing language;
 - stored decisions and label IDs are language-independent;
 - an item has exactly one `source_language`;
-- `Show original` appears only when `source_language != presentation_language`;
-- no scientific functionality depends on client-side JavaScript;
-- the server emits the final debug submission as JSON.
+- `Show original` exists only when `source_language /= presentation_language`;
+- scientific functionality does not depend on client-side JavaScript;
+- responses and navigation state are durable in SQLite;
+- the final dogfood submission is exported as JSON.
 
-Tally v7 remains a historical dogfood artifact and should not receive further protocol features.
+Tally v7 is a historical dogfood artifact and should not receive further protocol features.
 
 ## Stack
 
-- Go
-- `net/http`
-- `github.com/a-h/templ` v0.3.1020
-- plain CSS
-- no JavaScript
-- in-memory sessions for dogfood only
+- Haskell, GHC 9.10.3 via Stackage LTS 24.57
+- Yesod
+- `yesod-form` for server-rendered forms and CSRF validation
+- Persistent + SQLite
+- Hamlet + Lucius
+- Warp bound to `127.0.0.1`
+- no client-side JavaScript
 
-## Run
+The CI has an explicit source check that fails if a `<script>` element or JavaScript source is introduced under `app/`, `src/`, or `test/`.
 
-From this directory:
+## Domain model
 
-```bash
-go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate
-go mod tidy
-go run .
+The protocol states are algebraic data types rather than loosely related strings/booleans:
+
+```haskell
+data Language = RU | EN
+
+data Decision
+  = Assigned
+  | NoneObserved
+  | Abstained
+
+data BehaviorLabel
+  = BlameCriticism
+  | PressureForChange
+  | Validation
+  | RepairAttempt
+  | AvoidanceTopicShift
 ```
 
-Then open `http://localhost:8080`.
-
-The current server uses only the fresh `dg-04` .. `dg-09` dogfood items. It deliberately does not import the frozen 40-item pilot and must not be treated as scientific evidence.
+Stable wire codes remain the research contract, e.g. `B.REPAIR_ATTEMPT`, `none_observed`, and `insufficient_context`.
 
 ## Current flow
 
@@ -48,14 +60,14 @@ language
   -> episode
       -> decision
           -> none_observed -> next
-          -> abstained -> reason -> next
+          -> abstained -> reason (+ note where required) -> next
           -> assigned -> labels -> exact evidence span(s) -> next
   -> submission.json
 ```
 
-Every navigation transition is a normal HTTP GET/POST/redirect. No JS is required.
+Every transition is ordinary HTTP GET/POST/redirect. `runFormPost` provides CSRF-protected POST forms without JavaScript.
 
-## Original/translation invariant
+## Original / translation invariant
 
 For an item whose source is Russian:
 
@@ -69,30 +81,100 @@ presentation_language = en
   -> "Show original" reveals the Russian source
 ```
 
-For an English source item the rule is exactly reversed.
+For an English source item the rule is reversed. `original_revealed` is persisted and included in the submission.
 
-The persisted meaning never changes with presentation language:
+## Persistence
 
-```json
-{
-  "decision": "assigned",
-  "labels": ["B.VALIDATION"]
+SQLite stores:
+
+- survey sessions;
+- per-item decisions;
+- selected labels;
+- evidence quotes;
+- abstention reasons/notes;
+- whether the source original was revealed;
+- a small audit event stream for dogfood UX analysis.
+
+The browser session contains only Yesod session state including the opaque database session id and CSRF state. Annotation answers are not stored in the cookie.
+
+Runtime files are gitignored:
+
+- `annotation.db`, `annotation.db-wal`, `annotation.db-shm`;
+- `client-session-key.aes`;
+- Stack/Cabal build output.
+
+## Run locally
+
+From this directory:
+
+```bash
+stack test
+stack run annotation-web
+```
+
+The server listens on `127.0.0.1:8080` by default.
+
+Useful environment variables:
+
+```text
+RF_DB_PATH            SQLite path, default annotation.db
+RF_SESSION_KEY_PATH   Yesod client-session key, default client-session-key.aes
+RF_SECURE_COOKIES     1/true/yes enables Secure session cookies
+PORT                   listen port, default 8080
+```
+
+For local plain HTTP, leave `RF_SECURE_COOKIES` unset. For deployment behind HTTPS, set it to `1`.
+
+## Vultr VPS target
+
+The intended small deployment is:
+
+```text
+Internet
+   |
+ Caddy :443
+   |
+   v
+annotation-web 127.0.0.1:8080
+   |
+   v
+SQLite
+```
+
+Example Caddy route:
+
+```caddyfile
+annotate.example.com {
+    reverse_proxy 127.0.0.1:8080
 }
 ```
 
-## Dogfood limitations
+Run the binary as an unprivileged service account. Keep the database and session key under a restricted directory such as `/var/lib/relationship-fix/` and never commit either file.
 
-The current implementation intentionally has no durable database. Restarting the process loses sessions. Download `submission.json` before shutdown.
+Production-style environment:
 
-Before use with external annotators, at minimum add:
+```text
+RF_DB_PATH=/var/lib/relationship-fix/annotation.db
+RF_SESSION_KEY_PATH=/var/lib/relationship-fix/client-session-key.aes
+RF_SECURE_COOKIES=1
+PORT=8080
+```
 
-1. durable append-only submission storage;
-2. CSRF protection for non-local deployment;
-3. frozen dataset/ontology/presentation hashes in every submission;
-4. reviewed/frozen RU/EN translations;
-5. deterministic annotator-specific item ordering;
-6. resume semantics that survive process restarts;
-7. tests that render both languages and prove source/original invariants;
-8. deployment configuration and an explicit data-retention policy.
+Only Caddy should be Internet-facing; port 8080 remains loopback-only.
 
-Do not quietly turn this dogfood server into the scientific run. Freeze a new instrument version first.
+## Dogfood scope
+
+The runtime currently contains only fresh `dg-04` .. `dg-09` challenge items. It deliberately does not import the frozen 40-item annotation pilot and must not be treated as scientific evidence.
+
+Before promotion into a scientific run, freeze a new instrument and bind at least:
+
+1. ontology hash/version;
+2. item-set hash/version;
+3. reviewed RU/EN presentation translations and hashes;
+4. instructions and UI presentation version;
+5. annotator eligibility and deterministic ordering policy;
+6. data-retention policy;
+7. rendered-language/source-original invariants;
+8. immutable submission/provenance contract.
+
+Dogfood output is debugging evidence about the instrument, not construct-validation evidence.
