@@ -9,7 +9,7 @@ This directory preserves the Tally UX prototypes that preceded the dedicated ann
 - Final Tally revision: `v7`
 - Status: **legacy UX dogfood only; not the frozen scientific annotation run**
 
-Tally is no longer the planned annotation runtime. The replacement lives in `src/annotation-web/` and uses server-rendered Go + `a-h/templ` with a JavaScript-free baseline.
+Tally is no longer the planned annotation runtime. The replacement lives in `src/annotation-web/` and uses a server-rendered Haskell/Yesod app with a JavaScript-free baseline.
 
 ## Files
 
