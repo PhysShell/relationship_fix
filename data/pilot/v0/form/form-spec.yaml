@@ -1,0 +1,157 @@
+schema_version: rf.form-spec.v1
+form_id: tally-kdP6do
+form_revision: v4
+surface: tally
+public_url: https://tally.so/r/kdP6do
+status: ux_prototype_not_scientific_run
+language_setting: ru
+ontology_version_displayed: behavior-v0.1
+source_items_file: ../items.jsonl
+
+purpose: >-
+  UX prototype for the annotation protocol. This form is not the frozen scientific
+  annotation run and submissions to it MUST NOT be treated as pilot evidence.
+
+canonicality:
+  repository_spec_is_source_of_truth: true
+  tally_is_render_target: true
+  respondent_submissions_are_debug_only: true
+
+presentation_language:
+  question: "Язык предъявления / Presentation language"
+  options:
+    - ru
+    - en
+  policy:
+    - show selected-language stimulus
+    - where selected display differs from source language, allow optional original reveal
+    - record reveal as respondent action
+    - prototype translations are machine translations and are not frozen scientific translations
+
+intro:
+  title: "Relationship Fix — прототип разметки диалогов v4"
+  observable_only_rule: >-
+    Размечайте только то, что наблюдаемо в предоставленном фрагменте.
+    Не угадывайте мотив, характер или намерение человека.
+  categories:
+    - id: B.BLAME_CRITICISM
+      display_ru: "обвинение / критика"
+      short_definition_ru: >-
+        Партнёру приписывается вина или негативная характеристика личности/устойчивого
+        паттерна в целом, а не только описывается конкретный эпизод.
+      positive_example_ru: "Ты всегда обо всём забываешь."
+      boundary_example_ru: "ну ты дебил 😂❤️"
+      boundary_note_ru: "не обязательно label в явно игровом контексте"
+    - id: B.PRESSURE_FOR_CHANGE
+      display_ru: "давление с требованием измениться"
+      short_definition_ru: >-
+        Настойчивое или повторное требование изменить поведение, давление либо ультиматум.
+      positive_example_ru: "Сколько можно повторять — убери за собой, я серьёзно."
+      negative_example_ru: "Можешь завтра забрать посылку?"
+    - id: B.VALIDATION
+      display_ru: "признание переживания / позиции"
+      short_definition_ru: >-
+        Явное признание чувства, опыта или точки зрения партнёра как понятных или значимых.
+        Согласие не обязательно.
+      positive_example_ru: "Понимаю, звучит обидно, я бы тоже разозлилась."
+      negative_example_ru: "Понятно."
+      negative_note_ru: "само по себе подтверждает получение сообщения, но не переживание"
+    - id: B.REPAIR_ATTEMPT
+      display_ru: "попытка снизить накал / восстановить контакт"
+      short_definition_ru: >-
+        Наблюдаемая попытка остановить негативную петлю: извинение, принятие части
+        ответственности, предложение начать заново и т.п. Успех repair кодируется отдельно.
+      positive_example_ru: "Прости, я правда затупил. Давай сначала?"
+      negative_example_ru: "Извини конечно, но это ты всё начала."
+    - id: B.AVOIDANCE_TOPIC_SHIFT
+      display_ru: "уход / смена поднятой темы"
+      short_definition_ru: >-
+        Человек остаётся в разговоре, но наблюдаемо уводит разговор от только что поднятой
+        темы: меняет тему без ответа по существу, отшучивается от содержания или неопределённо
+        откладывает разговор.
+      negative_example_ru: "Давай вечером, сейчас встреча."
+      boundary_note_ru: "короткий или холодный ответ сам по себе не avoidance"
+
+epistemic_decision:
+  assigned:
+    display_ru: "assigned — наблюдается одна или несколько категорий"
+  none_observed:
+    display_ru: "none_observed — фрагмента достаточно; ни одна категория не наблюдается"
+    meaning: sufficient_context_no_active_label_observed
+  abstained:
+    display_ru: "abstained — недостающий контекст мешает определить, есть категория или нет"
+    meaning: missing_information_can_change_classification
+    reasons:
+      - insufficient_context
+      - ambiguous_between_labels
+      - unit_not_applicable
+      - source_corrupted
+      - language_unsupported
+      - other
+
+evidence_policy:
+  required_for_each_assigned_label: true
+  scope: target_message_only
+  quote_rule: "самый короткий непрерывный точный фрагмент target message, достаточный для label"
+
+items:
+  - item_id: pn-20
+    page_name: "Пример 1"
+    source_language: en
+    source:
+      - author: b
+        text: "grabbed the tickets, row 12"
+      - author: a
+        text: "perfect, thank you!!"
+        target: true
+    prototype_ru_translation:
+      - author: b
+        text: "Я взял билеты, 12-й ряд."
+      - author: a
+        text: "Отлично, спасибо!!"
+        target: true
+
+  - item_id: pc-05
+    page_name: "Пример 2"
+    source_language: ru
+    source:
+      - author: a
+        text: "Мне было неприятно при всех это слушать."
+      - author: b
+        text: "Слышу тебя. Я правда перегнул при ребятах, извини."
+        target: true
+    prototype_en_translation:
+      - author: a
+        text: "It was unpleasant for me to hear that in front of everyone."
+      - author: b
+        text: "I hear you. I really went too far in front of the guys, sorry."
+        target: true
+
+  - item_id: pc-16
+    page_name: "Пример 3"
+    source_language: ru
+    source:
+      - author: a
+        text: "Мне правда тяжело даются эти созвоны с твоими родителями. Я каждый раз потом пустая."
+      - author: b
+        text: "Ясно."
+        target: true
+    prototype_en_translation:
+      - author: a
+        text: "Those calls with your parents are really hard for me. I feel completely drained every time afterwards."
+      - author: b
+        text: "I see."
+        target: true
+
+logic_contract:
+  - selected language controls stimulus presentation
+  - original reveal is optional
+  - assigned shows active labels and requires at least one
+  - each selected label shows and requires one evidence quote
+  - abstained shows and requires abstention reason
+  - ambiguous_between_labels and other require a note
+
+scientific_run_warning: >-
+  Before any real annotator is exposed, replace prototype translations with frozen reviewed
+  translations, freeze ontology/instructions/items/presentation, record hashes, and generate
+  physically separate blind annotator packages. The Tally v4 prototype does not start that freeze.
