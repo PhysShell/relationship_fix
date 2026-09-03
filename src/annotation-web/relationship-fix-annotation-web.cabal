@@ -6,6 +6,9 @@ license:            MIT
 
 common common-options
   default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    OverloadedStrings
   ghc-options:
     -Wall
     -Wcompat
@@ -26,7 +29,7 @@ library
 executable annotation-web
   import: common-options
   hs-source-dirs: app
-  main-is: Server.hs
+  main-is: Main.hs
   build-depends:
     base >=4.20 && <4.21,
     relationship-fix-annotation-web,
