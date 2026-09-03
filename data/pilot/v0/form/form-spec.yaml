@@ -1,11 +1,11 @@
 schema_version: rf.form-spec.v1
 form_id: tally-kdP6do
-form_revision: v4
+form_revision: v5
 surface: tally
 public_url: https://tally.so/r/kdP6do
 status: ux_prototype_not_scientific_run
 language_setting: ru
-ontology_version_displayed: behavior-v0.1
+ontology_version_displayed: behavior-v0.2-candidate-inspired-wording
 source_items_file: ../items.jsonl
 
 purpose: >-
@@ -29,7 +29,7 @@ presentation_language:
     - prototype translations are machine translations and are not frozen scientific translations
 
 intro:
-  title: "Relationship Fix — прототип разметки диалогов v4"
+  title: "Relationship Fix — прототип разметки диалогов v5"
   observable_only_rule: >-
     Размечайте только то, что наблюдаемо в предоставленном фрагменте.
     Не угадывайте мотив, характер или намерение человека.
@@ -49,28 +49,37 @@ intro:
       positive_example_ru: "Сколько можно повторять — убери за собой, я серьёзно."
       negative_example_ru: "Можешь завтра забрать посылку?"
     - id: B.VALIDATION
-      display_ru: "признание переживания / позиции"
+      display_ru: "содержательное признание / понимание переживания или позиции"
       short_definition_ru: >-
-        Явное признание чувства, опыта или точки зрения партнёра как понятных или значимых.
-        Согласие не обязательно.
+        Наблюдаемое признание, понимание или содержательный отклик на чувство, опыт или
+        точку зрения партнёра. Согласие с выводами не обязательно. Важен отклик именно
+        на переживание или позицию, а не просто сигнал о получении сообщения.
       positive_example_ru: "Понимаю, звучит обидно, я бы тоже разозлилась."
       negative_example_ru: "Понятно."
       negative_note_ru: "само по себе подтверждает получение сообщения, но не переживание"
     - id: B.REPAIR_ATTEMPT
-      display_ru: "попытка снизить накал / восстановить контакт"
+      display_ru: "попытка снизить накал / восстановить взаимодействие"
       short_definition_ru: >-
-        Наблюдаемая попытка остановить негативную петлю: извинение, принятие части
-        ответственности, предложение начать заново и т.п. Успех repair кодируется отдельно.
-      positive_example_ru: "Прости, я правда затупил. Давай сначала?"
+        Наблюдаемая попытка изменить негативный ход взаимодействия: взять часть ответственности,
+        извиниться без немедленной контратаки, предложить начать заново, согласованно поставить
+        разговор на паузу или иным способом снизить накал. Кодируется попытка, а не её успех
+        и не предполагаемое внутреннее намерение.
+      positive_examples_ru:
+        - "Прости, я правда затупил. Давай сначала?"
+        - "Стоп, мы сейчас только сильнее ругаемся. Давай поедим и вернёмся к этому через час."
       negative_example_ru: "Извини конечно, но это ты всё начала."
     - id: B.AVOIDANCE_TOPIC_SHIFT
       display_ru: "уход / смена поднятой темы"
       short_definition_ru: >-
-        Человек остаётся в разговоре, но наблюдаемо уводит разговор от только что поднятой
-        темы: меняет тему без ответа по существу, отшучивается от содержания или неопределённо
-        откладывает разговор.
+        Человек остаётся в разговоре, но наблюдаемо уводит его от только что поднятой темы:
+        переводит разговор на другое без ответа по существу, отшучивается от содержания или
+        неопределённо откладывает обсуждение.
+      positive_example_ru: "A: Нам надо поговорить про кредит. B: Кстати, видела новый сериал?"
       negative_example_ru: "Давай вечером, сейчас встреча."
-      boundary_note_ru: "короткий или холодный ответ сам по себе не avoidance"
+      boundary_notes_ru:
+        - "короткий или холодный ответ сам по себе не avoidance"
+        - "сама по себе смена темы или любая пауза не avoidance"
+        - "согласованная деэскалация или пауза с конкретным возвратом может быть repair, а не avoidance"
 
 epistemic_decision:
   assigned:
@@ -142,6 +151,9 @@ items:
       - author: b
         text: "I see."
         target: true
+    item_specific_note_ru: >-
+      Короткий или холодный ответ сам по себе не является ни validation, ни avoidance.
+      Кодируйте только то, что наблюдаемо в предоставленном фрагменте.
 
 logic_contract:
   - selected language controls stimulus presentation
@@ -151,7 +163,18 @@ logic_contract:
   - abstained shows and requires abstention reason
   - ambiguous_between_labels and other require a note
 
+revision_notes:
+  from_v4_to_v5:
+    - validation reframed as substantive acknowledgement/understanding rather than lexical acknowledgement
+    - repair defined as observable attempt to alter a negative interaction trajectory, not merely apology language
+    - explicit de-escalation/pause-with-return added as repair example
+    - topic shift no longer treated as intrinsically avoidance
+    - avoidance contrasted explicitly against repair/de-escalation
+  provenance_note: >-
+    Wording is informed by behavior-v0.2-candidate and observational-coding prior-art review,
+    but this Tally form remains a UX prototype and does not itself validate the adapted constructs.
+
 scientific_run_warning: >-
   Before any real annotator is exposed, replace prototype translations with frozen reviewed
   translations, freeze ontology/instructions/items/presentation, record hashes, and generate
-  physically separate blind annotator packages. The Tally v4 prototype does not start that freeze.
+  physically separate blind annotator packages. The Tally v5 prototype does not start that freeze.
