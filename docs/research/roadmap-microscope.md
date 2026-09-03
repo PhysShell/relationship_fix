@@ -89,7 +89,7 @@ parser (готовый OSS)
 
 Если ontology/pipeline систематически патологизирует normality, Stage 5 не начинается до исправления.
 
-## Этап 3 — IPR-style correction
+## Этап 3 — IPR-style correction + participant elicitation
 
 Под finding и, выборочно, под episode-level hypothesis:
 
@@ -99,6 +99,18 @@ parser (готовый OSS)
 - я воспринимал это иначе;
 - важное происходило вне чата;
 - свободный комментарий.
+
+Для context-dependent hypotheses engine также может задавать **нейтральные точечные вопросы автору конкретного сообщения** вместо догадки о его недоступном намерении. Пример: «Когда вы писали это сообщение, что вы хотели передать? Был ли дополнительный смысл, который не был выражен прямо?» До первичного ответа автору не показывается гипотеза engine, если это не требуется дизайном исследования, чтобы не создавать anchoring.
+
+В dyadic режиме отдельно хранятся:
+
+- `author self-report`;
+- `recipient interpretation`;
+- observable source behavior;
+- engine hypothesis;
+- remaining uncertainty.
+
+Private participant reflection не становится shared автоматически: автор сам выбирает, чем поделиться с партнёром. Подробный контракт, включая passive-aggression как мотивирующий context-dependent construct: [participant-elicitation.md](participant-elicitation.md).
 
 Этот feedback не является truth label сам по себе. Хранятся отдельные оси из evaluation contract: `participant_resonance`, `missing_context`, `partner_corroboration` (если этично/доступно), `observational_correctness`, `evidence_fidelity`.
 
