@@ -18,15 +18,20 @@ jobs:
         working-directory: src/annotation-web
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Setup Haskell
+        uses: haskell-actions/setup@v2
         with:
-          go-version: '1.26.x'
-          cache: false
-      - name: Generate templ
-        run: go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate
-      - name: Tidy
-        run: go mod tidy
+          ghc-version: '9.10.3'
+          enable-stack: true
+          stack-version: 'latest'
+          cabal-update: false
+      - name: Enforce no-JS source invariant
+        run: |
+          if grep -RniE '<script[ >]|src=.*\.js' app src test; then
+            echo 'Client-side JavaScript detected in annotation-web source.' >&2
+            exit 1
+          fi
       - name: Test
-        run: go test ./...
+        run: stack test --system-ghc --pedantic
       - name: Build
-        run: go build ./...
+        run: stack build --system-ghc --pedantic
