@@ -1,0 +1,51 @@
+cabal-version:      3.0
+name:               relationship-fix-annotation-web
+version:            0.1.0.0
+build-type:         Simple
+license:            MIT
+
+common common-options
+  default-language: GHC2021
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+
+library
+  import: common-options
+  hs-source-dirs: src
+  exposed-modules:
+    Domain
+    Catalog
+  build-depends:
+    base >=4.20 && <4.21,
+    text >=2.1 && <2.2
+
+executable annotation-web
+  import: common-options
+  hs-source-dirs: app
+  main-is: Main.hs
+  build-depends:
+    base >=4.20 && <4.21,
+    relationship-fix-annotation-web,
+    aeson >=2.2 && <2.3,
+    monad-logger >=0.3 && <0.4,
+    persistent >=2.17 && <2.19,
+    persistent-sqlite >=2.13 && <2.14,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+    warp >=3.3 && <3.5,
+    yesod >=1.6.2 && <1.7
+
+test-suite annotation-web-test
+  import: common-options
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Spec.hs
+  build-depends:
+    base >=4.20 && <4.21,
+    relationship-fix-annotation-web,
+    hspec >=2.11 && <2.12,
+    text >=2.1 && <2.2
