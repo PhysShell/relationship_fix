@@ -149,6 +149,12 @@ annotate.example.com {
 }
 ```
 
+All routes are rendered as relative URLs (`approot = ApprootRelative`). Yesod's
+default `guessApproot` would derive absolute URLs from the loopback request,
+which is plain HTTP, so behind a TLS-terminating proxy every form action would
+come out as `http://host/...` on an `https://` page and be rejected by the
+`form-action 'self'` directive in the app's own Content-Security-Policy.
+
 Run the binary as an unprivileged service account. Keep the database and session key under a restricted directory such as `/var/lib/relationship-fix/` and never commit either file.
 
 Production-style environment:

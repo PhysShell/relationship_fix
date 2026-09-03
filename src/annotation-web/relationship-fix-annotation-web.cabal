@@ -8,7 +8,6 @@ common common-options
   default-language: GHC2021
   default-extensions:
     DerivingStrategies
-    OverloadedStrings
   ghc-options:
     -Wall
     -Wcompat

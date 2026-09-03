@@ -12,12 +12,12 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Main where
 
 import Catalog (items)
 import Control.Monad (forM, forM_, unless, when)
-import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Logger (runStdoutLoggingT)
 import Data.Int (Int64)
 import Data.Maybe (catMaybes, fromMaybe, isJust)
@@ -25,7 +25,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Read as TR
 import Data.Time (UTCTime, getCurrentTime)
-import Database.Persist.Sql (ConnectionPool, SqlBackend, fromSqlKey, runSqlPool, toSqlKey)
+import Database.Persist.Sql (ConnectionPool, SqlBackend, fromSqlKey, runMigration, runSqlPool, toSqlKey)
 import Database.Persist.Sqlite (createSqlitePool)
 import Domain
 import Network.Wai.Handler.Warp (defaultSettings, runSettings, setHost, setPort)
@@ -89,6 +89,12 @@ mkYesod "App" [parseRoutes|
 |]
 
 instance Yesod App where
+  -- The app is served from the root of one host behind a TLS-terminating
+  -- reverse proxy. Yesod's default guessApproot would build absolute URLs from
+  -- the loopback request, which is plain HTTP, so form actions would come out
+  -- as http://host/... on an https page and be blocked by form-action 'self'.
+  approot = ApprootRelative
+
   makeSessionBackend app =
     let backend = fmap Just $ defaultClientSessionBackend (24 * 60) (appSessionKeyPath app)
      in if appSecureCookies app then sslOnlySessions backend else backend
@@ -180,7 +186,7 @@ fieldSettings label name = FieldSettings
 
 languageForm :: AppForm Text
 languageForm = renderDivs $ areq
-  (radioFieldList [("Русский", "ru"), ("English", "en")])
+  (radioFieldList [("Русский" :: Text, "ru"), ("English", "en")])
   (fieldSettings "Язык предъявления / Presentation language" "language")
   Nothing
 
