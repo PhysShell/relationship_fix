@@ -26,7 +26,7 @@ library
 executable annotation-web
   import: common-options
   hs-source-dirs: app
-  main-is: Main.hs
+  main-is: Server.hs
   build-depends:
     base >=4.20 && <4.21,
     relationship-fix-annotation-web,
