@@ -28,6 +28,10 @@ Finding
 
 Не обучать модель. Собрать 15–25 наблюдаемых действий на базе couple-литературы: CIRS (blame, pressure for change, withdrawal, avoidance…), SPAFF/SSIRS, BOLT-style multi-label, repair-категории.
 
+Ключевой provenance review: [observational-coding-prior-art.md](observational-coding-prior-art.md). Он фиксирует, какие наши labels являются event-level/CMC adaptations существующих observational constructs, а где Relationship Fix принимает собственные решения по unitization, evidence и abstention.
+
+Исторический frozen draft остаётся `data/ontology/behavior-v0.1.json`. Для следующего, ещё не frozen run используется кандидат `data/ontology/behavior-v0.2-candidate.json`; v0.1 не переписывается задним числом, потому что annotation-pilot-v0 уже связывает себя с его hash.
+
 Для каждого label:
 
 - operational definition;
@@ -35,9 +39,11 @@ Finding
 - positive/negative examples;
 - tricky/context-dependent cases;
 - relation to соседним labels;
-- human annotation guide.
+- human annotation guide;
+- explicit construct provenance (`adapted_from` / `construct_aligned` / `contrast_only` etc.);
+- documented unit/adaptation difference from source coding system.
 
-Цель этапа — не «идеальная психология», а auditable vocabulary для E0/E1.
+Цель этапа — не «идеальная психология», а auditable vocabulary для E0/E1. Established source construct ≠ автоматически validated Relationship Fix adaptation.
 
 ## Этап 1 — Synthetic corpus / E0 mechanical fidelity
 
