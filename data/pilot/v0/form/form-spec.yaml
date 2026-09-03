@@ -1,35 +1,40 @@
 schema_version: rf.form-spec.v1
 form_id: tally-kdP6do
-form_revision: v5
+form_revision: v6
 surface: tally
 public_url: https://tally.so/r/kdP6do
 status: ux_prototype_not_scientific_run
 language_setting: ru
 ontology_version_displayed: behavior-v0.2-candidate-inspired-wording
-source_items_file: ../items.jsonl
+core_items_file: ../items.jsonl
+dogfood_items_file: dogfood-v6-items.yaml
 
 purpose: >-
-  UX prototype for the annotation protocol. This form is not the frozen scientific
-  annotation run and submissions to it MUST NOT be treated as pilot evidence.
+  UX and ontology-boundary dogfood prototype for the annotation protocol. This form is not
+  the frozen scientific annotation run and submissions to it MUST NOT be treated as pilot evidence.
 
 canonicality:
   repository_spec_is_source_of_truth: true
   tally_is_render_target: true
   respondent_submissions_are_debug_only: true
+  scientific_pilot_items_are_not_modified_by_v6: true
 
 presentation_language:
   question: "Язык предъявления / Presentation language"
   options:
     - ru
     - en
-  policy:
+  core_items_1_to_3_policy:
     - show selected-language stimulus
     - where selected display differs from source language, allow optional original reveal
     - record reveal as respondent action
     - prototype translations are machine translations and are not frozen scientific translations
+  dogfood_items_4_to_9_policy:
+    - RU-only in v6 regardless of the presentation-language choice
+    - explicitly marked as dogfood and outside the scientific pilot
 
 intro:
-  title: "Relationship Fix — прототип разметки диалогов v5"
+  title: "Relationship Fix — прототип разметки диалогов v6"
   observable_only_rule: >-
     Размечайте только то, что наблюдаемо в предоставленном фрагменте.
     Не угадывайте мотив, характер или намерение человека.
@@ -98,14 +103,25 @@ epistemic_decision:
       - language_unsupported
       - other
 
-evidence_policy:
+core_evidence_policy:
+  applies_to_pages: [2, 3, 4]
   required_for_each_assigned_label: true
   scope: target_message_only
   quote_rule: "самый короткий непрерывный точный фрагмент target message, достаточный для label"
+  ui: one_evidence_field_per_selected_label
 
-items:
+dogfood_evidence_policy:
+  applies_to_pages: [5, 6, 7, 8, 9, 10]
+  scope: target_message_only
+  ui: one_required_debug_textarea_for_all_selected_labels
+  format_hint: "LABEL = «самая короткая точная цитата»"
+  rationale: >-
+    The v6 dogfood set tests ontology boundaries rather than the already-tested conditional
+    evidence-field mechanics. The simplified debug UI avoids duplicating thirty conditional fields.
+
+core_items:
   - item_id: pn-20
-    page_name: "Пример 1"
+    page_number: 2
     source_language: en
     source:
       - author: b
@@ -121,7 +137,7 @@ items:
         target: true
 
   - item_id: pc-05
-    page_name: "Пример 2"
+    page_number: 3
     source_language: ru
     source:
       - author: a
@@ -137,7 +153,7 @@ items:
         target: true
 
   - item_id: pc-16
-    page_name: "Пример 3"
+    page_number: 4
     source_language: ru
     source:
       - author: a
@@ -155,13 +171,30 @@ items:
       Короткий или холодный ответ сам по себе не является ни validation, ни avoidance.
       Кодируйте только то, что наблюдаемо в предоставленном фрагменте.
 
+dogfood_set:
+  pages: [5, 6, 7, 8, 9, 10]
+  source: dogfood-v6-items.yaml
+  item_ids:
+    - dg-04
+    - dg-05
+    - dg-06
+    - dg-07
+    - dg-08
+    - dg-09
+  scientific_status: debug_only_not_scientific_evidence
+
 logic_contract:
-  - selected language controls stimulus presentation
-  - original reveal is optional
-  - assigned shows active labels and requires at least one
-  - each selected label shows and requires one evidence quote
-  - abstained shows and requires abstention reason
-  - ambiguous_between_labels and other require a note
+  core_items:
+    - selected language controls stimulus presentation
+    - original reveal is optional
+    - assigned shows active labels and requires at least one
+    - each selected label shows and requires one evidence quote
+    - abstained shows and requires abstention reason
+    - ambiguous_between_labels and other require a note
+  dogfood_items:
+    - assigned shows and requires active-label selection plus one evidence textarea
+    - abstained shows and requires abstention reason plus context-change comment
+    - none_observed shows no additional fields
 
 revision_notes:
   from_v4_to_v5:
@@ -170,11 +203,18 @@ revision_notes:
     - explicit de-escalation/pause-with-return added as repair example
     - topic shift no longer treated as intrinsically avoidance
     - avoidance contrasted explicitly against repair/de-escalation
+  from_v5_to_v6:
+    - retain the original three familiar prototype items for continuity and full UX coverage
+    - add six fresh RU-only dogfood challenge cases in a separate non-scientific artifact
+    - probe concrete causal description vs blame, substantive acknowledgement, bounded pause, playful language, under-contextualized sarcasm, and co-occurring behaviors
+    - simplify evidence capture on dogfood pages to one required textarea while preserving exact-quote semantics
+    - explicitly prevent dogfood answers from being treated as gold or pilot evidence
   provenance_note: >-
     Wording is informed by behavior-v0.2-candidate and observational-coding prior-art review,
-    but this Tally form remains a UX prototype and does not itself validate the adapted constructs.
+    but this Tally form remains a UX/debug prototype and does not itself validate the adapted constructs.
 
 scientific_run_warning: >-
   Before any real annotator is exposed, replace prototype translations with frozen reviewed
   translations, freeze ontology/instructions/items/presentation, record hashes, and generate
-  physically separate blind annotator packages. The Tally v5 prototype does not start that freeze.
+  physically separate blind annotator packages. The Tally v6 prototype and dogfood responses
+  do not start that freeze and MUST NOT be mixed with scientific pilot evidence.
