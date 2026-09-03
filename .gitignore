@@ -8,3 +8,11 @@ artifacts/
 __pycache__/
 .venv/
 *.pyc
+
+# annotation-web / Haskell
+src/annotation-web/.stack-work/
+src/annotation-web/dist-newstyle/
+src/annotation-web/annotation.db
+src/annotation-web/annotation.db-shm
+src/annotation-web/annotation.db-wal
+src/annotation-web/client-session-key.aes
