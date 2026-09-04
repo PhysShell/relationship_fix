@@ -65,6 +65,10 @@ domainSpec = do
       validEvidence RU item "забыл закрыть окно" `shouldBe` False
     it "rejects empty evidence" $
       validEvidence RU item "   " `shouldBe` False
+    it "tells a blank answer apart from a wrong one" $ do
+      checkEvidence RU item "   " `shouldBe` Left EvidenceBlank
+      checkEvidence RU item "забыл закрыть окно" `shouldBe` Left EvidenceNotASpan
+      checkEvidence RU item "  оставил окно открытым  " `shouldBe` Right "оставил окно открытым"
 
   describe "wire codes" $ do
     it "round-trips all labels" $

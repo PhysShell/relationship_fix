@@ -41,3 +41,32 @@ void *cabi_realloc(void *ptr, size_t old_size, size_t align, size_t new_size) {
     }
     return fresh;
 }
+
+/* post-return for validate-evidence.
+ *
+ * Five flattened i32 results do not fit the single register the canonical ABI
+ * will return, so the result travels through a pointer into our linear memory.
+ * The host reads it and then calls this, which is the only chance anyone gets
+ * to release the buffers the result points at.
+ *
+ * The layout is the one computed in Abi.hs. Walking it is transport, not a
+ * rule: nothing here decides whether a quote was valid, only which pointers
+ * exist to be freed.
+ */
+__attribute__((export_name("cabi_post_validate_evidence")))
+void cabi_post_validate_evidence(unsigned char *result) {
+    if (result == NULL) {
+        return;
+    }
+
+    if (result[0] == 0) {
+        /* ok(accepted-evidence): displayed-target at +4, quote at +12 */
+        free(*(void **)(result + 4));
+        free(*(void **)(result + 12));
+    } else if (result[4] == 0) {
+        /* err(unknown-item(string)): the payload string at +8 */
+        free(*(void **)(result + 8));
+    }
+
+    free(result);
+}

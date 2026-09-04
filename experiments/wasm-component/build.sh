@@ -36,6 +36,7 @@ wasm32-wasi-ghc \
   -no-hs-main -optl-mexec-model=reactor \
   -optl-Wl,--export=cabi_realloc \
   -optl-Wl,--export=validate_evidence \
+  -optl-Wl,--export=cabi_post_validate_evidence \
   -i"$root/src/annotation-web/src" -i"$here" \
   -outputdir "$build/obj" \
   "$build/cabi_realloc.o" \
@@ -55,8 +56,10 @@ wasm32-wasi-ghc \
 #    of the two grammars is empty. This renames one export and does nothing
 #    else; no rule of the protocol passes through here.
 wasm-tools print "$build/validator-core.wasm" -o "$build/core.wat"
+canonical='relationship-fix:annotation/validator@0.2.0#validate-evidence'
 sed -i \
-  's|(export "validate_evidence"|(export "relationship-fix:annotation/validator@0.1.0#validate-evidence"|' \
+  -e "s|(export \"validate_evidence\"|(export \"$canonical\"|" \
+  -e "s|(export \"cabi_post_validate_evidence\"|(export \"cabi_post_$canonical\"|" \
   "$build/core.wat"
 wasm-tools parse "$build/core.wat" -o "$build/validator-renamed.wasm"
 
