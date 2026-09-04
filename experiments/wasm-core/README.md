@@ -80,15 +80,22 @@ The same module, one more capability. Note the first message: not "permission
 denied" but "does not exist". An ungranted path is not forbidden, it is absent
 from the guest's namespace. There is nothing to probe for.
 
-### A bug the unit tests could not have found
+### A defect of this boundary, not of the server
 
 The first native run crashed on the first Cyrillic character:
 `commitAndReleaseBuffer: invalid argument (cannot encode character '\1058')`.
 Handle encodings are derived from the ambient locale, and a CI runner, a systemd
-unit and a WASI guest all have none. A bilingual instrument whose output depends
-on the operator's `LANG` is broken; `Main.hs` now sets the encoding explicitly
-for stdout, stderr and argument decoding. The hspec suite never saw it because
-tests do not write the instrument's own output.
+unit and a WASI guest all have none. `Main.hs` now sets the encoding explicitly for stdout, stderr and
+argument decoding, and the hspec suite never saw it because tests do not write
+the instrument's own output.
+
+Scope this honestly: it is a confirmed defect of *this* CLI and runtime
+boundary under locale-less execution, not a confirmed defect of the Yesod
+server. The server writes its responses as bytes through Warp and never routes
+Russian text through a stdout handle, and nothing in `src/annotation-web/`
+changed here. What the experiment demonstrates is the class of risk — the same
+mistake in any future logging path on a host with no `LANG` would take the
+server down the same way.
 
 ## What this does not show
 

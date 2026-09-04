@@ -1,0 +1,31 @@
+package relationship-fix:annotation@0.1.0;
+
+/// The evidence rule of the annotation protocol, as a typed interface rather
+/// than a command line. Callers do not parse text output and do not agree on a
+/// JSON shape; they call a function whose signature is part of the artifact.
+interface validator {
+    /// Presentation language. The case order matches the constructors of
+    /// `Language` in Domain.hs, which is what makes the discriminant crossing
+    /// the ABI boundary meaningful in both directions.
+    enum language {
+        ru,
+        en,
+    }
+
+    /// True when `quote` is an exact continuous span of the target message of
+    /// `item-id` as displayed in `language`.
+    ///
+    /// Note that this is deliberately a question about the presentation, not
+    /// about the source: the same quote is valid against a Russian
+    /// presentation of a Russian item and invalid against its English
+    /// translation.
+    validate-evidence: func(
+        language: language,
+        item-id: string,
+        quote: string,
+    ) -> bool;
+}
+
+world annotation-validator {
+    export validator;
+}

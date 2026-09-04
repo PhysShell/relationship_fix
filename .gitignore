@@ -19,3 +19,5 @@ src/annotation-web/client-session-key.aes
 
 # wasm laboratory build output
 experiments/wasm-core/*.wasm
+experiments/wasm-component/build/
+experiments/wasm-component/*.wasm
