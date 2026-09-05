@@ -406,12 +406,21 @@ fingerprintDiff leftLabel left rightLabel right =
 -- database rewrites parts of it, so the bytes change when nothing was stored.
 -- The question is about content, so the digest is over content.
 --
+-- Take it while nothing can write. The snapshot below makes the digest
+-- internally consistent, not the database quiescent.
+--
 -- The fold is FNV-1a, not SHA-256, and deliberately: this detects our own
 -- application writing rows, which is accident detection and not an adversarial
 -- problem, and 64 bits with no new dependency is the honest size for it. Do not
 -- reach for this to prove a file has not been tampered with.
 dataFingerprint :: Sqlite.Connection -> IO Text
-dataFingerprint conn = do
+dataFingerprint conn = Sqlite.withTransaction conn $ do
+  -- One read transaction over the whole walk, so the answer describes a single
+  -- moment. Reading each table in its own implicit transaction would let a
+  -- writer slip between them and produce a digest of a database that never
+  -- existed -- which, for something a rollback decision rests on, is worse than
+  -- no answer. The caller is expected to have stopped every writer first; this
+  -- makes the digest self-consistent even when that expectation is wrong.
   tables <- Sqlite.query_ conn
     "SELECT name FROM sqlite_master WHERE type = 'table' \
     \AND name <> '_migrations' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' \

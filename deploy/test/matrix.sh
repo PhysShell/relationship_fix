@@ -475,6 +475,145 @@ STUB
     "the new row should have survived; before=$before after=$after"
 }
 
+# ---------------------------------------------------------------------------
+# 9b. The database's *directory* is checked, not just the file.
+#
+#     SQLite creates and removes -wal, -shm and -journal siblings next to the
+#     database, and a restore replaces the file in place. `test -w $DB` says
+#     nothing about any of that, so a deploy that only checked the file would
+#     get all the way to the restore before finding out it could not do one.
+# ---------------------------------------------------------------------------
+scenario_database_directory_checked() {
+  local root; root=$(make_host dbdir)
+  seed_legacy_db "$root/annotation.db"
+
+  local previous; previous=$(make_release prev-dbdir)
+  run_activate "$root" "$previous" >/dev/null
+  local before; before=$(digest_of "$root/annotation.db")
+
+  local release; release=$(make_release good-dbdir)
+  # A database whose directory cannot exist. Deliberately not a chmod: this may
+  # run as root, and root walks through permission bits, so a test built on them
+  # would pass by doing nothing.
+  touch "$root/a-file-not-a-directory"
+  local status
+  status=$(env RF_FAKE_ROOT="$root" RF_FAKE_PORT="$PORT" RF_ACTIVATE_BACKEND="$FAKE_BACKEND" \
+    RF_DB_PATH="$root/a-file-not-a-directory/annotation.db" RF_BACKUP_DIR="$root/backups" \
+    RF_HEALTH_URL="http://127.0.0.1:$PORT/" RF_HEALTH_ATTEMPTS=4 RF_HEALTH_INTERVAL=0.5 \
+    RF_LOCK_FILE="$root/activate.lock" \
+    "$ACTIVATE" "$release" test-sha >"$root/report.txt" 2>"$root/activate.log"; echo $?)
+  local still_serving=0
+  curl -sf --max-time 5 "http://127.0.0.1:$PORT/" >/dev/null 2>&1 && still_serving=1
+  cleanup_host "$root"
+  local after; after=$(digest_of "$root/annotation.db")
+
+  check "an unusable database directory -> DEPLOY REFUSED" \
+    "$([[ $status -eq 10 ]] && echo 1 || echo 0)" \
+    "exit $status (want 10), log: $(tail -1 "$root/activate.log")"
+  check "  and it refused before stopping the running service" "$still_serving" ""
+  check "  and the real database was left alone" \
+    "$([[ $before == "$after" ]] && echo 1 || echo 0)" "before=$before after=$after"
+}
+
+# ---------------------------------------------------------------------------
+# 10. A migration that rewrites rows is not an application write.
+#
+#     This is about *when* the baseline digest is taken, which is the one thing
+#     in the whole design that is a single edit away from being subtly wrong.
+#     The baseline has to answer "has anything changed since the new
+#     application became reachable", not "did the migration change anything".
+#
+#     Take it before the migration instead, and the first real data migration --
+#     any UPDATE at all -- makes every rollback look like it would destroy data,
+#     and a perfectly safe deploy refuses to roll back. That failure would show
+#     up months from now, on the one night it matters.
+# ---------------------------------------------------------------------------
+scenario_data_migration_is_not_a_write() {
+  local root; root=$(make_host datamigration)
+  seed_legacy_db "$root/annotation.db"
+
+  local previous; previous=$(make_release prev-datamigration)
+  run_activate "$root" "$previous" >/dev/null
+  cleanup_host "$root"
+  local before; before=$(digest_of "$root/annotation.db")
+
+  # A release whose migration rewrites existing rows and whose server then
+  # never answers: the rollback must still happen.
+  local rel; rel=$(make_release rewrites-rows-then-hangs)
+  rm "$rel/bin/annotation-web-migrate" "$rel/bin/annotation-web"
+  cat > "$rel/bin/annotation-web-migrate" <<STUB
+#!/usr/bin/env bash
+if [ "\${1:-migrate}" = "migrate" ]; then
+  "$BIN_DIR/annotation-web-migrate" migrate || exit 1
+  sqlite3 "\$RF_DB_PATH" "UPDATE annotation SET abstention_note = 'rewritten by a data migration' WHERE decision = 'abstained';"
+  exit 0
+fi
+exec "$BIN_DIR/annotation-web-migrate" "\$@"
+STUB
+  cat > "$rel/bin/annotation-web" <<'STUB'
+#!/usr/bin/env bash
+while true; do sleep 1; done
+STUB
+  chmod +x "$rel/bin/annotation-web-migrate" "$rel/bin/annotation-web"
+
+  local status; status=$(run_activate "$root" "$rel")
+  cleanup_host "$root"
+  local after; after=$(digest_of "$root/annotation.db")
+
+  check "a migration that rewrites rows still allows rollback" \
+    "$([[ $status -eq 13 ]] && echo 1 || echo 0)" \
+    "exit $status (want 13, not 14; 14 would mean the baseline digest was taken before the migration)"
+  check "  and the migration's own rewrite is not counted as an application write" \
+    "$([[ $(report_value "$root" post_activation_writes) == none ]] && echo 1 || echo 0)" \
+    "post_activation_writes=$(report_value "$root" post_activation_writes)"
+  check "  and the rollback undid the data migration too" \
+    "$([[ $before == "$after" ]] && echo 1 || echo 0)" "before=$before after=$after"
+}
+
+# ---------------------------------------------------------------------------
+# 11. No quiescence, no decision.
+#
+#     The digest is only evidence if nothing can write while it is taken. If the
+#     unhealthy release will not stop, there is no evidence to be had, and the
+#     honest move is to refuse rather than to read a database mid-write and
+#     overwrite it based on what that said.
+# ---------------------------------------------------------------------------
+scenario_unstoppable_service() {
+  local root; root=$(make_host unstoppable)
+  seed_legacy_db "$root/annotation.db"
+
+  local previous; previous=$(make_release prev-unstoppable)
+  run_activate "$root" "$previous" >/dev/null
+  cleanup_host "$root"
+  local before; before=$(digest_of "$root/annotation.db")
+
+  local sick; sick=$(make_release sick-and-unstoppable)
+  rm "$sick/bin/annotation-web"
+  cat > "$sick/bin/annotation-web" <<'STUB'
+#!/usr/bin/env bash
+while true; do sleep 1; done
+STUB
+  chmod +x "$sick/bin/annotation-web"
+
+  # The stop only starts failing once the deploy has got as far as the health
+  # check, so the earlier quiesce still succeeds and this exercises the branch
+  # under test rather than the preflight one.
+  local status
+  status=$(run_activate "$root" "$sick" RF_FAKE_STOP_FAILS_AFTER_START=1)
+  cleanup_host "$root"
+  local after; after=$(digest_of "$root/annotation.db")
+
+  check "an unhealthy release that will not stop -> REFUSED, nothing restored" \
+    "$([[ $status -eq 15 ]] && echo 1 || echo 0)" \
+    "exit $status (want 15), log: $(tail -1 "$root/activate.log")"
+  check "  and it says the evidence could not be gathered" \
+    "$([[ $(report_value "$root" post_activation_writes) == unknown ]] && echo 1 || echo 0)" \
+    "post_activation_writes=$(report_value "$root" post_activation_writes)"
+  check "  and it did not overwrite the database on a guess" \
+    "$([[ $(report_value "$root" db_restored) == refused ]] && echo 1 || echo 0)" \
+    "db_restored=$(report_value "$root" db_restored)"
+}
+
 # Stands in for a respondent answering a question in the window between "the
 # new release is reachable" and "the deploy decided it is unhealthy".
 cat > "$WORK/insert-a-row" <<'STUB'
@@ -494,6 +633,9 @@ scenario_backup_unavailable
 scenario_wrong_revision_migrator
 scenario_no_writes_during_migration
 scenario_writes_then_unhealthy
+scenario_database_directory_checked
+scenario_data_migration_is_not_a_write
+scenario_unstoppable_service
 
 echo
 echo "$pass passed, $fail failed"

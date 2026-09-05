@@ -60,13 +60,52 @@ longer describes the database. Restoring it would not be a rollback; it would be
 deleting a respondent's answer. The script refuses, leaves the service stopped,
 and exits 14.
 
-The boundary between B and C is decided by evidence, not by a clock. Before the
-service is started, the script records a digest of every row in every table.
-After a failed health check it takes the digest again. Equal means the backup is
-still a complete description of the world; different means it is not.
+The boundary between B and C is decided by evidence, not by a clock:
 
-Comparing the file byte for byte would not work: merely opening a WAL database
-rewrites parts of it, so the bytes change when nothing was stored.
+```
+backup verified
+      │
+   migrate
+      │
+   verify
+      │
+ DIGEST A          ← after the migration, before anything is started
+      │
+    start
+      │
+ health FAIL
+      │
+   stop  ← confirmed, not attempted
+      │
+ DIGEST B
+    /     \
+A == B    A != B
+   │         │
+restore    refuse,
+DB + old   exit 14
+release
+```
+
+Two things about that ordering are load-bearing and easy to get wrong.
+
+**A is taken after the migration, not before.** The question is "has anything
+changed since the new application became reachable", not "did the migration
+change anything". Take A before the migration and the first real data migration
+— any `UPDATE` at all — makes every rollback look like it would destroy data, and
+a perfectly safe deploy refuses to roll back. That failure would surface months
+later, on the one night it matters. `matrix.sh` has a scenario whose migration
+rewrites rows and whose server is then unhealthy: it must exit 13, and moving
+the baseline earlier turns it red.
+
+**B is taken only after the stop is confirmed.** A digest read while something
+can still write is several moments stitched together, and overwriting a database
+based on that is worse than not deciding at all. If the unhealthy release will
+not stop, there is no evidence to be had and no automatic action to take: exit
+15, nothing restored. The digest itself is also taken inside a single SQLite read
+transaction, so it describes one snapshot even if that expectation is violated.
+
+Comparing the file byte for byte would not work at all: merely opening a WAL
+database rewrites parts of it, so the bytes change when nothing was stored.
 
 ## Exit codes
 
@@ -94,6 +133,27 @@ release against the schema that is already there; or extract the new rows,
 restore the backup, and reapply them by hand. Discarding them is a decision a
 person makes explicitly, never one the pipeline makes quietly.
 
+## Why a plain copy is a sound backup here
+
+`cp` of a live SQLite database is not a snapshot, and the WAL makes that worse
+rather than better. It is sound in this script for two specific reasons, both of
+which are checked rather than assumed:
+
+1. **The copy happens after confirmed quiescence.** The service is stopped and
+   the stop is polled until the process is actually gone; a stop that does not
+   confirm is exit 10 with nothing else touched. The database file, its `-wal`
+   and its `-shm` are then copied together, because a service that was killed
+   rather than shut down cleanly leaves a WAL that is part of the database.
+2. **The copy is then verified as a database.** `annotation-web-migrate
+   integrity` runs against the copy, and its row digest is compared against the
+   live one. A truncated or torn copy fails one or both. That is a stronger
+   guarantee than "we called the right API": it is a check on the artifact, not
+   a claim about the method.
+
+If quiescence ever stops being guaranteed, this reasoning collapses and the
+backup needs `VACUUM INTO` or the online backup API instead. That is why the
+stop is a hard failure and not a best effort.
+
 ## Verifying the layer without a VPS
 
 ```bash
@@ -115,6 +175,9 @@ host — no systemd, no sudo, no network — and covers:
 | migrator from another release | refused before anything is stopped |
 | writes during the migration window | impossible by construction, asserted |
 | health fails after a write | **no automatic restore** |
+| unusable database directory | refused before anything is stopped |
+| migration rewrites rows, then health fails | rollback still allowed |
+| unhealthy release will not stop | refused, nothing restored |
 
 It also mutation-tests itself in the sense that matters: removing the
 release-identity check or the write-detection branch turns rows red.
@@ -139,18 +202,64 @@ Stated plainly, because the alternative is someone assuming otherwise.
   requires `deploy` to be able to read and write both `/var/lib/relationship-fix/`
   and the database file, which is normally owned by the service account.
 
-Before the first real deploy, on the host:
+### Operational qualification, before the first real deploy
+
+Run these on the host, as the user the deploy actually runs as. `test -w` on the
+database file is **not** sufficient: SQLite creates and removes `-wal`, `-shm`
+and `-journal` siblings next to it, and a restore replaces the file in place, so
+the permission that matters is on the directory.
 
 ```bash
+# 1. may deploy stop and start the unit?
 sudo -n systemctl stop relationship-fix.service && sudo -n systemctl start relationship-fix.service
-sudo -u deploy test -w /var/lib/relationship-fix/annotation.db && echo "db writable by deploy"
-sudo -u deploy mkdir -p /var/lib/relationship-fix/backups && echo "backup dir writable by deploy"
+
+# 2. may deploy touch the database, its siblings and its directory?
+sudo -u deploy bash -c '
+  DB=/var/lib/relationship-fix/annotation.db
+  DIR=$(dirname "$DB")
+  test -r "$DB"  || echo "FAIL: cannot read $DB"
+  test -w "$DB"  || echo "FAIL: cannot write $DB"
+  test -x "$DIR" || echo "FAIL: cannot traverse $DIR"
+  test -w "$DIR" || echo "FAIL: cannot create -wal/-shm in $DIR, or replace the file on restore"
+  : > "$DIR/.probe" && rm -f "$DIR/.probe" || echo "FAIL: $DIR rejects writes"
+'
+
+# 3. may deploy write backups?
+sudo -u deploy bash -c '
+  D=/var/lib/relationship-fix/backups
+  mkdir -p "$D" && : > "$D/.probe" && rm -f "$D/.probe" || echo "FAIL: $D not usable"
+'
 ```
 
-If any of those fail, fix the ownership or the sudoers entry first. The script
-fails closed — a backup directory it cannot write is exit 10 with nothing
-touched — so the failure mode is a refused deploy rather than a damaged one, but
-a refused deploy is still a deploy that did not happen.
+The script performs the same checks itself in preflight and refuses with exit 10
+before stopping anything, so the failure mode is a refused deploy rather than a
+damaged one. Running them by hand first turns a refused deploy into a fixed
+permission.
+
+### Retire the old entrypoint during the same visit
+
+`/opt/relationship-fix/bin/activate.sh` is now unused, which is not the same as
+unreachable. A stale cron entry, an old runbook, a shell history line or a person
+working from memory would call it, and all of the machinery above would sit in
+the Nix store being no help at all.
+
+Replace it with a tombstone that deploys nothing:
+
+```bash
+sudo mv /opt/relationship-fix/bin/activate.sh /opt/relationship-fix/bin/activate.sh.retired
+sudo tee /opt/relationship-fix/bin/activate.sh >/dev/null <<'EOF'
+#!/usr/bin/env bash
+echo "This entrypoint is retired. Activation ships inside the release:" >&2
+echo "  <store-path>/bin/annotation-web-activate <store-path> [git-sha]" >&2
+echo "See docs/runbooks/annotation-web-deploy.md." >&2
+exit 64
+EOF
+sudo chmod 755 /opt/relationship-fix/bin/activate.sh
+```
+
+Deliberately a tombstone and not a proxy to the new script. Forwarding would
+recreate exactly the production-owned indirection this change removed, and the
+next person would have two activation paths to reason about instead of one.
 
 ## Configuration
 

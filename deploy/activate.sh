@@ -255,13 +255,36 @@ done
 record release_identity verified
 
 DB=$(backend_db_path)
+DB_DIR=$(dirname -- "$DB")
 record db_path "$DB"
+
+# SQLite needs more than the database file. It creates and removes -wal, -shm
+# and -journal siblings next to it, and a restore renames and unlinks in the
+# same directory, so write access to the file alone is not the permission that
+# matters -- the directory is. Checking only `test -w $DB` is how a deploy gets
+# all the way to the restore before discovering it cannot do one.
+[[ -d $DB_DIR ]] || die 10 "$DB_DIR is not a directory"
+[[ -x $DB_DIR ]] || die 10 "cannot traverse $DB_DIR as $(id -un)"
+[[ -w $DB_DIR ]] || die 10 "cannot write in $DB_DIR as $(id -un); SQLite needs to create -wal and -shm siblings there, and a restore needs to replace the file"
+if db_exists; then
+  [[ -r $DB ]] || die 10 "cannot read $DB as $(id -un)"
+  [[ -w $DB ]] || die 10 "cannot write $DB as $(id -un)"
+fi
+record db_dir_access ok
 
 # A backup we cannot write is a rollback we do not have, and finding that out
 # after the migration is finding it out too late.
-if ! mkdir -p -- "$RF_BACKUP_DIR" 2>/dev/null || [[ ! -w $RF_BACKUP_DIR ]]; then
-  die 10 "backup directory $RF_BACKUP_DIR is missing or not writable"
+if ! mkdir -p -- "$RF_BACKUP_DIR" 2>/dev/null; then
+  die 10 "backup directory $RF_BACKUP_DIR could not be created"
 fi
+[[ -x $RF_BACKUP_DIR ]] || die 10 "cannot traverse $RF_BACKUP_DIR as $(id -un)"
+[[ -w $RF_BACKUP_DIR ]] || die 10 "cannot write in $RF_BACKUP_DIR as $(id -un)"
+# Permission bits are advice; root ignores them and so do some mounts. Prove it
+# by writing something.
+if ! ( : > "$RF_BACKUP_DIR/.activate-write-probe" ) 2>/dev/null; then
+  die 10 "$RF_BACKUP_DIR rejects writes as $(id -un)"
+fi
+rm -f -- "$RF_BACKUP_DIR/.activate-write-probe"
 record backup_dir "$RF_BACKUP_DIR"
 
 if db_exists; then
@@ -374,6 +397,16 @@ fi
 recover_to_previous() {
   local why=$1 code=$2
   log "$why"
+  # Reached from branches where the new release may be half-started. Restoring a
+  # file underneath a process that has it open is its own kind of damage, so
+  # confirm quiescence here too rather than assuming the failure that got us
+  # here left nothing running.
+  if ! stop_and_confirm; then
+    record db_restored refused
+    record rollback_performed false
+    record operator_required true
+    die 15 "could not stop the service, so the database cannot be safely restored"
+  fi
   if [[ -n $BACKUP ]]; then
     # Deliberately unconditional. The migration is written to be one SQLite
     # transaction and the test suite checks that a failure inside it leaves the
@@ -438,8 +471,19 @@ fi
 record local_health fail
 log "the new release started but never became healthy"
 
-# Stop it before deciding anything, so nothing else can be written while we look.
-stop_and_confirm || true
+# Quiescence first, and it is not optional. Everything below rests on a digest
+# taken while nothing can write; a digest taken over a live database is a
+# reading of several different moments stitched together, and deciding whether
+# to overwrite a database from one of those is worse than not deciding at all.
+# If the service will not stop, there is no evidence to be had, so there is no
+# automatic action to take.
+if ! stop_and_confirm; then
+  record post_activation_writes unknown
+  record db_restored refused
+  record rollback_performed false
+  record operator_required true
+  die 15 "the unhealthy release will not stop, so no trustworthy digest can be taken; refusing to restore anything on a guess"
+fi
 
 CURRENT_DIGEST=$(data_digest "$DB")
 record post_activation_writes "$( [[ $CURRENT_DIGEST == "$POST_MIGRATION_DIGEST" ]] && echo none || echo present )"

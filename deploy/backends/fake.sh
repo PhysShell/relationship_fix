@@ -12,6 +12,18 @@
 # service log.
 
 backend_service_stop() {
+  # Host conditions are simulated here, in the host adapter, because that is
+  # what a host adapter is for. A unit that will not die is a real thing, and
+  # the choreography needs an answer to it that is not "assume it worked".
+  #
+  # The _AFTER_START variant only starts refusing once something has been
+  # started, so a scenario can let the deploy quiesce normally and then fail the
+  # stop that follows a bad health check -- which is the branch worth testing,
+  # rather than the preflight one.
+  [[ ${RF_FAKE_STOP_FAILS:-} == 1 ]] && return 1
+  if [[ ${RF_FAKE_STOP_FAILS_AFTER_START:-} == 1 && -f $RF_FAKE_ROOT/service.pid ]]; then
+    return 1
+  fi
   local pidfile="$RF_FAKE_ROOT/service.pid"
   [[ -f $pidfile ]] || return 0
   local pid
