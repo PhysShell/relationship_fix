@@ -20,11 +20,14 @@ module Domain
   , abstentionCode
   , parseAbstentionReason
   , abstentionName
+  , abstentionRequiresNote
   , Message (..)
   , Presentation (..)
   , Item (..)
   , presentationFor
   , shouldOfferOriginal
+  , EvidenceProblem (..)
+  , checkEvidence
   , validEvidence
   ) where
 
@@ -183,6 +186,14 @@ abstentionName lang reason = case reason of
   LanguageUnsupported -> tr lang "Язык не поддерживается" "Language unsupported"
   OtherReason -> tr lang "Другая причина" "Other"
 
+-- | Reasons that are meaningless without a note: both say "the categories or
+-- the unit were the problem" without saying how, which is unusable in
+-- adjudication unless the annotator writes it down.
+abstentionRequiresNote :: AbstentionReason -> Bool
+abstentionRequiresNote AmbiguousBetweenLabels = True
+abstentionRequiresNote OtherReason = True
+abstentionRequiresNote _ = False
+
 data Message = Message
   { messageAuthor :: Text
   , messageText :: Text
@@ -213,8 +224,32 @@ presentationFor EN = itemPresentationEN
 shouldOfferOriginal :: Language -> Item -> Bool
 shouldOfferOriginal lang item = itemSourceLanguage item /= lang
 
+-- | Why a submitted evidence quote was not usable.
+--
+-- The two are worth telling apart when reporting back: an empty box is a
+-- respondent who has not answered yet, while a quote that is not a span is a
+-- respondent who answered and was wrong about what they were shown.
+data EvidenceProblem
+  = EvidenceBlank
+  | EvidenceNotASpan
+  deriving stock (Eq, Ord, Show)
+
+-- | Check a submitted quote against the message as it was displayed, returning
+-- the normalised quote when it is usable.
+--
+-- Note that this is a question about the presentation and not about the
+-- source: the same quote is a valid span of a Russian presentation of a
+-- Russian item and is not a span of its English translation.
+checkEvidence :: Language -> Item -> Text -> Either EvidenceProblem Text
+checkEvidence lang item raw
+  | T.null quote = Left EvidenceBlank
+  | quote `T.isInfixOf` target = Right quote
+  | otherwise = Left EvidenceNotASpan
+  where
+    quote = T.strip raw
+    target = presentationTarget (presentationFor lang item)
+
 validEvidence :: Language -> Item -> Text -> Bool
-validEvidence lang item raw =
-  let quote = T.strip raw
-      target = presentationTarget (presentationFor lang item)
-   in not (T.null quote) && quote `T.isInfixOf` target
+validEvidence lang item raw = case checkEvidence lang item raw of
+  Right _ -> True
+  Left _ -> False

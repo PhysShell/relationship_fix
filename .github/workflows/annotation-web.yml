@@ -18,6 +18,18 @@ jobs:
         working-directory: src/annotation-web
     steps:
       - uses: actions/checkout@v4
+
+      - name: Enforce no-JS source invariant
+        run: |
+          if grep -RniE '<script[ >]|src=[^ ]*\.js|javascript:' app src test; then
+            echo 'Client-side JavaScript detected in annotation-web source.' >&2
+            exit 1
+          fi
+          if find app src test -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.ts' \) | grep -q .; then
+            echo 'JavaScript/TypeScript source files detected in annotation-web.' >&2
+            exit 1
+          fi
+
       - name: Setup Haskell
         uses: haskell-actions/setup@v2
         with:
@@ -25,13 +37,16 @@ jobs:
           enable-stack: true
           stack-version: 'latest'
           cabal-update: false
-      - name: Enforce no-JS source invariant
-        run: |
-          if grep -RniE '<script[ >]|src=.*\.js' app src test; then
-            echo 'Client-side JavaScript detected in annotation-web source.' >&2
-            exit 1
-          fi
-      - name: Test
-        run: stack test --system-ghc --pedantic
-      - name: Build
-        run: stack build --system-ghc --pedantic
+
+      - name: Cache Stack artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.stack
+            src/annotation-web/.stack-work
+          key: stack-${{ runner.os }}-ghc9.10.3-${{ hashFiles('src/annotation-web/stack.yaml.lock', 'src/annotation-web/relationship-fix-annotation-web.cabal') }}
+          restore-keys: |
+            stack-${{ runner.os }}-ghc9.10.3-
+
+      - name: Build and test
+        run: stack build --system-ghc --pedantic --test

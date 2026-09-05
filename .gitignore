@@ -16,3 +16,12 @@ src/annotation-web/annotation.db
 src/annotation-web/annotation.db-shm
 src/annotation-web/annotation.db-wal
 src/annotation-web/client-session-key.aes
+
+# wasm laboratory build output
+experiments/wasm-core/*.wasm
+experiments/wasm-component/build/
+experiments/wasm-component/*.wasm
+
+# nix build output symlinks
+/result
+/result-*

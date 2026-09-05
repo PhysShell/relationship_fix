@@ -52,6 +52,8 @@ data BehaviorLabel
 
 Stable wire codes remain the research contract, e.g. `B.REPAIR_ATTEMPT`, `none_observed`, and `insufficient_context`.
 
+Radio, checkbox and select inputs submit those wire codes directly rather than `yesod-form`'s positional indices, so the rendered HTML can be audited against the contract and a re-rendered form round-trips exactly the codes it was given.
+
 ## Current flow
 
 ```text
@@ -66,6 +68,14 @@ language
 ```
 
 Every transition is ordinary HTTP GET/POST/redirect. `runFormPost` provides CSRF-protected POST forms without JavaScript.
+
+### Validation
+
+Only a valid submission is persisted and redirected (POST/redirect/GET), so a reload never resubmits an answer.
+
+A submission that fails validation is not redirected. The step is re-rendered in the same request with every value the respondent submitted, and each message is attached to the field that caused it. Nothing is written to SQLite. This matters for measurement, not only for comfort: an annotator who selects a span carefully, misses by one character and is handed an empty form is no longer being measured on the behaviour categories.
+
+Cross-field rules follow the same principle. The note that `ambiguous_between_labels` and `other` require is reported under the note field rather than as a page-level banner.
 
 ## Original / translation invariant
 
@@ -148,6 +158,12 @@ annotate.example.com {
     reverse_proxy 127.0.0.1:8080
 }
 ```
+
+All routes are rendered as relative URLs (`approot = ApprootRelative`). Yesod's
+default `guessApproot` would derive absolute URLs from the loopback request,
+which is plain HTTP, so behind a TLS-terminating proxy every form action would
+come out as `http://host/...` on an `https://` page and be rejected by the
+`form-action 'self'` directive in the app's own Content-Security-Policy.
 
 Run the binary as an unprivileged service account. Keep the database and session key under a restricted directory such as `/var/lib/relationship-fix/` and never commit either file.
 

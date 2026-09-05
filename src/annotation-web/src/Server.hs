@@ -12,28 +12,22 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
-module Main (main) where
+module Server where
 
 import Catalog (items)
-import Control.Monad (forM, forM_, unless, when)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Logger (runStdoutLoggingT)
-import Data.Aeson (object, (.=))
+import Control.Monad (forM, forM_, unless, void, when)
+import Control.Monad.Logger (runNoLoggingT)
 import Data.Int (Int64)
-import Data.Maybe (catMaybes, fromMaybe, isJust)
+import Data.Maybe (catMaybes, isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Read as TR
 import Data.Time (UTCTime, getCurrentTime)
-import Database.Persist
-import Database.Persist.Sql (ConnectionPool, SqlPersistT, fromSqlKey, runSqlPool, toSqlKey)
+import Database.Persist.Sql (ConnectionPool, SqlBackend, fromSqlKey, runMigrationQuiet, runSqlPool, toSqlKey)
 import Database.Persist.Sqlite (createSqlitePool)
-import Database.Persist.TH
 import Domain
-import Network.Wai.Handler.Warp (defaultSettings, runSettings, setHost, setPort)
-import System.Environment (lookupEnv)
-import Text.Read (readMaybe)
 import Yesod
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
@@ -92,6 +86,12 @@ mkYesod "App" [parseRoutes|
 |]
 
 instance Yesod App where
+  -- The app is served from the root of one host behind a TLS-terminating
+  -- reverse proxy. Yesod's default guessApproot would build absolute URLs from
+  -- the loopback request, which is plain HTTP, so form actions would come out
+  -- as http://host/... on an https page and be blocked by form-action 'self'.
+  approot = ApprootRelative
+
   makeSessionBackend app =
     let backend = fmap Just $ defaultClientSessionBackend (24 * 60) (appSessionKeyPath app)
      in if appSecureCookies app then sslOnlySessions backend else backend
@@ -134,6 +134,8 @@ instance Yesod App where
         form li label { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid #d7dade; border-radius: 12px; }
         form input[type=checkbox], form input[type=radio] { margin-top: 4px; }
         .message-banner { padding: 12px 14px; border: 1px solid #b42318; border-radius: 10px; color: #8a1c13; background: #fff5f4; }
+        .field-error { margin: 6px 0 0; color: #8a1c13; }
+        .field-invalid > label { color: #8a1c13; }
         .category { border-top: 1px solid #eceff1; padding-top: 18px; margin-top: 18px; }
         .example-tag { font-weight: 700; }
         @media (max-width: 520px) {
@@ -157,19 +159,80 @@ instance Yesod App where
             ^{pageBody page}
     |]
 
+instance YesodPersist App where
+  type YesodPersistBackend App = SqlBackend
+  runDB action = do
+    app <- getYesod
+    runSqlPool action (appPool app)
+
 instance RenderMessage App FormMessage where
   renderMessage _ _ = defaultFormMessage
 
 type AppForm a = Html -> MForm Handler (FormResult a, Widget)
 
-data LabelSelection = LabelSelection Bool Bool Bool Bool Bool
-
 data Step = StepDecision | StepLabels | StepEvidence | StepAbstain
+  deriving stock (Eq, Show)
 
-runDB :: SqlPersistT IO a -> Handler a
-runDB action = do
-  app <- getYesod
-  liftIO $ runSqlPool action (appPool app)
+-- | Option values carry the stable wire code instead of yesod-form's positional
+-- index, so the rendered HTML matches the research contract and a re-rendered
+-- form round-trips exactly the codes it was given.
+wireOptions :: (a -> Text) -> (a -> Text) -> [a] -> OptionList a
+wireOptions code display values = mkOptionList
+  [ Option
+      { optionDisplay = display value
+      , optionInternalValue = value
+      , optionExternalValue = code value
+      }
+  | value <- values
+  ]
+
+languageOptions :: OptionList Language
+languageOptions = wireOptions languageCode display [RU, EN]
+  where
+    display RU = "Русский"
+    display EN = "English"
+
+decisionOptions :: Language -> OptionList Decision
+decisionOptions lang = wireOptions decisionCode display [Assigned, NoneObserved, Abstained]
+  where
+    display Assigned = tr lang "assigned — наблюдается одна или несколько категорий" "assigned — one or more categories are observed"
+    display NoneObserved = tr lang "none_observed — фрагмента достаточно; категории не наблюдаются" "none_observed — enough context; no category is observed"
+    display Abstained = tr lang "abstained — недостающий контекст мешает решить" "abstained — missing context prevents a decision"
+
+labelOptions :: Language -> OptionList BehaviorLabel
+labelOptions lang = wireOptions labelCode display allBehaviorLabels
+  where
+    display label = labelCode label <> " — " <> labelName lang label
+
+reasonOptions :: Language -> OptionList AbstentionReason
+reasonOptions lang = wireOptions abstentionCode (abstentionName lang) allAbstentionReasons
+
+-- | One field, its label and the validation message that belongs to it.
+--
+-- yesod-form only fills 'fvErrors' for failures the field itself produced, so
+-- cross-field rules pass their message in separately rather than surfacing as a
+-- page-level banner detached from the input that caused them.
+fieldRow :: Maybe Html -> FieldView App -> Widget
+fieldRow crossFieldError view = [whamlet|
+  <div .field :isJust fieldError:.field-invalid>
+    <label for=#{fvId view}>#{fvLabel view}
+    ^{fvInput view}
+    $maybe err <- fieldError
+      <p .field-error>#{err}
+|]
+  where
+    fieldError = maybe crossFieldError Just (fvErrors view)
+
+-- | Like yesod-form's @renderDivs@, but rendering each field through 'fieldRow'.
+renderFields :: FormRender Handler a
+renderFields aform fragment = do
+  (result, viewsFront) <- aFormToForm aform
+  let widget = [whamlet|
+        #{fragment}
+        $forall view <- viewsFront []
+          ^{fieldRow Nothing view}
+      |]
+  pure (result, widget)
 
 fieldSettings :: Text -> Text -> FieldSettings App
 fieldSettings label name = FieldSettings
@@ -180,78 +243,96 @@ fieldSettings label name = FieldSettings
   , fsAttrs = []
   }
 
-languageForm :: AppForm Text
-languageForm = renderDivs $ areq
-  (radioFieldList [("Русский", "ru"), ("English", "en")])
+languageForm :: AppForm Language
+languageForm = renderFields $ areq
+  (radioField' (pure languageOptions))
   (fieldSettings "Язык предъявления / Presentation language" "language")
   Nothing
 
-decisionForm :: Language -> AppForm Text
-decisionForm lang = renderDivs $ areq
-  (radioFieldList
-    [ (tr lang "assigned — наблюдается одна или несколько категорий" "assigned — one or more categories are observed", decisionCode Assigned)
-    , (tr lang "none_observed — фрагмента достаточно; категории не наблюдаются" "none_observed — enough context; no category is observed", decisionCode NoneObserved)
-    , (tr lang "abstained — недостающий контекст мешает решить" "abstained — missing context prevents a decision", decisionCode Abstained)
-    ])
+decisionForm :: Language -> AppForm Decision
+decisionForm lang = renderFields $ areq
+  (radioField' (pure (decisionOptions lang)))
   (fieldSettings (tr lang "Решение" "Decision") "decision")
   Nothing
 
-labelSelectionForm :: Language -> AppForm LabelSelection
-labelSelectionForm lang = renderDivs $
-  LabelSelection
-    <$> checkbox BlameCriticism
-    <*> checkbox PressureForChange
-    <*> checkbox Validation
-    <*> checkbox RepairAttempt
-    <*> checkbox AvoidanceTopicShift
-  where
-    checkbox label = areq checkBoxField
-      (fieldSettings (labelCode label <> " — " <> labelName lang label) (labelCode label))
-      (Just False)
+-- | A single multi-valued field rather than five booleans: "at least one
+-- category" is then a failure of that field, so the message lands under the
+-- checkbox group instead of floating at the top of the page.
+labelsForm :: Language -> AppForm [BehaviorLabel]
+labelsForm lang = renderFields $ areqMsg
+  (checkboxesField' (pure (labelOptions lang)))
+  (fieldSettings (tr lang "Категории" "Categories") "labels")
+  (tr lang "Выберите хотя бы одну категорию." "Select at least one category.")
+  Nothing
 
-evidenceForm :: Language -> [BehaviorLabel] -> AppForm [(BehaviorLabel, Text)]
-evidenceForm lang labels = renderDivs $ traverse one labels
+evidenceForm :: Language -> Item -> [BehaviorLabel] -> AppForm [(BehaviorLabel, Text)]
+evidenceForm lang item labels = renderFields $ traverse quoteField labels
   where
-    one label = (label,) <$> areq textField
-      (fieldSettings (labelCode label <> " — " <> tr lang "самая короткая точная цитата" "shortest exact quote") ("evidence_" <> labelCode label))
+    quoteField label = (label,) <$> areq
+      (check exactSpan textField)
+      (fieldSettings
+        (labelCode label <> " — " <> tr lang "самая короткая точная цитата" "shortest exact quote")
+        ("evidence_" <> labelCode label))
       Nothing
+    exactSpan raw
+      | validEvidence lang item raw = Right (T.strip raw)
+      | otherwise = Left $ tr lang
+          "Цитата должна быть точным непрерывным фрагментом размечаемого сообщения."
+          "The quote must be an exact continuous span from the target message."
 
-abstainForm :: Language -> AppForm (Text, Maybe Text)
-abstainForm lang = renderDivs $
-  (,)
-    <$> areq
-      (selectFieldList [(abstentionName lang reason, abstentionCode reason) | reason <- allAbstentionReasons])
-      (fieldSettings (tr lang "Причина abstained" "Abstention reason") "reason")
-      Nothing
-    <*> aopt textField
-      (fieldSettings (tr lang "Короткий комментарий, если нужен" "Short note, if needed") "note")
-      Nothing
+-- | Monadic rather than applicative: whether the note is required depends on
+-- the reason submitted alongside it, which an applicative form cannot see.
+abstainForm :: Language -> AppForm (AbstentionReason, Maybe Text)
+abstainForm lang fragment = do
+  (reasonResult, reasonView) <- mreq
+    (selectField (pure (reasonOptions lang)))
+    (fieldSettings (tr lang "Причина abstained" "Abstention reason") "reason")
+    Nothing
+  (noteResult, noteView) <- mopt textField
+    (fieldSettings (tr lang "Короткий комментарий, если нужен" "Short note, if needed") "note")
+    Nothing
+  let note = case noteResult of
+        FormSuccess raw -> raw >>= nonBlank
+        _ -> Nothing
+      mustExplain = case reasonResult of
+        FormSuccess reason -> abstentionRequiresNote reason
+        _ -> False
+      missingNote = mustExplain && isNothing note
+      message = tr lang
+        "Для ambiguous_between_labels и other нужен короткий комментарий."
+        "A short note is required for ambiguous_between_labels and other."
+      noteError
+        | missingNote = Just (toHtml message)
+        | otherwise = Nothing
+      result
+        | missingNote = FormFailure [message]
+        | otherwise = (,) <$> reasonResult <*> (note <$ noteResult)
+      widget = [whamlet|
+        #{fragment}
+        ^{fieldRow Nothing reasonView}
+        ^{fieldRow noteError noteView}
+      |]
+  pure (result, widget)
+
+nonBlank :: Text -> Maybe Text
+nonBlank raw
+  | T.null stripped = Nothing
+  | otherwise = Just stripped
+  where
+    stripped = T.strip raw
 
 csrfForm :: AppForm ()
-csrfForm = renderDivs $ pure ()
-
-selectedLabels :: LabelSelection -> [BehaviorLabel]
-selectedLabels (LabelSelection a b c d e) = catMaybes
-  [ if a then Just BlameCriticism else Nothing
-  , if b then Just PressureForChange else Nothing
-  , if c then Just Validation else Nothing
-  , if d then Just RepairAttempt else Nothing
-  , if e then Just AvoidanceTopicShift else Nothing
-  ]
+csrfForm = renderFields $ pure ()
 
 getHomeR :: Handler Html
-getHomeR = renderHome Nothing
+getHomeR = generateFormPost languageForm >>= uncurry renderHome
 
-renderHome :: Maybe Text -> Handler Html
-renderHome mError = do
-  (widget, enctype) <- generateFormPost languageForm
-  defaultLayout [whamlet|
+renderHome :: Widget -> Enctype -> Handler Html
+renderHome widget enctype = defaultLayout [whamlet|
     <section .card>
       <p .eyebrow>Relationship Fix · Haskell/Yesod dogfood
       <h1>Язык предъявления / Presentation language
       <p>Выберите язык интерфейса и эпизодов. / Choose the interface and episode presentation language.
-      $maybe err <- mError
-        <p .message-banner>#{err}
       <form method=post action=@{LanguageR} enctype=#{enctype} .stack>
         ^{widget}
         <button type=submit .primary>Продолжить / Continue
@@ -259,16 +340,15 @@ renderHome mError = do
 
 postLanguageR :: Handler Html
 postLanguageR = do
-  ((result, _), _) <- runFormPost languageForm
+  ((result, widget), enctype) <- runFormPost languageForm
   case result of
-    FormSuccess code
-      | Just lang <- parseLanguage code -> do
-          now <- liftIO getCurrentTime
-          sid <- runDB $ insert $ SurveySession (languageCode lang) now Nothing
-          setSession "annotation_session_id" (T.pack $ show $ fromSqlKey sid)
-          logEvent sid Nothing "language_selected" (Just $ languageCode lang)
-          redirect IntroR
-    _ -> renderHome (Just "Некорректный выбор языка / Invalid language selection")
+    FormSuccess lang -> do
+      now <- liftIO getCurrentTime
+      sid <- runDB $ insert $ SurveySession (languageCode lang) now Nothing
+      setSession "annotation_session_id" (T.pack $ show $ fromSqlKey sid)
+      logEvent sid Nothing "language_selected" (Just $ languageCode lang)
+      redirect IntroR
+    _ -> renderHome widget enctype
 
 getIntroR :: Handler Html
 getIntroR = do
@@ -278,12 +358,8 @@ getIntroR = do
     <section .card>
       <p .eyebrow>Relationship Fix · no-JS annotation dogfood
       <h1>#{tr lang "Исследование разметки диалогов" "Dialogue annotation study"}
-      <p>#{tr lang
-        "Мы проверяем, насколько одинаково разные люди применяют одни и те же операциональные категории к фрагментам диалога. Здесь не оцениваются вы или ваши отношения."
-        "We are testing how consistently different people apply the same operational categories to dialogue excerpts. We are not evaluating you or your relationship."}
-      <p><strong>#{tr lang "Главное правило:" "Main rule:"}</strong> #{tr lang
-        "размечайте только то, что наблюдаемо в предоставленном фрагменте. Не угадывайте мотив, характер или намерение человека."
-        "annotate only what is observable in the provided excerpt. Do not infer a person's motive, character, or intention."}
+      <p>#{tr lang "Мы проверяем, насколько одинаково разные люди применяют одни и те же операциональные категории к фрагментам диалога. Здесь не оцениваются вы или ваши отношения." "We are testing how consistently different people apply the same operational categories to dialogue excerpts. We are not evaluating you or your relationship."}
+      <p><strong>#{tr lang "Главное правило:" "Main rule:"}</strong> #{tr lang "размечайте только то, что наблюдаемо в предоставленном фрагменте. Не угадывайте мотив, характер или намерение человека." "annotate only what is observable in the provided excerpt. Do not infer a person's motive, character, or intention."}
       <h2>#{tr lang "Категории: определения и граничные примеры" "Categories: definitions and boundary examples"}
       $forall label <- allBehaviorLabels
         <section .category>
@@ -291,44 +367,87 @@ getIntroR = do
           <p>#{labelDefinition lang label}
           <ul>
             $forall example <- labelExamples lang label
-              <li><span .example-tag>#{fst example}:</span> #{snd example}
+              <li>
+                <span .example-tag>#{fst example}:
+                \ #{snd example}
       <h2>none_observed vs abstained
       <p><strong>none_observed</strong> — #{tr lang "фрагмента достаточно, и ни одна активная категория не наблюдается. Всю историю отношений знать не нужно." "the excerpt provides enough context, and none of the active categories is observed. You do not need the entire relationship history."}
       <p><strong>abstained</strong> — #{tr lang "недостающий контекст реально мешает решить, присутствует категория или нет. Не выбирайте abstained просто потому, что дополнительный контекст теоретически существует." "missing context genuinely prevents deciding whether a category is present. Do not choose abstained merely because additional context could theoretically exist."}
       <p><strong>Evidence quote:</strong> #{tr lang "самый короткий непрерывный точный фрагмент размечаемого сообщения, достаточный для выбранной категории." "the shortest continuous exact span from the target message sufficient for the selected category."}
-      <p><a href=@{ItemR 0} .primary>#{tr lang "Начать" "Start"}
+      <p>
+        <a href=@{ItemR 0} .primary>#{tr lang "Начать" "Start"}
   |]
 
-getItemR :: Int -> Handler Html
-getItemR index = do
+-- | Everything a step needs about the item being annotated, read once per
+-- request so that a re-render after a rejected POST shows the same state the
+-- respondent was looking at when they submitted.
+data ItemContext = ItemContext
+  { ctxSessionId :: SurveySessionId
+  , ctxLanguage :: Language
+  , ctxIndex :: Int
+  , ctxItem :: Item
+  , ctxAnnotationId :: AnnotationId
+  , ctxAnnotation :: Annotation
+  , ctxLabels :: [BehaviorLabel]
+  , ctxEvidence :: [(BehaviorLabel, Text)]
+  }
+
+itemContext :: Int -> Handler ItemContext
+itemContext index = do
   (sid, session) <- requireSurveySession
   lang <- sessionLanguage session
   item <- itemAt index
-  entity@(Entity aid annotation) <- ensureAnnotation sid (itemId item)
+  Entity aid annotation <- ensureAnnotation sid (itemId item)
   labels <- loadLabels aid
   evidence <- loadEvidence aid
-  if annotationComplete annotation labels evidence
+  pure ItemContext
+    { ctxSessionId = sid
+    , ctxLanguage = lang
+    , ctxIndex = index
+    , ctxItem = item
+    , ctxAnnotationId = aid
+    , ctxAnnotation = annotation
+    , ctxLabels = labels
+    , ctxEvidence = evidence
+    }
+
+getItemR :: Int -> Handler Html
+getItemR index = do
+  ctx <- itemContext index
+  if annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx)
     then advanceFrom index
     else do
-      message <- getMessage
-      (originalWidget, originalEnctype) <- generateFormPost csrfForm
-      case stepFor annotation labels of
-        StepDecision -> do
-          (widget, enctype) <- generateFormPost (decisionForm lang)
-          renderItemPage lang item index entity message originalWidget originalEnctype (tr lang "Решение" "Decision") widget enctype (DecisionR index)
-        StepLabels -> do
-          (widget, enctype) <- generateFormPost (labelSelectionForm lang)
-          renderItemPage lang item index entity message originalWidget originalEnctype (tr lang "Категории" "Categories") widget enctype (LabelsR index)
-        StepEvidence -> do
-          (widget, enctype) <- generateFormPost (evidenceForm lang labels)
-          renderItemPage lang item index entity message originalWidget originalEnctype (tr lang "Цитаты-доказательства" "Evidence quotes") widget enctype (EvidenceR index)
-        StepAbstain -> do
-          (widget, enctype) <- generateFormPost (abstainForm lang)
-          renderItemPage lang item index entity message originalWidget originalEnctype (tr lang "Причина abstained" "Abstention reason") widget enctype (AbstainR index)
+      let lang = ctxLanguage ctx
+      case stepFor (ctxAnnotation ctx) (ctxLabels ctx) of
+        StepDecision -> generateFormPost (decisionForm lang) >>= uncurry (renderStep ctx StepDecision)
+        StepLabels -> generateFormPost (labelsForm lang) >>= uncurry (renderStep ctx StepLabels)
+        StepEvidence -> generateFormPost (evidenceForm lang (ctxItem ctx) (ctxLabels ctx)) >>= uncurry (renderStep ctx StepEvidence)
+        StepAbstain -> generateFormPost (abstainForm lang) >>= uncurry (renderStep ctx StepAbstain)
 
-renderItemPage :: Language -> Item -> Int -> Entity Annotation -> Maybe Html -> Widget -> Enctype -> Text -> Widget -> Enctype -> Route App -> Handler Html
-renderItemPage lang item index (Entity _ annotation) message originalWidget originalEnctype formTitle widget enctype action = do
-  let presentation = presentationFor lang item
+stepRoute :: Step -> Int -> Route App
+stepRoute StepDecision = DecisionR
+stepRoute StepLabels = LabelsR
+stepRoute StepEvidence = EvidenceR
+stepRoute StepAbstain = AbstainR
+
+stepTitle :: Language -> Step -> Text
+stepTitle lang step = case step of
+  StepDecision -> tr lang "Решение" "Decision"
+  StepLabels -> tr lang "Категории" "Categories"
+  StepEvidence -> tr lang "Цитаты-доказательства" "Evidence quotes"
+  StepAbstain -> tr lang "Причина abstained" "Abstention reason"
+
+-- | Renders one step of one item. A rejected POST hands its own form widget
+-- back here, so the respondent keeps every value they submitted.
+renderStep :: ItemContext -> Step -> Widget -> Enctype -> Handler Html
+renderStep ctx step widget enctype = do
+  (originalWidget, originalEnctype) <- generateFormPost csrfForm
+  let lang = ctxLanguage ctx
+      item = ctxItem ctx
+      index = ctxIndex ctx
+      annotation = ctxAnnotation ctx
+      presentation = presentationFor lang item
+      action = stepRoute step index
   defaultLayout [whamlet|
     <section .card>
       <p .eyebrow>#{index + 1} / #{length items}
@@ -344,112 +463,95 @@ renderItemPage lang item index (Entity _ annotation) message originalWidget orig
               $forall sourceMessage <- itemSource item
                 <p><strong>#{messageAuthor sourceMessage}</strong>: #{messageText sourceMessage}
           $else
-            <form method=post action=@{OriginalR index} enctype=#{originalEnctype}>
+            <form #reveal-form method=post action=@{OriginalR index} enctype=#{originalEnctype}>
               ^{originalWidget}
               <button type=submit .secondary>#{tr lang "Показать оригинал" "Show original"}
-      $maybe msg <- message
-        <div .message-banner>^{msg}
-      <h2>#{formTitle}
-      <form method=post action=@{action} enctype=#{enctype} .stack>
+      <h2>#{stepTitle lang step}
+      <form #step-form method=post action=@{action} enctype=#{enctype} .stack>
         ^{widget}
         <button type=submit .primary>#{tr lang "Продолжить" "Continue"}
   |]
 
+-- Every POST below follows the same rule: persist and redirect only once the
+-- form is valid, otherwise re-render the same step in this request with the
+-- submitted values and the field-level errors, writing nothing.
+
 postDecisionR :: Int -> Handler Html
 postDecisionR index = do
-  (sid, session) <- requireSurveySession
-  lang <- sessionLanguage session
-  item <- itemAt index
-  Entity aid _ <- ensureAnnotation sid (itemId item)
-  ((result, _), _) <- runFormPost (decisionForm lang)
+  ctx <- itemContext index
+  ((result, widget), enctype) <- runFormPost (decisionForm (ctxLanguage ctx))
   case result of
-    FormSuccess code
-      | Just decision <- parseDecision code -> do
-          runDB $ do
-            update aid [AnnotationDecision =. Just (decisionCode decision), AnnotationAbstentionReason =. Nothing, AnnotationAbstentionNote =. Nothing]
-            deleteWhere [AnnotationLabelAnnotationId ==. aid]
-            deleteWhere [EvidenceAnnotationId ==. aid]
-          logEvent sid (Just $ itemId item) "decision_submitted" (Just $ decisionCode decision)
-          if decision == NoneObserved then advanceFrom index else redirect (ItemR index)
-    _ -> setLocalizedMessage lang "Выберите один вариант решения." "Choose one decision." >> redirect (ItemR index)
+    FormSuccess decision -> do
+      let aid = ctxAnnotationId ctx
+      runDB $ do
+        update aid
+          [ AnnotationDecision =. Just (decisionCode decision)
+          , AnnotationAbstentionReason =. Nothing
+          , AnnotationAbstentionNote =. Nothing
+          ]
+        deleteWhere [AnnotationLabelAnnotationId ==. aid]
+        deleteWhere [EvidenceAnnotationId ==. aid]
+      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "decision_submitted" (Just $ decisionCode decision)
+      if decision == NoneObserved then advanceFrom index else redirect (ItemR index)
+    _ -> renderStep ctx StepDecision widget enctype
 
 postLabelsR :: Int -> Handler Html
 postLabelsR index = do
-  (sid, session) <- requireSurveySession
-  lang <- sessionLanguage session
-  item <- itemAt index
-  Entity aid annotation <- ensureAnnotation sid (itemId item)
-  requireDecision Assigned annotation index
-  ((result, _), _) <- runFormPost (labelSelectionForm lang)
+  ctx <- itemContext index
+  requireDecision Assigned ctx
+  ((result, widget), enctype) <- runFormPost (labelsForm (ctxLanguage ctx))
   case result of
-    FormSuccess selection
-      | not (null $ selectedLabels selection) -> do
-          let labels = selectedLabels selection
-          runDB $ do
-            deleteWhere [AnnotationLabelAnnotationId ==. aid]
-            deleteWhere [EvidenceAnnotationId ==. aid]
-            forM_ labels $ \label -> insert_ $ AnnotationLabel aid (labelCode label)
-          logEvent sid (Just $ itemId item) "labels_submitted" (Just $ T.intercalate "," $ map labelCode labels)
-          redirect (ItemR index)
-    _ -> setLocalizedMessage lang "Выберите хотя бы одну категорию." "Select at least one category." >> redirect (ItemR index)
+    FormSuccess labels -> do
+      let aid = ctxAnnotationId ctx
+      runDB $ do
+        deleteWhere [AnnotationLabelAnnotationId ==. aid]
+        deleteWhere [EvidenceAnnotationId ==. aid]
+        forM_ labels $ \label -> insert_ $ AnnotationLabel aid (labelCode label)
+      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "labels_submitted" (Just $ T.intercalate "," $ map labelCode labels)
+      redirect (ItemR index)
+    _ -> renderStep ctx StepLabels widget enctype
 
 postEvidenceR :: Int -> Handler Html
 postEvidenceR index = do
-  (sid, session) <- requireSurveySession
-  lang <- sessionLanguage session
-  item <- itemAt index
-  Entity aid annotation <- ensureAnnotation sid (itemId item)
-  requireDecision Assigned annotation index
-  labels <- loadLabels aid
+  ctx <- itemContext index
+  requireDecision Assigned ctx
+  let labels = ctxLabels ctx
   when (null labels) $ redirect (ItemR index)
-  ((result, _), _) <- runFormPost (evidenceForm lang labels)
+  ((result, widget), enctype) <- runFormPost (evidenceForm (ctxLanguage ctx) (ctxItem ctx) labels)
   case result of
     FormSuccess pairs -> do
-      let normalized = [(label, T.strip quote) | (label, quote) <- pairs]
-      if all (validEvidence lang item . snd) normalized
-        then do
-          runDB $ do
-            deleteWhere [EvidenceAnnotationId ==. aid]
-            forM_ normalized $ \(label, quote) -> insert_ $ Evidence aid (labelCode label) quote
-          logEvent sid (Just $ itemId item) "evidence_submitted" (Just $ T.intercalate "," $ map (labelCode . fst) normalized)
-          advanceFrom index
-        else setLocalizedMessage lang "Каждая цитата должна быть точным непрерывным фрагментом размечаемого сообщения." "Every evidence quote must be an exact continuous span from the target message." >> redirect (ItemR index)
-    _ -> setLocalizedMessage lang "Заполните evidence для каждой выбранной категории." "Provide evidence for every selected category." >> redirect (ItemR index)
+      let aid = ctxAnnotationId ctx
+      runDB $ do
+        deleteWhere [EvidenceAnnotationId ==. aid]
+        forM_ pairs $ \(label, quote) -> insert_ $ Evidence aid (labelCode label) quote
+      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "evidence_submitted" (Just $ T.intercalate "," $ map (labelCode . fst) pairs)
+      advanceFrom index
+    _ -> renderStep ctx StepEvidence widget enctype
 
 postAbstainR :: Int -> Handler Html
 postAbstainR index = do
-  (sid, session) <- requireSurveySession
-  lang <- sessionLanguage session
-  item <- itemAt index
-  Entity aid annotation <- ensureAnnotation sid (itemId item)
-  requireDecision Abstained annotation index
-  ((result, _), _) <- runFormPost (abstainForm lang)
+  ctx <- itemContext index
+  requireDecision Abstained ctx
+  ((result, widget), enctype) <- runFormPost (abstainForm (ctxLanguage ctx))
   case result of
-    FormSuccess (reasonCode, mRawNote)
-      | Just reason <- parseAbstentionReason reasonCode -> do
-          let note = fmap T.strip mRawNote
-              notePresent = maybe False (not . T.null) note
-              noteRequired = reason `elem` [AmbiguousBetweenLabels, OtherReason]
-          if noteRequired && not notePresent
-            then setLocalizedMessage lang "Для ambiguous_between_labels и other нужен короткий комментарий." "A short note is required for ambiguous_between_labels and other." >> redirect (ItemR index)
-            else do
-              runDB $ update aid [AnnotationAbstentionReason =. Just (abstentionCode reason), AnnotationAbstentionNote =. if notePresent then note else Nothing]
-              logEvent sid (Just $ itemId item) "abstention_submitted" (Just $ abstentionCode reason)
-              advanceFrom index
-    _ -> setLocalizedMessage lang "Выберите причину abstained." "Choose an abstention reason." >> redirect (ItemR index)
+    FormSuccess (reason, note) -> do
+      runDB $ update (ctxAnnotationId ctx)
+        [ AnnotationAbstentionReason =. Just (abstentionCode reason)
+        , AnnotationAbstentionNote =. note
+        ]
+      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "abstention_submitted" (Just $ abstentionCode reason)
+      advanceFrom index
+    _ -> renderStep ctx StepAbstain widget enctype
 
 postOriginalR :: Int -> Handler Html
 postOriginalR index = do
-  (sid, session) <- requireSurveySession
-  lang <- sessionLanguage session
-  item <- itemAt index
-  Entity aid _ <- ensureAnnotation sid (itemId item)
+  ctx <- itemContext index
   ((result, _), _) <- runFormPost csrfForm
   case result of
     FormSuccess ()
-      | shouldOfferOriginal lang item -> do
-          runDB $ update aid [AnnotationOriginalRevealed =. True]
-          logEvent sid (Just $ itemId item) "original_revealed" Nothing
+      | shouldOfferOriginal (ctxLanguage ctx) (ctxItem ctx) -> do
+          runDB $ update (ctxAnnotationId ctx) [AnnotationOriginalRevealed =. True]
+          logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "original_revealed" Nothing
           redirect (ItemR index)
     _ -> invalidArgs ["invalid original reveal request"]
 
@@ -470,10 +572,11 @@ getDoneR = do
           <p .eyebrow>Relationship Fix · Haskell/Yesod dogfood
           <h1>#{tr lang "Готово" "Done"}
           <p>#{tr lang "Ответы сохранены в SQLite на сервере. Финальный JSON содержит source/presentation provenance и факт раскрытия оригинала." "Answers are stored in SQLite on the server. The final JSON includes source/presentation provenance and whether the original was revealed."}
-          <p><a href=@{SubmissionR} .primary>#{tr lang "Скачать submission.json" "Download submission.json"}
+          <p>
+            <a href=@{SubmissionR} .primary>#{tr lang "Скачать submission.json" "Download submission.json"}
       |]
 
-getSubmissionR :: Handler TypedContent
+getSubmissionR :: Handler Value
 getSubmissionR = do
   (sid, session0) <- requireSurveySession
   incomplete <- firstIncomplete sid
@@ -580,30 +683,31 @@ firstIncomplete sid = go 0 items
       evidence <- loadEvidence aid
       if annotationComplete annotation labels evidence then go (index + 1) rest else pure $ Just index
 
-requireDecision :: Decision -> Annotation -> Int -> Handler ()
-requireDecision expected annotation index =
-  unless ((annotationDecision annotation >>= parseDecision) == Just expected) $ redirect (ItemR index)
+-- | A step guard, not a validation rule: reaching the labels step without an
+-- assigned decision is a stale URL, so send the respondent back to the item.
+requireDecision :: Decision -> ItemContext -> Handler ()
+requireDecision expected ctx =
+  unless ((annotationDecision (ctxAnnotation ctx) >>= parseDecision) == Just expected) $
+    redirect (ItemR (ctxIndex ctx))
 
 advanceFrom :: Int -> Handler a
 advanceFrom index
   | index + 1 < length items = redirect (ItemR $ index + 1)
   | otherwise = redirect DoneR
 
-setLocalizedMessage :: Language -> Text -> Text -> Handler ()
-setLocalizedMessage lang ru en = setMessage $ toHtml $ tr lang ru en
-
 logEvent :: SurveySessionId -> Maybe Text -> Text -> Maybe Text -> Handler ()
 logEvent sid itemID kind value = do
   now <- liftIO getCurrentTime
   runDB $ insert_ $ AuditEvent sid itemID kind value now
 
-main :: IO ()
-main = do
-  dbPath <- fromMaybe "annotation.db" <$> lookupEnv "RF_DB_PATH"
-  sessionKeyPath <- fromMaybe "client-session-key.aes" <$> lookupEnv "RF_SESSION_KEY_PATH"
-  secureCookies <- maybe False (`elem` ["1", "true", "yes"]) <$> lookupEnv "RF_SECURE_COOKIES"
-  port <- maybe 8080 (fromMaybe 8080 . readMaybe) <$> lookupEnv "PORT"
-  pool <- runStdoutLoggingT $ createSqlitePool (T.pack dbPath) 4
-  runSqlPool (runMigration migrateAll) pool
-  wai <- toWaiApp $ App pool sessionKeyPath secureCookies
-  runSettings (setPort port $ setHost "127.0.0.1" defaultSettings) wai
+-- | Opens the pool, brings the schema up to date and returns the foundation.
+-- Kept here rather than in the executable so tests can drive the real app.
+makeFoundation :: FilePath -> FilePath -> Bool -> IO App
+makeFoundation dbPath sessionKeyPath secureCookies = do
+  pool <- runNoLoggingT $ createSqlitePool (T.pack dbPath) 4
+  void $ runSqlPool (runMigrationQuiet migrateAll) pool
+  pure App
+    { appPool = pool
+    , appSessionKeyPath = sessionKeyPath
+    , appSecureCookies = secureCookies
+    }

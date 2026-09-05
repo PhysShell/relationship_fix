@@ -33,9 +33,10 @@ The resulting surface no longer represented the desired invariant:
 
 The successor is `src/annotation-web/`:
 
-- Go + `a-h/templ` + `net/http`;
+- Haskell + Yesod + Hamlet/Lucius, on Warp;
 - server-rendered;
-- JavaScript-free baseline;
+- JavaScript-free baseline, enforced by a CI source check;
+- answers persisted server-side in SQLite rather than in the cookie;
 - one stable internal value for each decision/label;
 - fully localized respondent-facing presentation;
 - exactly one source/original per item;

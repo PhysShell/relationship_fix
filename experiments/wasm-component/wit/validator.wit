@@ -1,0 +1,51 @@
+package relationship-fix:annotation@0.2.0;
+
+/// The evidence rule of the annotation protocol, as a typed interface rather
+/// than a command line.
+///
+/// Version 0.2.0 deliberately returns composite values. The 0.1.0 signature
+/// returned a bare `bool`, which the canonical ABI flattens into a single
+/// scalar and hands back in a register; that spared the guest every mechanism
+/// the Component Model is actually made of. This one does not.
+interface validator {
+    /// Presentation language. The case order matches the constructors of
+    /// `Language` in Domain.hs, which is what makes the discriminant crossing
+    /// the ABI boundary meaningful in both directions.
+    enum language {
+        ru,
+        en,
+    }
+
+    /// Why a quote was not usable. A blank box is a respondent who has not
+    /// answered; a quote that is not a span is a respondent who answered and
+    /// was wrong about what they were shown.
+    variant validation-error {
+        unknown-item(string),
+        blank-evidence,
+        not-exact-span,
+    }
+
+    /// An accepted quote, returned together with the text it was checked
+    /// against, so that a caller can show the respondent what was matched
+    /// without holding the catalog itself.
+    record accepted-evidence {
+        displayed-target: string,
+        quote: string,
+    }
+
+    /// Check `quote` against the target message of `item-id` as displayed in
+    /// `language`.
+    ///
+    /// This is a question about the presentation and not about the source: the
+    /// same quote is a span of a Russian presentation of a Russian item and is
+    /// not a span of its English translation.
+    validate-evidence: func(
+        language: language,
+        item-id: string,
+        quote: string,
+    ) -> result<accepted-evidence, validation-error>;
+}
+
+world annotation-validator {
+    export validator;
+}
