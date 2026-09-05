@@ -25,10 +25,21 @@
           "relationship-fix-annotation-web"
           ./src/annotation-web
           { };
+
+      # justStaticExecutables here means the Haskell package dependencies are
+      # linked statically — not "a single freestanding ELF with no libc": the
+      # measured 28-path, 81.6 MiB closure below is a small self-contained
+      # Nix closure, not one mystery file. This is the artifact meant for
+      # `nix copy`/deployment; `annotation-web` above stays the normal
+      # nixpkgs-dynamic build used for tests/check/dev/reference.
+      annotationWebDeployFor = system:
+        (pkgsFor system).haskell.lib.justStaticExecutables
+          (annotationWebFor system);
     in
     {
       packages = forAllSystems (system: rec {
         annotation-web = annotationWebFor system;
+        annotation-web-deploy = annotationWebDeployFor system;
         default = annotation-web;
       });
 

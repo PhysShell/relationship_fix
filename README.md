@@ -159,7 +159,15 @@ nix path-info -rSh .#annotation-web
 
 даёт **387 путей и 4.3 GiB**. Причина не в приложении: nixpkgs линкует Haskell динамически, и все библиотеки остаются runtime-ссылками. Для `nix copy` на маленький VPS это неприменимо.
 
-Штатное лекарство — `pkgs.haskell.lib.justStaticExecutables`. Замерено на этом же пакете: **28 путей и 81.6 MiB**, тот же бинарь. В текущий флейк оно намеренно не внесено: первый Nix-коммит ограничен воспроизводимой сборкой, а выбор формы артефакта относится к шагу деплоя.
+Штатное лекарство — `pkgs.haskell.lib.justStaticExecutables`. Замерено на этом же пакете: **28 путей и 81.6 MiB**, тот же бинарь. Оформлено отдельным package output, а не заменой `annotation-web`:
+
+```
+nix build .#annotation-web           # обычная сборка: tests/check/dev/reference
+nix build .#annotation-web-deploy    # то же самое, но closure для transport/runtime
+nix path-info -rSh .#annotation-web-deploy
+```
+
+`justStaticExecutables` означает прежде всего статическое связывание Haskell-зависимостей пакета, а не «единственный ELF без libc» — 28 путей выше как раз показывают маленькую самодостаточную closure, а не один файл. `annotation-web-deploy` — то, что уходит в `nix copy` на VPS; `annotation-web` остаётся обычной nixpkgs-сборкой для тестов и разработки, `src/annotation-web/**` при этом не меняется.
 
 Для сравнения, Stack-бинарь — 42 МБ, динамически слинкован с `libc`, `libgmp`, `libz` **хоста**, то есть за пределами конкретной машины ничего не гарантирует. Nix-замыкание самодостаточно, включая glibc.
 
