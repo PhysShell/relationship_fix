@@ -111,7 +111,7 @@ jobs:
       - name: Sign the closure for the target daemon
         run: |
           umask 077
-          printf '%s' "${{ secrets.NIX_SIGNING_SECRET_KEY }}" > /tmp/signing.key
+          printf '%s\n' "${{ secrets.NIX_SIGNING_SECRET_KEY }}" > /tmp/signing.key
           nix store sign --key-file /tmp/signing.key "${{ needs.build.outputs.store_path }}"
           shred -u /tmp/signing.key
 
@@ -119,8 +119,12 @@ jobs:
         run: |
           umask 077
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          printf '%s' "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          # printf '%s\n', not '%s': an OpenSSH private key file without its
+          # trailing newline fails to parse ("invalid format" / "error in
+          # libcrypto" depending on the client build) — reproduced locally
+          # against the VPS's own sshd before landing this fix.
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
       # deploy@ is not a Nix trusted-user — this succeeds only because the
