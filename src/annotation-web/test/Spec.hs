@@ -17,7 +17,9 @@ import qualified Data.Text as T
 import Database.Persist.Sql (Entity (..), Filter, SelectOpt (Asc), SqlPersistT, count, deleteWhere, entityVal, runSqlPool, selectList, (==.))
 import Domain
 import qualified Feedback as F
+import qualified MigrationSpec
 import Network.Wai.Test (simpleBody)
+import Schema (migrateDatabase)
 import Server
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -29,6 +31,7 @@ main = withSystemTempDirectory "annotation-web-test" $ \dir -> do
   counter <- newIORef (0 :: Int)
   hspec $ do
     domainSpec
+    MigrationSpec.spec
     yesodSpecWithSiteGenerator (freshSite dir counter) $ do
       formSpec
       markupSpec
@@ -40,7 +43,11 @@ main = withSystemTempDirectory "annotation-web-test" $ \dir -> do
 freshSite :: FilePath -> IORef Int -> IO App
 freshSite dir counter = do
   n <- atomicModifyIORef' counter (\i -> (i + 1, i))
-  makeFoundation (dir </> ("test-" <> show n <> ".db")) (dir </> "session-key.aes") False
+  let db = dir </> ("test-" <> show n <> ".db")
+  -- The two halves in the order deployment runs them: schema first, and only
+  -- then a server that expects to find it already there.
+  _ <- migrateDatabase db
+  makeFoundation db (dir </> "session-key.aes") False
 
 -- | Catalog lookup by stable item id. Tests must not depend on list order.
 itemById :: Text -> Item

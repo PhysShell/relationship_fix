@@ -3,7 +3,21 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/topics/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: migrant-core-0.1.1.1@sha256:862c78ff5e56735c7508a88ed87d30328b8433be17865973dd10464ed9aa0768,1458
+    pantry-tree:
+      sha256: cb30e73f1353c3f6a76f320a3b1254f081fc5aa53684a2845f5be134d9aea676
+      size: 787
+  original:
+    hackage: migrant-core-0.1.1.1
+- completed:
+    hackage: migrant-sqlite-simple-0.1.1.1@sha256:fd3e4d2bcff20d933cc0527d9be2b7fb65e43940f8862e1d2f2b1b293438d8f0,1436
+    pantry-tree:
+      sha256: 8894bd1fc4508abb704076f9524ae62f040f92b4fc9b7907e95bcb601c3c0a69
+      size: 379
+  original:
+    hackage: migrant-sqlite-simple-0.1.1.1
 snapshots:
 - completed:
     sha256: 3a80466f5d716f7e02425f64d09cf1c55b0da74bfc0828cb91862b91677c4af3

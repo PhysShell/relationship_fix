@@ -21,11 +21,11 @@ jobs:
 
       - name: Enforce no-JS source invariant
         run: |
-          if grep -RniE '<script[ >]|src=[^ ]*\.js|javascript:' app src test; then
+          if grep -RniE '<script[ >]|src=[^ ]*\.js|javascript:' app migrate src test; then
             echo 'Client-side JavaScript detected in annotation-web source.' >&2
             exit 1
           fi
-          if find app src test -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.ts' \) | grep -q .; then
+          if find app migrate src test -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.ts' \) | grep -q .; then
             echo 'JavaScript/TypeScript source files detected in annotation-web.' >&2
             exit 1
           fi

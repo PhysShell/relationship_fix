@@ -1,3 +1,7 @@
 resolver: lts-24.57
 packages:
   - .
+
+extra-deps:
+  - migrant-core-0.1.1.1
+  - migrant-sqlite-simple-0.1.1.1

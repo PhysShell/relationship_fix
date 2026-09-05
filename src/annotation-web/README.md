@@ -23,7 +23,8 @@ Tally v7 is a historical dogfood artifact and should not receive further protoco
 - Haskell, GHC 9.10.3 via Stackage LTS 24.57
 - Yesod
 - `yesod-form` for server-rendered forms and CSRF validation
-- Persistent + SQLite
+- Persistent + SQLite for the entity model, queries and serialization
+- `migrant-core` + `migrant-sqlite-simple` for the explicit schema history
 - Hamlet + Lucius
 - Warp bound to `127.0.0.1`
 - no client-side JavaScript
@@ -161,6 +162,92 @@ Creating a new table has no such problem. The migration this version actually
 performs on a live hs-v1 database is two `CREATE TABLE` statements and nothing
 else; `survey_session` is not touched, and its rows are not rewritten.
 
+## Schema migrations
+
+Schema change is explicit, ordered and owned by a separate executable. The
+server does not migrate anything.
+
+That split exists because of the failure above. Automatic migration means the
+shape of a production table is decided by whatever persistent infers at start-up
+from the entity model it happens to be compiled against, and persistent-sqlite's
+answer to "add a column" is "drop the table and rebuild it". A migration that
+destructive should be a deliberate act, reviewed as a diff, not a side effect of
+a restart.
+
+- `annotation-web-migrate` applies the history in `src/Schema.hs`, verifies the
+  result and exits. It is the only thing that writes schema.
+- `annotation-web` checks that the database is at the end of that history and
+  refuses to serve if it is not.
+
+The history is append-only, oldest first:
+
+| Version | Contents |
+| --- | --- |
+| `0001-baseline-hs-v1` | `survey_session`, `annotation`, `annotation_label`, `evidence`, `audit_event` |
+| `0002-session-instrument-and-item-feedback` | adds `session_instrument`, `item_feedback` |
+
+`0001` is not "the schema as of the commit that introduced migrations". It is the
+schema production was *already* running, transcribed from a real hs-v1 database
+file, so that an existing deployment can be recognised as being at `0001` rather
+than rebuilt from scratch on top of live data.
+
+### What happens to a database that predates all of this
+
+A file with tables in it and no `_migrations` table is either a legacy
+production database or something nobody recognises. Which one is decided by
+structure, not by hope: the migrator fingerprints the file from
+`sqlite_master` plus `PRAGMA table_info`, `foreign_key_list`, `index_list` and
+`index_info`, and compares it against what each prefix of the history builds
+from empty. The longest exact match is recorded as already applied; the rest of
+the history then runs normally.
+
+Anything that matches no version is refused, and refused before anything is
+written — a missing column, a dropped unique constraint, a missing foreign key
+and an unexpected extra table are each enough. Matching *some* tables is not
+matching a schema.
+
+The whole run — reading the history, deciding, writing schema, verifying — is a
+single SQLite transaction, so a migration that throws halfway leaves the file
+exactly as it was found, migration bookkeeping included.
+
+### What the checks actually check
+
+After the statements run, three independent things have to agree, and none of
+them is the migrator's own report:
+
+- the structural fingerprint of the file equals the fingerprint of a database
+  built from the history in an empty `:memory:` database;
+- `PRAGMA foreign_key_check` returns no rows and `PRAGMA integrity_check`
+  returns `ok`;
+- persistent, asked via `showMigration` and reading the entity model rather
+  than the migration list, has no statement left it wants to run.
+
+The third is the one that matters most. Migrant can only tell us that the
+migrations it knows about ran. Persistent is the independent judge of whether
+the resulting schema is the one the application's queries were compiled
+against.
+
+### The limitation worth stating
+
+`migrant-sqlite-simple` records applied migration *names*, in order, and
+nothing else — no checksum of the migration body. Migrant alone therefore
+cannot tell that `0001` is still the `0001` that was applied to production.
+
+What partly covers that here is the fingerprint check, which runs on every
+migrate and every server start: editing an already-applied migration in a way
+that changes the resulting schema makes the live file stop matching, loudly, on
+the next run. An edit that leaves the structure identical is not detected. That
+is a documented limitation, not a guarantee.
+
+### Not yet wired into deployment
+
+Deployment still runs the server directly. Until the deploy workflow gains a
+migrate step, a host whose database has not been migrated by hand will see the
+server exit with `database schema is behind the application; run
+annotation-web-migrate first` instead of starting. Sequencing backup → migrate →
+activate → health check, and deciding what rollback means when the binary rolls
+back but the schema does not, is deliberately a separate change.
+
 ## Persistence
 
 SQLite stores:
@@ -188,15 +275,20 @@ From this directory:
 
 ```bash
 stack test
+stack run annotation-web-migrate
 stack run annotation-web
 ```
+
+Schema first, server second: the server will not create or migrate a database,
+and says so rather than starting. `annotation-web-migrate` is idempotent — a
+second run applies nothing.
 
 The server listens on `127.0.0.1:8080` by default.
 
 Useful environment variables:
 
 ```text
-RF_DB_PATH            SQLite path, default annotation.db
+RF_DB_PATH            SQLite path, default annotation.db (both executables)
 RF_SESSION_KEY_PATH   Yesod client-session key, default client-session-key.aes
 RF_SECURE_COOKIES     1/true/yes enables Secure session cookies
 PORT                   listen port, default 8080

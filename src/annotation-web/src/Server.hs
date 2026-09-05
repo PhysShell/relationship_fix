@@ -17,7 +17,8 @@
 module Server where
 
 import Catalog (items)
-import Control.Monad (forM, forM_, unless, void, when)
+import Control.Exception (throwIO)
+import Control.Monad (forM, forM_, unless, when)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Int (Int64)
 import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing)
@@ -25,10 +26,11 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Read as TR
 import Data.Time (UTCTime, getCurrentTime)
-import Database.Persist.Sql (ConnectionPool, SqlBackend, fromSqlKey, runMigrationQuiet, runSqlPool, toSqlKey)
-import Database.Persist.Sqlite (createSqlitePool)
+import Database.Persist.Sql (ConnectionPool, SqlBackend, fromSqlKey, runSqlPool, showMigration, toSqlKey)
+import Database.Persist.Sqlite (createSqlitePool, withSqlitePool)
 import Domain
 import qualified Feedback as F
+import qualified Schema
 import Yesod
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
@@ -940,14 +942,39 @@ logEvent sid itemID kind value = do
   now <- liftIO getCurrentTime
   runDB $ insert_ $ AuditEvent sid itemID kind value now
 
--- | Opens the pool, brings the schema up to date and returns the foundation.
--- Kept here rather than in the executable so tests can drive the real app.
+-- | Opens the pool against a database that is already at the current schema,
+-- and refuses to return a foundation otherwise. Kept here rather than in the
+-- executable so tests can drive the real app.
+--
+-- Nothing on this path writes schema. That used to be a @runMigrationQuiet@
+-- call, which on the production file meant "the server decided, while starting,
+-- to rebuild a table that other rows reference". Schema is annotation-web-migrate's
+-- job now; the server only checks, and a database it does not recognise is a
+-- refusal to start rather than a repair attempt.
 makeFoundation :: FilePath -> FilePath -> Bool -> IO App
 makeFoundation dbPath sessionKeyPath secureCookies = do
+  Schema.assertCurrent dbPath
   pool <- runNoLoggingT $ createSqlitePool (T.pack dbPath) 4
-  void $ runSqlPool (runMigrationQuiet migrateAll) pool
+  -- Migrant says the history is complete and the structure matches what that
+  -- history builds. Persistent is asked the same question independently, from
+  -- the entity model rather than from the migration list: anything it would
+  -- still change is a schema the application cannot actually use.
+  pending <- pendingEntityChanges pool
+  unless (null pending) $ throwIO (Schema.SchemaPersistentDisagrees pending)
   pure App
     { appPool = pool
     , appSessionKeyPath = sessionKeyPath
     , appSecureCookies = secureCookies
     }
+
+-- | The statements persistent would run to bring this database in line with the
+-- entity model, without running them. Empty on a database the migration history
+-- built correctly.
+pendingEntityChanges :: ConnectionPool -> IO [Text]
+pendingEntityChanges = runSqlPool (showMigration migrateAll)
+
+-- | The same question asked of a file rather than a pool, so a test can put
+-- persistent on the stand without standing up the whole application.
+pendingEntityChangesAt :: FilePath -> IO [Text]
+pendingEntityChangesAt dbPath =
+  runNoLoggingT $ withSqlitePool (T.pack dbPath) 1 (liftIO . pendingEntityChanges)
