@@ -27,6 +27,7 @@ spec = do
   legacyDatabaseSpec
   serverGateSpec
   failClosedSpec
+  dataFingerprintSpec
 
 -- | A database file inside a temporary directory. The file is not created:
 -- whether a path that does not exist yet is allowed to become a database is
@@ -259,6 +260,59 @@ failClosedSpec = describe "a database the history does not recognise" $ do
         , ["CREATE TABLE \"surprise\"(\"id\" INTEGER PRIMARY KEY)"]
         )
       ]
+
+-- | The deploy script decides whether restoring a backup would destroy a
+-- respondent's answer by comparing these. If the digest missed a class of
+-- write, that decision would be made wrongly and silently, so each class gets
+-- its own example.
+dataFingerprintSpec :: Spec
+dataFingerprintSpec = describe "the stored-data digest a rollback decision rests on" $ do
+  it "is stable across separate connections to an unchanged database" $ withTempDb $ \db -> do
+    loadLegacyFixture db
+    _ <- migrateDatabase db
+    first <- fingerprintOf db
+    second <- fingerprintOf db
+    second `shouldBe` first
+
+  it "does not move when only the migration bookkeeping does" $ withTempDb $ \db -> do
+    loadLegacyFixture db
+    _ <- migrateDatabase db
+    priorDigest <- fingerprintOf db
+    -- a second migrate touches _migrations reads and reopens the file; neither
+    -- is a respondent writing anything
+    _ <- migrateDatabase db
+    fingerprintOf db `shouldReturn` priorDigest
+
+  it "moves on an insert" $ withTempDb $ \db -> do
+    loadLegacyFixture db
+    _ <- migrateDatabase db
+    priorDigest <- fingerprintOf db
+    Sqlite.withConnection db $ \conn -> Sqlite.execute_ conn
+      "INSERT INTO survey_session (presentation_language, started_at, completed_at) \
+      \VALUES ('ru', '2026-01-01T00:00:00Z', NULL)"
+    laterDigest <- fingerprintOf db
+    laterDigest `shouldNotBe` priorDigest
+
+  it "moves on an update that changes no row count" $ withTempDb $ \db -> do
+    loadLegacyFixture db
+    _ <- migrateDatabase db
+    priorDigest <- fingerprintOf db
+    Sqlite.withConnection db $ \conn -> Sqlite.execute_ conn
+      "UPDATE annotation SET decision = 'none_observed' WHERE id = 1"
+    laterDigest <- fingerprintOf db
+    laterDigest `shouldNotBe` priorDigest
+
+  it "moves on a delete" $ withTempDb $ \db -> do
+    loadLegacyFixture db
+    _ <- migrateDatabase db
+    priorDigest <- fingerprintOf db
+    Sqlite.withConnection db $ \conn -> Sqlite.execute_ conn
+      "DELETE FROM audit_event WHERE id = 1"
+    laterDigest <- fingerprintOf db
+    laterDigest `shouldNotBe` priorDigest
+
+fingerprintOf :: FilePath -> IO T.Text
+fingerprintOf db = Sqlite.withConnection db dataFingerprint
 
 summarise :: Either SchemaFault a -> String
 summarise (Left fault) = T.unpack (renderSchemaFault fault)

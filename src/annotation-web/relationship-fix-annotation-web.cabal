@@ -61,7 +61,9 @@ executable annotation-web-migrate
   build-depends:
     base >=4.20 && <4.21,
     relationship-fix-annotation-web,
+    directory >=1.3 && <1.4,
     migrant-core >=0.1.1.1 && <0.1.2,
+    sqlite-simple >=0.4.18 && <0.5,
     text >=2.1 && <2.2
 
 test-suite annotation-web-test

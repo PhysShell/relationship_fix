@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'src/annotation-web/**'
+      - 'deploy/**'
       - '.github/workflows/annotation-web.yml'
   pull_request:
     paths:
       - 'src/annotation-web/**'
+      - 'deploy/**'
       - '.github/workflows/annotation-web.yml'
 
 jobs:
@@ -50,3 +52,18 @@ jobs:
 
       - name: Build and test
         run: stack build --system-ghc --pedantic --test
+
+      # The deployment choreography, exercised against a fake host: nine ways a
+      # schema-changing release can go wrong, including the two that must not
+      # roll the database back. It runs the real binaries and the real
+      # activate.sh; only the systemd/nix-profile adapter is swapped.
+      #
+      # TMPDIR is pinned to the runner's temp so the harness can hard-link the
+      # binaries into its fake releases instead of copying 48 MB seventeen
+      # times.
+      - name: Deployment acceptance matrix
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          command -v sqlite3 >/dev/null || sudo apt-get install -y sqlite3
+          ../../deploy/test/matrix.sh "$(stack path --system-ghc --local-install-root)/bin"

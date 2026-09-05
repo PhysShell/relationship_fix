@@ -38,6 +38,7 @@ module Schema
   , recordedMigrations
   , schemaFingerprint
   , referenceFingerprint
+  , dataFingerprint
   , foreignKeyViolations
   , integrityCheck
   , withDatabase
@@ -45,9 +46,12 @@ module Schema
 
 import Control.Exception (Exception (..), throwIO)
 import Control.Monad (forM, forM_, unless, when)
+import Data.Bits (xor)
 import Data.List (isPrefixOf, sort, sortOn)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Word (Word64)
+import Text.Printf (printf)
 import Database.Migrant (Driver (..))
 import Database.Migrant.MigrationName (MigrationName (..))
 import Database.Migrant.Run (MigrationDirection (..), executePlan, makePlan)
@@ -385,6 +389,55 @@ fingerprintDiff leftLabel left rightLabel right =
   where
     ls = T.lines left
     rs = T.lines right
+
+-- | A digest of everything the application has stored, as opposed to the shape
+-- it is stored in. Every row of every table, rendered and folded into one
+-- 64-bit value per table.
+--
+-- This exists so a deploy can decide whether restoring a pre-migration backup
+-- would destroy anything, by looking rather than by guessing. Take it once
+-- after migrating and before the service is reachable; take it again if the
+-- release has to be abandoned. Equal means nobody wrote anything in between and
+-- the backup is still a lossless place to go back to. Different means a
+-- respondent's answer is in there now, and an automatic restore would silently
+-- eat it.
+--
+-- Comparing the file byte for byte cannot answer this. Merely opening a WAL
+-- database rewrites parts of it, so the bytes change when nothing was stored.
+-- The question is about content, so the digest is over content.
+--
+-- The fold is FNV-1a, not SHA-256, and deliberately: this detects our own
+-- application writing rows, which is accident detection and not an adversarial
+-- problem, and 64 bits with no new dependency is the honest size for it. Do not
+-- reach for this to prove a file has not been tampered with.
+dataFingerprint :: Sqlite.Connection -> IO Text
+dataFingerprint conn = do
+  tables <- Sqlite.query_ conn
+    "SELECT name FROM sqlite_master WHERE type = 'table' \
+    \AND name <> '_migrations' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' \
+    \ORDER BY name"
+  digests <- forM tables $ \(Sqlite.Only table) -> do
+    -- ORDER BY rowid rather than by primary key: this has to be stable for any
+    -- table, and every table in this schema is a rowid table.
+    body <- Sqlite.query_ conn
+      (Sqlite.Query ("SELECT * FROM \"" <> escapeIdent (table :: Text) <> "\" ORDER BY rowid"))
+    let rendered = T.unlines (map (T.intercalate "|" . map renderCell) (body :: [[SQLData]]))
+    pure (table <> ":" <> T.pack (show (length body)) <> ":" <> hex64 (fnv1a rendered))
+  pure (T.intercalate " " digests)
+
+-- | SQLite identifier quoting: double any embedded quote. These names come from
+-- @sqlite_master@ rather than from a caller, but a query built by concatenation
+-- gets escaped anyway, or the next person to reuse it inherits a hole.
+escapeIdent :: Text -> Text
+escapeIdent = T.replace "\"" "\"\""
+
+fnv1a :: Text -> Word64
+fnv1a = T.foldl' step 0xcbf29ce484222325
+  where
+    step acc c = (acc `xor` fromIntegral (fromEnum c)) * 0x100000001b3
+
+hex64 :: Word64 -> Text
+hex64 w = T.pack (printf "%016x" w)
 
 -- | @PRAGMA foreign_key_check@, one line per violation, empty when clean.
 foreignKeyViolations :: Sqlite.Connection -> IO [Text]

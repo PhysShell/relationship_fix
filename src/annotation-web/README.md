@@ -239,14 +239,19 @@ that changes the resulting schema makes the live file stop matching, loudly, on
 the next run. An edit that leaves the structure identical is not detected. That
 is a documented limitation, not a guarantee.
 
-### Not yet wired into deployment
+### How deployment sequences it
 
-Deployment still runs the server directly. Until the deploy workflow gains a
-migrate step, a host whose database has not been migrated by hand will see the
-server exit with `database schema is behind the application; run
-annotation-web-migrate first` instead of starting. Sequencing backup → migrate →
-activate → health check, and deciding what rollback means when the binary rolls
-back but the schema does not, is deliberately a separate change.
+`deploy/activate.sh` ships inside the release it activates, alongside both
+binaries, and owns the order: quiesce, verify, back up, verify the backup,
+migrate, verify, activate, health-check, and on failure put the database *and*
+the release back together. Because writers are stopped before the backup is
+taken, the rollback unit is the whole world rather than a reverse migration —
+there are no down migrations here and there are not meant to be.
+
+The one thing it will not do automatically is restore a backup after rows have
+been written to the new schema, because that would not be a rollback. See
+`docs/runbooks/annotation-web-deploy.md`, and `deploy/test/matrix.sh` for the
+nine failure scenarios that keep it honest.
 
 ## Persistence
 
