@@ -37,6 +37,20 @@ SurveySession
     startedAt UTCTime
     completedAt UTCTime Maybe
     deriving Show
+-- | The instrument a session is being taken under.
+--
+-- A separate table rather than a column on SurveySession, and not for taste:
+-- persistent-sqlite migrates an added column by rebuilding the table --
+-- CREATE backup, INSERT, DROP survey_session, CREATE, INSERT back -- and
+-- dropping a table that annotation rows reference fails the foreign key check
+-- outright. On the live database that is a server that will not start.
+-- Creating a new table has no such problem, and a session with no row here is
+-- one that began before this table existed: historical hs-v1.
+SessionInstrument
+    surveySessionId SurveySessionId
+    version Text
+    UniqueSessionInstrument surveySessionId
+    deriving Show
 Annotation
     surveySessionId SurveySessionId
     itemId Text
@@ -186,6 +200,35 @@ instance YesodPersist App where
 
 instance RenderMessage App FormMessage where
   renderMessage _ _ = defaultFormMessage
+
+-- | Which instrument a session is being taken under.
+--
+-- The version is a property of the session, not of the deployment: a
+-- respondent who started before the item-feedback step existed took hs-v1, and
+-- must keep taking hs-v1 for the rest of that session however many times the
+-- server is redeployed underneath them. Reading it off the running binary
+-- instead would rewrite the provenance of an already-completed run, which is
+-- the one thing a research instrument must never do to its own record.
+data InstrumentVersion = InstrumentV1 | InstrumentV2
+  deriving stock (Eq, Show)
+
+instrumentVersionCode :: InstrumentVersion -> Text
+instrumentVersionCode InstrumentV1 = "annotation-web-dogfood-hs-v1"
+instrumentVersionCode InstrumentV2 = "annotation-web-dogfood-hs-v2"
+
+-- | The version new sessions are started under.
+currentInstrument :: InstrumentVersion
+currentInstrument = InstrumentV2
+
+-- | Anything not recognisably hs-v2 -- no row at all from before this table
+-- existed, the hs-v1 string itself, or a value from some future version this
+-- binary has never heard of -- is hs-v1, and is never offered the newer steps.
+instrumentFor :: SurveySessionId -> Handler InstrumentVersion
+instrumentFor sid = do
+  stored <- runDB $ getBy (UniqueSessionInstrument sid)
+  pure $ case sessionInstrumentVersion . entityVal <$> stored of
+    Just recorded | recorded == instrumentVersionCode InstrumentV2 -> InstrumentV2
+    _ -> InstrumentV1
 
 type AppForm a = Html -> MForm Handler (FormResult a, Widget)
 
@@ -436,7 +479,10 @@ postLanguageR = do
   case result of
     FormSuccess lang -> do
       now <- liftIO getCurrentTime
-      sid <- runDB $ insert $ SurveySession (languageCode lang) now Nothing
+      sid <- runDB $ do
+        created <- insert $ SurveySession (languageCode lang) now Nothing
+        insert_ $ SessionInstrument created (instrumentVersionCode currentInstrument)
+        pure created
       setSession "annotation_session_id" (T.pack $ show $ fromSqlKey sid)
       logEvent sid Nothing "language_selected" (Just $ languageCode lang)
       redirect IntroR
@@ -483,6 +529,7 @@ data ItemContext = ItemContext
   , ctxLabels :: [BehaviorLabel]
   , ctxEvidence :: [(BehaviorLabel, Text)]
   , ctxFeedback :: Maybe ItemFeedback
+  , ctxInstrument :: InstrumentVersion
   }
 
 itemContext :: Int -> Handler ItemContext
@@ -494,6 +541,7 @@ itemContext index = do
   labels <- loadLabels aid
   evidence <- loadEvidence aid
   feedback <- loadFeedback aid
+  instrument <- instrumentFor sid
   pure ItemContext
     { ctxSessionId = sid
     , ctxLanguage = lang
@@ -504,6 +552,7 @@ itemContext index = do
     , ctxLabels = labels
     , ctxEvidence = evidence
     , ctxFeedback = feedback
+    , ctxInstrument = instrument
     }
 
 -- | Which step the respondent is on. Once the annotation itself is complete
@@ -511,13 +560,14 @@ itemContext index = do
 -- flow but never a condition on the annotation being correct.
 currentStep :: ItemContext -> Step
 currentStep ctx
-  | annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx) = StepFeedback
+  | ctxInstrument ctx == InstrumentV2
+  , annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx) = StepFeedback
   | otherwise = stepFor (ctxAnnotation ctx) (ctxLabels ctx)
 
 getItemR :: Int -> Handler Html
 getItemR index = do
   ctx <- itemContext index
-  if itemDone (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx) (ctxFeedback ctx)
+  if itemDone (ctxInstrument ctx) (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx) (ctxFeedback ctx)
     then advanceFrom index
     else do
       let lang = ctxLanguage ctx
@@ -673,6 +723,10 @@ postAbstainR index = do
 postFeedbackR :: Int -> Handler Html
 postFeedbackR index = do
   ctx <- itemContext index
+  -- This step does not exist in hs-v1. Refusing rather than ignoring keeps a
+  -- grandfathered session from being quietly turned into a hybrid of two
+  -- instruments by a stale tab or a hand-made request.
+  when (ctxInstrument ctx == InstrumentV1) notFound
   -- The step exists only after the annotation itself is finished; reaching it
   -- otherwise is a stale URL.
   unless (annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx)) $
@@ -710,7 +764,8 @@ getDoneR :: Handler Html
 getDoneR = do
   (sid, session) <- requireSurveySession
   lang <- sessionLanguage session
-  incomplete <- firstIncomplete sid
+  instrument <- instrumentFor sid
+  incomplete <- firstIncomplete instrument sid
   case incomplete of
     Just index -> redirect (ItemR index)
     Nothing -> do
@@ -730,7 +785,8 @@ getDoneR = do
 getSubmissionR :: Handler Value
 getSubmissionR = do
   (sid, session0) <- requireSurveySession
-  incomplete <- firstIncomplete sid
+  instrument <- instrumentFor sid
+  incomplete <- firstIncomplete instrument sid
   when (isJust incomplete) $ permissionDenied "submission is incomplete"
   now <- liftIO getCurrentTime
   unless (isJust $ surveySessionCompletedAt session0) $ runDB $ update sid [SurveySessionCompletedAt =. Just now]
@@ -743,7 +799,7 @@ getSubmissionR = do
     feedback <- loadFeedback aid
     let presentation = presentationFor lang item
         evidenceFor label = lookup label evidence
-    pure $ object
+    pure $ object $
       [ "item_id" .= itemId item
       , "source_language" .= languageCode (itemSourceLanguage item)
       , "presentation_language" .= languageCode lang
@@ -753,13 +809,16 @@ getSubmissionR = do
       , "abstention_reason" .= annotationAbstentionReason annotation
       , "abstention_note" .= annotationAbstentionNote annotation
       , "original_revealed" .= annotationOriginalRevealed annotation
-      -- A separate axis from labels[]: what the respondent thinks of the item,
-      -- not what they observed inside it.
-      , "feedback" .= feedbackValue feedback
       ]
+        -- A separate axis from labels[]: what the respondent thinks of the
+        -- item, not what they observed inside it. An hs-v1 submission does not
+        -- carry the key at all, because that contract did not have it.
+        <> case instrument of
+             InstrumentV1 -> []
+             InstrumentV2 -> ["feedback" .= feedbackValue feedback]
   addHeader "Content-Disposition" "attachment; filename=relationship-fix-submission.json"
   returnJson $ object
-    [ "instrument_version" .= ("annotation-web-dogfood-hs-v2" :: Text)
+    [ "instrument_version" .= instrumentVersionCode instrument
     , "presentation_version" .= ("presentation-v1" :: Text)
     , "ontology_version" .= ("behavior-v0.2-candidate" :: Text)
     , "presentation_language" .= languageCode lang
@@ -827,9 +886,11 @@ storedDecision ctx = annotationDecision (ctxAnnotation ctx) >>= parseDecision
 -- annotation alone. Feedback content is optional -- an empty submission is a
 -- valid answer -- but the step is part of the flow, so an item is finished
 -- once it has been passed through.
-itemDone :: Annotation -> [BehaviorLabel] -> [(BehaviorLabel, Text)] -> Maybe ItemFeedback -> Bool
-itemDone annotation labels evidence feedback =
-  annotationComplete annotation labels evidence && isJust feedback
+itemDone :: InstrumentVersion -> Annotation -> [BehaviorLabel] -> [(BehaviorLabel, Text)] -> Maybe ItemFeedback -> Bool
+itemDone instrument annotation labels evidence feedback =
+  annotationComplete annotation labels evidence && case instrument of
+    InstrumentV1 -> True
+    InstrumentV2 -> isJust feedback
 
 loadEvidence :: AnnotationId -> Handler [(BehaviorLabel, Text)]
 loadEvidence aid = do
@@ -851,8 +912,8 @@ annotationComplete annotation labels evidence = case annotationDecision annotati
   Just Abstained -> isJust (annotationAbstentionReason annotation >>= parseAbstentionReason)
   Just Assigned -> not (null labels) && all (`elem` map fst evidence) labels
 
-firstIncomplete :: SurveySessionId -> Handler (Maybe Int)
-firstIncomplete sid = go 0 items
+firstIncomplete :: InstrumentVersion -> SurveySessionId -> Handler (Maybe Int)
+firstIncomplete instrument sid = go 0 items
   where
     go _ [] = pure Nothing
     go index (item : rest) = do
@@ -860,7 +921,7 @@ firstIncomplete sid = go 0 items
       labels <- loadLabels aid
       evidence <- loadEvidence aid
       feedback <- loadFeedback aid
-      if itemDone annotation labels evidence feedback then go (index + 1) rest else pure $ Just index
+      if itemDone instrument annotation labels evidence feedback then go (index + 1) rest else pure $ Just index
 
 -- | A step guard, not a validation rule: reaching the labels step without an
 -- assigned decision is a stale URL, so send the respondent back to the item.

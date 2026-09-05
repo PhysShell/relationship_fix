@@ -122,13 +122,44 @@ an abstention and never touches labels.
 "feedback": { "flags": ["unnatural_example"], "note": "…" }
 ```
 
-### Instrument version
+### Instrument version belongs to the session
 
-Adding that field changes the submission contract, so `instrument_version` is
-now `annotation-web-dogfood-hs-v2`. Submissions already collected under
-`annotation-web-dogfood-hs-v1` stay as they are: they are historical dogfood
-artifacts and are not migrated forward. `ontology_version` is untouched — the
-categories did not change.
+Adding that field changes the submission contract, so new sessions are taken
+under `annotation-web-dogfood-hs-v2`.
+
+The version is recorded on the session when it starts, in `session_instrument`,
+and every decision that depends on it is read from there rather than from the
+running binary. A session that began before the feedback step existed has no
+row, is therefore hs-v1, is never shown the feedback step, has `POST
+/item/N/feedback` refused outright, and exports as hs-v1 without the `feedback`
+key at all — because that key was not part of the contract it was taken under.
+
+This is not tidiness. A live hs-v1 submission exists. Reading the version off
+the deployment instead would let one unchanged database session be exported
+under a version its respondent never saw, which is a provenance failure
+regardless of how correct the answers are. If we ever want to ask an hs-v1
+respondent whether an example sounded natural, that is post-hoc feedback with
+its own provenance, not a step retroactively inserted into a run that already
+happened.
+
+`ontology_version` is untouched — the categories did not change.
+
+#### Why a table and not a column
+
+`instrument_version` began as a nullable column on `SurveySession`. Running that
+migration against a copy of the live database failed:
+
+    SQLite3 returned ErrorConstraint while attempting to perform step:
+    FOREIGN KEY constraint failed
+
+persistent-sqlite does not `ALTER TABLE ADD COLUMN`. It rebuilds the table —
+create a backup, copy, `DROP TABLE survey_session`, recreate, copy back — and
+dropping a table that `annotation` rows reference fails the foreign key check.
+On the deployed database that is a server that does not start.
+
+Creating a new table has no such problem. The migration this version actually
+performs on a live hs-v1 database is two `CREATE TABLE` statements and nothing
+else; `survey_session` is not touched, and its rows are not rewritten.
 
 ## Persistence
 

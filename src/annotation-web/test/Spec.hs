@@ -14,7 +14,7 @@ import Data.IORef (IORef, atomicModifyIORef', newIORef)
 import qualified Data.List as List
 import Data.Text (Text)
 import qualified Data.Text as T
-import Database.Persist.Sql (Entity (..), Filter, SelectOpt (Asc), SqlPersistT, count, entityVal, runSqlPool, selectList, (==.))
+import Database.Persist.Sql (Entity (..), Filter, SelectOpt (Asc), SqlPersistT, count, deleteWhere, entityVal, runSqlPool, selectList, (==.))
 import Domain
 import qualified Feedback as F
 import Network.Wai.Test (simpleBody)
@@ -34,6 +34,7 @@ main = withSystemTempDirectory "annotation-web-test" $ \dir -> do
       markupSpec
       decisionSpec
       feedbackSpec
+      instrumentSpec
 
 -- | Each spec item gets its own database, so row counts mean what they say.
 freshSite :: FilePath -> IORef Int -> IO App
@@ -93,16 +94,17 @@ domainSpec = do
       filter abstentionRequiresNote allAbstentionReasons `shouldBe` [AmbiguousBetweenLabels, OtherReason]
 
 -- | Row counts across every table an annotation submission can touch.
-type RowCounts = (Int, Int, Int, Int)
+type RowCounts = (Int, Int, Int, Int, Int)
 
 rowCounts :: YesodExample App RowCounts
 rowCounts = do
   site <- getTestYesod
   liftIO $ flip runSqlPool (appPool site) $
-    (,,,)
+    (,,,,)
       <$> count ([] :: [Filter Annotation])
       <*> count ([] :: [Filter AnnotationLabel])
       <*> count ([] :: [Filter Evidence])
+      <*> count ([] :: [Filter ItemFeedback])
       <*> count ([] :: [Filter AuditEvent])
 
 runDb :: SqlPersistT IO a -> YesodExample App a
@@ -146,19 +148,28 @@ jsonField _ _ = Nothing
 
 -- | The submission object for one item, so that feedback can be checked to be
 -- a field of its own rather than something smuggled into labels.
-submissionAnnotation :: Text -> YesodExample App A.Value
-submissionAnnotation iid = do
+submissionObject :: YesodExample App A.Value
+submissionObject = do
   get SubmissionR
   statusIs 200
   body <- withResponse (pure . simpleBody)
-  let found = do
-        annotations <- A.decode body >>= jsonField "annotations"
-        case annotations of
-          A.Array xs -> case filter ((== Just (A.String iid)) . jsonField "item_id") (toList xs) of
-            (a : _) -> Just a
-            [] -> Nothing
-          _ -> Nothing
-  pure (fromMaybe A.Null found)
+  pure (fromMaybe A.Null (A.decode body))
+
+annotationOf :: Text -> A.Value -> Maybe A.Value
+annotationOf iid submission = case jsonField "annotations" submission of
+  Just (A.Array xs) -> case filter ((== Just (A.String iid)) . jsonField "item_id") (toList xs) of
+    (a : _) -> Just a
+    [] -> Nothing
+  _ -> Nothing
+
+submissionAnnotation :: Text -> YesodExample App A.Value
+submissionAnnotation iid = fromMaybe A.Null . annotationOf iid <$> submissionObject
+
+-- | Turns the session this test is holding into one that predates the
+-- item-feedback step, exactly as the live database holds it: the column simply
+-- has no value, because it did not exist when the row was written.
+grandfatherSession :: YesodExample App ()
+grandfatherSession = runDb $ deleteWhere ([] :: [Filter SessionInstrument])
 
 auditKindsFor :: Text -> YesodExample App [Text]
 auditKindsFor iid = do
@@ -564,3 +575,67 @@ completeItemWithFeedback index feedback = do
   followTo (T.pack ("/item/" <> show index))
   submitStep (FeedbackR index) feedback
   followTo (if index + 1 < length items then T.pack ("/item/" <> show (index + 1)) else "/done")
+
+-- | The instrument a session is taken under is a property of that session.
+--
+-- A live hs-v1 session exists. Redeploying must not walk it into a step that
+-- did not exist when it started, and must not export it under a version its
+-- respondent never saw.
+instrumentSpec :: YesodSpec App
+instrumentSpec = ydescribe "instrument version is bound to the session" $ do
+  yit "records the version on the session rather than reading it off the binary" $ do
+    startSession "ru"
+    versions <- runDb (map (sessionInstrumentVersion . entityVal) <$> selectList ([] :: [Filter SessionInstrument]) [])
+    assertEq "a new session is hs-v2" ["annotation-web-dogfood-hs-v2"] versions
+
+  yit "never shows the feedback step to a session that predates it" $ do
+    startSession "ru"
+    grandfatherSession
+    get (ItemR 0)
+    bodyNotContains "Замечания к примеру"
+    submitStep (DecisionR 0) [("decision", "none_observed")]
+    followTo "/item/0"
+    followTo "/item/1"
+    rows <- feedbackFor "dg-04"
+    assertEq "and stores no feedback for it" 0 (length rows)
+
+  yit "refuses the feedback step outright under the older instrument" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitStep (DecisionR 0) [("decision", "none_observed")]
+    followTo "/item/0"
+    bodyContains "Замечания к примеру"
+    grandfatherSession
+    rowsBefore <- rowCounts
+    submitStep (FeedbackR 0) [("feedback_flags", "unnatural_example")]
+    statusIs 404
+    rowsAfter <- rowCounts
+    assertEq "a refused step writes nothing" rowsBefore rowsAfter
+
+  yit "exports a grandfathered session under hs-v1, without the newer field" $ do
+    startSession "ru"
+    grandfatherSession
+    forM_ [0 .. 5] $ \index -> do
+      get (ItemR index)
+      submitStep (DecisionR index) [("decision", "none_observed")]
+      followTo (T.pack ("/item/" <> show index))
+      followTo (if index + 1 < length items then T.pack ("/item/" <> show (index + 1)) else "/done")
+    submission <- submissionObject
+    assertEq "reported as the version actually taken"
+      (Just (A.String "annotation-web-dogfood-hs-v1")) (jsonField "instrument_version" submission)
+    assertEq "ontology version is not touched by any of this"
+      (Just (A.String "behavior-v0.2-candidate")) (jsonField "ontology_version" submission)
+    let annotation = fromMaybe A.Null (annotationOf "dg-04" submission)
+    assertEq "the hs-v2 field is absent, not merely empty" Nothing (jsonField "feedback" annotation)
+    assertEq "the annotation itself is unchanged"
+      (Just (A.String "none_observed")) (jsonField "decision" annotation)
+
+  yit "exports a session started now under hs-v2, with the field" $ do
+    startSession "ru"
+    forM_ [0 .. 5] $ \index -> completeItemWithFeedback index []
+    submission <- submissionObject
+    assertEq "reported as hs-v2"
+      (Just (A.String "annotation-web-dogfood-hs-v2")) (jsonField "instrument_version" submission)
+    let annotation = fromMaybe A.Null (annotationOf "dg-04" submission)
+    assertEq "and carries the feedback field"
+      (Just (A.Array mempty)) (jsonField "feedback" annotation >>= jsonField "flags")
