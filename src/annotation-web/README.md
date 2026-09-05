@@ -61,11 +61,22 @@ language
   -> instructions
   -> episode
       -> decision
-          -> none_observed -> next
-          -> abstained -> reason (+ note where required) -> next
-          -> assigned -> labels -> exact evidence span(s) -> next
+          -> none_observed ---------------------------+
+          -> abstained -> reason (+ note where required) -+
+          -> assigned -> labels -> exact evidence span(s) -+
+                                                       |
+                                        optional item feedback
+                                                       |
+                                                    -> next
   -> submission.json
 ```
+
+A respondent can reopen the decision of the item they are on from any later
+step; the link goes to `/item/N/decision/edit`, which renders and writes
+nothing. Changing the decision clears what it made stale — categories, quotes,
+abstention reason and note — and that clearing lives in exactly one place, the
+decision handler. Confirming the decision already on record is a different act
+and keeps the work already entered.
 
 Every transition is ordinary HTTP GET/POST/redirect. `runFormPost` provides CSRF-protected POST forms without JavaScript.
 
@@ -93,6 +104,32 @@ presentation_language = en
 
 For an English source item the rule is reversed. `original_revealed` is persisted and included in the submission.
 
+## Item feedback is a separate axis
+
+A respondent can also say something about the *item* rather than about the
+interaction inside it: that the example sounds unnatural, that context is
+missing, that the wording or translation raises questions. That is dogfood
+evidence about the instrument, not an annotation, and conflating it with
+observation labels or abstention reasons would make all three unreadable.
+
+So it lives in its own module (`Feedback`), its own table (`ItemFeedback`) and
+its own field of the submission. It is optional in content — an empty
+submission is a valid answer — but it is a step in the flow, offered the same
+way after every decision. It never affects `annotationComplete`, never becomes
+an abstention and never touches labels.
+
+```json
+"feedback": { "flags": ["unnatural_example"], "note": "…" }
+```
+
+### Instrument version
+
+Adding that field changes the submission contract, so `instrument_version` is
+now `annotation-web-dogfood-hs-v2`. Submissions already collected under
+`annotation-web-dogfood-hs-v1` stay as they are: they are historical dogfood
+artifacts and are not migrated forward. `ontology_version` is untouched — the
+categories did not change.
+
 ## Persistence
 
 SQLite stores:
@@ -103,6 +140,7 @@ SQLite stores:
 - evidence quotes;
 - abstention reasons/notes;
 - whether the source original was revealed;
+- optional item-quality feedback, separately from the annotation;
 - a small audit event stream for dogfood UX analysis.
 
 The browser session contains only Yesod session state including the opaque database session id and CSRF state. Annotation answers are not stored in the cookie.

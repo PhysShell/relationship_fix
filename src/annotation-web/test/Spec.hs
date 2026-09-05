@@ -3,13 +3,21 @@
 module Main (main) where
 
 import Catalog (items)
+import Control.Monad (forM_)
 import Control.Monad.IO.Class (liftIO)
+import qualified Data.Aeson as A
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
+import Data.Foldable (toList)
+import Data.Maybe (fromMaybe)
 import Data.IORef (IORef, atomicModifyIORef', newIORef)
 import qualified Data.List as List
 import Data.Text (Text)
 import qualified Data.Text as T
-import Database.Persist.Sql (Filter, count, entityVal, runSqlPool, selectList, (==.))
+import Database.Persist.Sql (Entity (..), Filter, SelectOpt (Asc), SqlPersistT, count, entityVal, runSqlPool, selectList, (==.))
 import Domain
+import qualified Feedback as F
+import Network.Wai.Test (simpleBody)
 import Server
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -21,7 +29,11 @@ main = withSystemTempDirectory "annotation-web-test" $ \dir -> do
   counter <- newIORef (0 :: Int)
   hspec $ do
     domainSpec
-    yesodSpecWithSiteGenerator (freshSite dir counter) formSpec
+    yesodSpecWithSiteGenerator (freshSite dir counter) $ do
+      formSpec
+      markupSpec
+      decisionSpec
+      feedbackSpec
 
 -- | Each spec item gets its own database, so row counts mean what they say.
 freshSite :: FilePath -> IORef Int -> IO App
@@ -93,11 +105,60 @@ rowCounts = do
       <*> count ([] :: [Filter Evidence])
       <*> count ([] :: [Filter AuditEvent])
 
-annotationsFor :: Text -> YesodExample App [Annotation]
-annotationsFor iid = do
+runDb :: SqlPersistT IO a -> YesodExample App a
+runDb action = do
   site <- getTestYesod
-  rows <- liftIO $ runSqlPool (selectList [AnnotationItemId ==. iid] []) (appPool site)
-  pure (map entityVal rows)
+  liftIO $ runSqlPool action (appPool site)
+
+annotationsFor :: Text -> YesodExample App [Annotation]
+annotationsFor iid = map entityVal <$> runDb (selectList [AnnotationItemId ==. iid] [])
+
+-- | Everything that hangs off one item's annotation, for the invariants about
+-- what a decision change is and is not allowed to discard.
+labelsFor :: Text -> YesodExample App [Text]
+labelsFor iid = runDb $ do
+  anns <- selectList [AnnotationItemId ==. iid] []
+  case anns of
+    [] -> pure []
+    (Entity aid _ : _) ->
+      map (annotationLabelLabelId . entityVal)
+        <$> selectList [AnnotationLabelAnnotationId ==. aid] [Asc AnnotationLabelId]
+
+evidenceFor :: Text -> YesodExample App [Text]
+evidenceFor iid = runDb $ do
+  anns <- selectList [AnnotationItemId ==. iid] []
+  case anns of
+    [] -> pure []
+    (Entity aid _ : _) ->
+      map (evidenceQuote . entityVal) <$> selectList [EvidenceAnnotationId ==. aid] [Asc EvidenceId]
+
+feedbackFor :: Text -> YesodExample App [ItemFeedback]
+feedbackFor iid = runDb $ do
+  anns <- selectList [AnnotationItemId ==. iid] []
+  case anns of
+    [] -> pure []
+    (Entity aid _ : _) ->
+      map entityVal <$> selectList [ItemFeedbackAnnotationId ==. aid] []
+
+jsonField :: Text -> A.Value -> Maybe A.Value
+jsonField name (A.Object o) = KeyMap.lookup (Key.fromText name) o
+jsonField _ _ = Nothing
+
+-- | The submission object for one item, so that feedback can be checked to be
+-- a field of its own rather than something smuggled into labels.
+submissionAnnotation :: Text -> YesodExample App A.Value
+submissionAnnotation iid = do
+  get SubmissionR
+  statusIs 200
+  body <- withResponse (pure . simpleBody)
+  let found = do
+        annotations <- A.decode body >>= jsonField "annotations"
+        case annotations of
+          A.Array xs -> case filter ((== Just (A.String iid)) . jsonField "item_id") (toList xs) of
+            (a : _) -> Just a
+            [] -> Nothing
+          _ -> Nothing
+  pure (fromMaybe A.Null found)
 
 auditKindsFor :: Text -> YesodExample App [Text]
 auditKindsFor iid = do
@@ -115,6 +176,13 @@ startSession language = do
     addToken
     addPostParam "language" language
   followTo "/intro"
+
+-- | Passes the dogfood feedback step without saying anything, which is a
+-- valid answer and the common case in these tests.
+skipFeedback :: Int -> YesodExample App ()
+skipFeedback index = do
+  submitStep (FeedbackR index) []
+  followTo (T.pack ("/item/" <> show (index + 1)))
 
 submitStep :: Route App -> [(Text, Text)] -> YesodExample App ()
 submitStep route params = request $ do
@@ -252,9 +320,247 @@ formSpec = ydescribe "rejected submissions" $ do
     startSession "ru"
     get (ItemR 0)
     submitStep (DecisionR 0) [("decision", "none_observed")]
-    followTo "/item/1"
+    followTo "/item/0"
     stored <- annotationsFor "dg-04"
     assertEq "exactly one annotation row" 1 (length stored)
     assertEq "the decision is stored" [Just "none_observed"] (map annotationDecision stored)
     kinds <- auditKindsFor "dg-04"
     assertEq "exactly one audit event" ["decision_submitted"] kinds
+    skipFeedback 0
+
+-- | What the respondent's thumb actually meets. The generic yesod-form
+-- renderer emitted inputs and labels as flat siblings, which on a narrow
+-- screen reflowed into each other; these assert the structure that replaced it.
+markupSpec :: YesodSpec App
+markupSpec = ydescribe "option rows" $ do
+  yit "gives every category its own row, with its label bound to its input" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitStep (DecisionR 0) [("decision", "assigned")]
+    followTo "/item/0"
+    htmlCount "label.choice" 5
+    htmlCount "input[name=labels]" 5
+    forM_ (map labelCode allBehaviorLabels) $ \code ->
+      bodyContains . T.unpack $
+        "<label class=\"choice\" for=\"labels-" <> code
+          <> "\"><input id=\"labels-" <> code
+          <> "\" type=\"checkbox\" name=\"labels\" value=\"" <> code <> "\""
+    htmlAnyContain "span.choice-text" "обвинение / критика"
+
+  yit "gives the decision radios the same structure" $ do
+    startSession "ru"
+    get (ItemR 0)
+    htmlCount "label.choice" 3
+    htmlCount "input[name=decision]" 3
+    bodyContains "<label class=\"choice\" for=\"decision-assigned\"><input id=\"decision-assigned\""
+
+  yit "no longer ships stylesheet rules that match no markup" $ do
+    get HomeR
+    statusIs 200
+    bodyNotContains "form ul {"
+    bodyNotContains "form li label {"
+
+decisionSpec :: YesodSpec App
+decisionSpec = ydescribe "reconsidering a decision" $ do
+  yit "offers a way back to the decision from the later steps" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitStep (DecisionR 0) [("decision", "assigned")]
+    followTo "/item/0"
+    htmlCount "p.step-back a" 1
+    bodyContains "/item/0/decision/edit"
+    bodyContains "Изменить решение"
+
+  yit "reopens the step with the decision already on record selected" $ do
+    startSession "ru"
+    reachEvidenceStep ["B.BLAME_CRITICISM"]
+    get (EditDecisionR 0)
+    statusIs 200
+    htmlCount "input[name=decision][checked]" 1
+    bodyContains "value=\"assigned\" required checked"
+
+  yit "A. assigned to none_observed drops what it made stale" $ do
+    startSession "ru"
+    reachEvidenceStep ["B.BLAME_CRITICISM"]
+    get (EditDecisionR 0)
+    submitStep (DecisionR 0) [("decision", "none_observed")]
+    followTo "/item/0"
+    labels <- labelsFor "dg-04"
+    assertEq "categories cleared" [] labels
+    quotes <- evidenceFor "dg-04"
+    assertEq "quotes cleared" [] quotes
+    stored <- annotationsFor "dg-04"
+    assertEq "decision changed" [Just "none_observed"] (map annotationDecision stored)
+    bodyContains "Замечания к примеру"
+
+  yit "B. assigned to abstained drops categories and quotes" $ do
+    startSession "ru"
+    reachEvidenceStep ["B.BLAME_CRITICISM"]
+    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставил окно открытым")]
+    followTo "/item/0"
+    get (EditDecisionR 0)
+    submitStep (DecisionR 0) [("decision", "abstained")]
+    followTo "/item/0"
+    labels <- labelsFor "dg-04"
+    assertEq "categories cleared" [] labels
+    quotes <- evidenceFor "dg-04"
+    assertEq "quotes cleared" [] quotes
+    bodyContains "Причина abstained"
+
+  yit "C. abstained to assigned clears the abstention" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitStep (DecisionR 0) [("decision", "abstained")]
+    followTo "/item/0"
+    submitStep (AbstainR 0) [("reason", "ambiguous_between_labels"), ("note", "на границе repair и avoidance")]
+    followTo "/item/0"
+    get (EditDecisionR 0)
+    submitStep (DecisionR 0) [("decision", "assigned")]
+    followTo "/item/0"
+    stored <- annotationsFor "dg-04"
+    assertEq "reason cleared" [Nothing] (map annotationAbstentionReason stored)
+    assertEq "note cleared" [Nothing] (map annotationAbstentionNote stored)
+    bodyContains "Категории"
+
+  yit "D. confirming the same decision keeps the work already done" $ do
+    startSession "ru"
+    reachEvidenceStep ["B.BLAME_CRITICISM"]
+    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставил окно открытым")]
+    followTo "/item/0"
+    get (EditDecisionR 0)
+    submitStep (DecisionR 0) [("decision", "assigned")]
+    followTo "/item/0"
+    labels <- labelsFor "dg-04"
+    assertEq "categories survive" ["B.BLAME_CRITICISM"] labels
+    quotes <- evidenceFor "dg-04"
+    assertEq "quotes survive" ["оставил окно открытым"] quotes
+
+  yit "E. an invalid edit submission re-renders and writes nothing" $ do
+    startSession "ru"
+    reachEvidenceStep ["B.BLAME_CRITICISM"]
+    get (EditDecisionR 0)
+    rowsBefore <- rowCounts
+    submitStep (DecisionR 0) []
+    statusIs 200
+    htmlCount ".field-error" 1
+    labels <- labelsFor "dg-04"
+    assertEq "categories untouched" ["B.BLAME_CRITICISM"] labels
+    rowsAfter <- rowCounts
+    assertEq "an invalid submission writes nothing" rowsBefore rowsAfter
+
+feedbackSpec :: YesodSpec App
+feedbackSpec = ydescribe "optional item feedback" $ do
+  yit "none_observed reaches feedback, then the next item" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitStep (DecisionR 0) [("decision", "none_observed")]
+    followTo "/item/0"
+    bodyContains "Замечания к примеру"
+    skipFeedback 0
+
+  yit "assigned reaches feedback after the quotes" $ do
+    startSession "ru"
+    reachEvidenceStep ["B.BLAME_CRITICISM"]
+    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставил окно открытым")]
+    followTo "/item/0"
+    bodyContains "Замечания к примеру"
+    skipFeedback 0
+
+  yit "abstained reaches feedback after the reason" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitStep (DecisionR 0) [("decision", "abstained")]
+    followTo "/item/0"
+    submitStep (AbstainR 0) [("reason", "insufficient_context")]
+    followTo "/item/0"
+    bodyContains "Замечания к примеру"
+    skipFeedback 0
+
+  yit "an empty submission is a valid answer and completes the item" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitStep (DecisionR 0) [("decision", "none_observed")]
+    followTo "/item/0"
+    skipFeedback 0
+    rows <- feedbackFor "dg-04"
+    assertEq "one feedback row" 1 (length rows)
+    assertEq "no flags" [] (concatMap flagCodes rows)
+    assertEq "no note" [Nothing] (map itemFeedbackNote rows)
+
+  yit "one flag persists" $ do
+    startSession "ru"
+    completeItemWithFeedback 0 [("feedback_flags", "unnatural_example")]
+    rows <- feedbackFor "dg-04"
+    assertEq "the flag is stored" ["unnatural_example"] (concatMap flagCodes rows)
+
+  yit "several flags persist" $ do
+    startSession "ru"
+    completeItemWithFeedback 0
+      [ ("feedback_flags", "unnatural_example")
+      , ("feedback_flags", "insufficient_context")
+      ]
+    rows <- feedbackFor "dg-04"
+    assertEq "both flags are stored"
+      ["unnatural_example", "insufficient_context"] (concatMap flagCodes rows)
+
+  yit "a free note persists without any flag" $ do
+    startSession "ru"
+    completeItemWithFeedback 0 [("feedback_note", "  так люди как будто не разговаривают  ")]
+    rows <- feedbackFor "dg-04"
+    assertEq "no flags" [] (concatMap flagCodes rows)
+    assertEq "the note is stored, trimmed"
+      [Just "так люди как будто не разговаривают"] (map itemFeedbackNote rows)
+
+  yit "leaves the decision and the categories alone" $ do
+    startSession "ru"
+    reachEvidenceStep ["B.BLAME_CRITICISM"]
+    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставил окно открытым")]
+    followTo "/item/0"
+    submitStep (FeedbackR 0) [("feedback_flags", "unnatural_example")]
+    followTo "/item/1"
+    stored <- annotationsFor "dg-04"
+    assertEq "decision unchanged" [Just "assigned"] (map annotationDecision stored)
+    labels <- labelsFor "dg-04"
+    assertEq "categories unchanged" ["B.BLAME_CRITICISM"] labels
+    quotes <- evidenceFor "dg-04"
+    assertEq "quotes unchanged" ["оставил окно открытым"] quotes
+
+  yit "reports feedback as its own field of the submission, never as a label" $ do
+    startSession "ru"
+    completeItemWithFeedback 0
+      [ ("feedback_flags", "unnatural_example")
+      , ("feedback_note", "звучит неестественно")
+      ]
+    forM_ [1 .. 5] $ \index -> completeItemWithFeedback index []
+    annotation <- submissionAnnotation "dg-04"
+    assertEq "labels stay empty" (Just (A.Array mempty)) (jsonField "labels" annotation)
+    assertEq "flags are their own list"
+      (Just (A.Array (pure (A.String "unnatural_example"))))
+      (jsonField "feedback" annotation >>= jsonField "flags")
+    assertEq "the note is its own field"
+      (Just (A.String "звучит неестественно"))
+      (jsonField "feedback" annotation >>= jsonField "note")
+
+  yit "reports no feedback content as an empty structure, not as an answer" $ do
+    startSession "ru"
+    forM_ [0 .. 5] $ \index -> completeItemWithFeedback index []
+    annotation <- submissionAnnotation "dg-05"
+    assertEq "flags empty" (Just (A.Array mempty)) (jsonField "feedback" annotation >>= jsonField "flags")
+    assertEq "note absent" (Just A.Null) (jsonField "feedback" annotation >>= jsonField "note")
+
+flagCodes :: ItemFeedback -> [Text]
+flagCodes row = map F.feedbackFlagCode $ concat
+  [ [F.UnnaturalExample | itemFeedbackUnnaturalExample row]
+  , [F.InsufficientContext | itemFeedbackInsufficientContext row]
+  , [F.WordingOrTranslation | itemFeedbackWordingOrTranslation row]
+  , [F.OtherFeedback | itemFeedbackOther row]
+  ]
+
+-- | none_observed on one item, then the given feedback, then on to the next.
+completeItemWithFeedback :: Int -> [(Text, Text)] -> YesodExample App ()
+completeItemWithFeedback index feedback = do
+  get (ItemR index)
+  submitStep (DecisionR index) [("decision", "none_observed")]
+  followTo (T.pack ("/item/" <> show index))
+  submitStep (FeedbackR index) feedback
+  followTo (if index + 1 < length items then T.pack ("/item/" <> show (index + 1)) else "/done")
