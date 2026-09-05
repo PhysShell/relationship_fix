@@ -16,6 +16,18 @@ on:
         required: true
         type: string
 
+# Never kill a production deploy midway to start a fresher one — a live
+# rollback racing an in-flight activation is exactly how one deploy's
+# failure ends up reverting a different, successful one. GitHub's queue
+# only protects GitHub's side; activate.sh's own flock (see the VPS script)
+# protects against a concurrent MANUAL invocation of the same script.
+concurrency:
+  group: annotation-web-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 env:
   DEPLOY_HOST: 192.248.184.141
   DEPLOY_USER: deploy
@@ -29,12 +41,12 @@ jobs:
       nixpkgs_rev: ${{ steps.record.outputs.nixpkgs_rev }}
       store_path: ${{ steps.record.outputs.store_path }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
 
-      - uses: cachix/install-nix-action@v27
+      - uses: cachix/install-nix-action@ba0dd844c9180cbf77aa72a116d6fbc515d0e87b # v27
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -69,7 +81,7 @@ jobs:
           nix-store -qR "${{ steps.build.outputs.store_path }}" \
             | xargs nix-store --export > closure.nar
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: closure
           path: closure.nar
@@ -80,12 +92,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: cachix/install-nix-action@v27
+      - uses: cachix/install-nix-action@ba0dd844c9180cbf77aa72a116d6fbc515d0e87b # v27
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: closure
 
