@@ -21,3 +21,7 @@ src/annotation-web/client-session-key.aes
 experiments/wasm-core/*.wasm
 experiments/wasm-component/build/
 experiments/wasm-component/*.wasm
+
+# nix build output symlinks
+/result
+/result-*
