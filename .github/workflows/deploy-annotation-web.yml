@@ -1,0 +1,166 @@
+name: deploy annotation-web
+
+# Manual, explicit-ref only — this workflow never deploys "whatever is on a
+# branch HEAD" implicitly. `ref` must be given every time, and the
+# `production` environment (required reviewer, see repo settings) gates the
+# `deploy` job before it ever touches SSH credentials or the VPS.
+#
+# What this workflow does NOT do, on purpose: it never provisions or edits
+# Caddy. The reverse-proxy route and TLS certificate already exist; this
+# pipeline only ever replaces the running application release behind them.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref or commit SHA to build and deploy"
+        required: true
+        type: string
+
+env:
+  DEPLOY_HOST: 192.248.184.141
+  DEPLOY_USER: deploy
+  HEALTH_URL_PUBLIC: https://relationship-fix.192-248-184-141.sslip.io/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      git_sha: ${{ steps.record.outputs.git_sha }}
+      nixpkgs_rev: ${{ steps.record.outputs.nixpkgs_rev }}
+      store_path: ${{ steps.record.outputs.store_path }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Build annotation-web-deploy
+        id: build
+        run: |
+          STORE_PATH=$(nix build .#annotation-web-deploy --print-out-paths --no-link)
+          echo "store_path=$STORE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Record provenance facts
+        id: record
+        run: |
+          GIT_SHA=$(git rev-parse HEAD)
+          NIXPKGS_REV=$(nix flake metadata --json | jq -r '.locks.nodes.nixpkgs.locked.rev')
+          echo "git_sha=$GIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "nixpkgs_rev=$NIXPKGS_REV" >> "$GITHUB_OUTPUT"
+          echo "store_path=${{ steps.build.outputs.store_path }}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Build record"
+            echo "- git_sha: \`$GIT_SHA\`"
+            echo "- nixpkgs_rev: \`$NIXPKGS_REV\`"
+            echo "- store_path: \`${{ steps.build.outputs.store_path }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Exported as a NAR so the deploy job — a separate, environment-gated
+      # job that may run on a different runner — doesn't need to rebuild.
+      # This job never sees DEPLOY_SSH_PRIVATE_KEY or NIX_SIGNING_SECRET_KEY;
+      # both stay scoped to the approval-gated job below.
+      - name: Export closure
+        run: |
+          nix-store -qR "${{ steps.build.outputs.store_path }}" \
+            | xargs nix-store --export > closure.nar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: closure
+          path: closure.nar
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: closure
+
+      # `--import` (unlike `nix copy --to daemon`) accepts an unsigned NAR
+      # from this job's own local, unrestricted-user Nix install — the
+      # signature check only applies to the *next* step, which is what
+      # actually pushes into the untrusted `deploy` user's target daemon.
+      - name: Import closure into this runner's local store
+        run: nix-store --import < closure.nar
+
+      - name: Sign the closure for the target daemon
+        run: |
+          umask 077
+          printf '%s' "${{ secrets.NIX_SIGNING_SECRET_KEY }}" > /tmp/signing.key
+          nix store sign --key-file /tmp/signing.key "${{ needs.build.outputs.store_path }}"
+          shred -u /tmp/signing.key
+
+      - name: Configure SSH
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s' "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      # deploy@ is not a Nix trusted-user — this succeeds only because the
+      # path was signed above with a key already in the VPS's
+      # trusted-public-keys. See docs/runbooks/ (or the deploy-setup notes)
+      # for why that's the deliberate choice over widening trusted-users.
+      - name: nix copy to the VPS
+        run: |
+          nix copy --to ssh-ng://${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            "${{ needs.build.outputs.store_path }}"
+
+      # activate.sh lives on the VPS (owned by `deploy`, not shipped by this
+      # workflow): switch profile generation, restart relationship-fix.service,
+      # check localhost health, and — on failure — roll back and restart
+      # automatically by itself. Never touches Caddy.
+      - name: Activate new release
+        id: activate
+        run: |
+          set +e
+          OUTPUT=$(ssh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            /opt/relationship-fix/bin/activate.sh "${{ needs.build.outputs.store_path }}" 2>&1)
+          STATUS=$?
+          echo "$OUTPUT"
+          {
+            echo "activate_status=$STATUS"
+            echo "$OUTPUT" | grep -E '^(activated_store_path|previous_store_path|generation|local_health|rollback_performed|rolled_back_to)='
+          } >> "$GITHUB_OUTPUT"
+          exit $STATUS
+
+      - name: Public HTTPS health check
+        id: public_health
+        if: always()
+        run: |
+          if curl -sf --max-time 8 "${{ env.HEALTH_URL_PUBLIC }}" > /dev/null; then
+            echo "public_health=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "public_health=fail" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Deployment record
+        if: always()
+        run: |
+          {
+            echo "### Deployment record"
+            echo "- git_sha: \`${{ needs.build.outputs.git_sha }}\`"
+            echo "- nixpkgs_rev: \`${{ needs.build.outputs.nixpkgs_rev }}\`"
+            echo "- built_store_path: \`${{ needs.build.outputs.store_path }}\`"
+            echo "- previous_store_path: \`${{ steps.activate.outputs.previous_store_path }}\`"
+            echo "- activated_store_path: \`${{ steps.activate.outputs.activated_store_path }}\`"
+            echo "- deployment_timestamp: \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`"
+            echo "- local_health: \`${{ steps.activate.outputs.local_health }}\`"
+            echo "- public_health: \`${{ steps.public_health.outputs.public_health }}\`"
+            echo "- rollback_performed: \`${{ steps.activate.outputs.rollback_performed }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
