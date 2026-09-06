@@ -182,25 +182,121 @@ host — no systemd, no sudo, no network — and covers:
 It also mutation-tests itself in the sense that matters: removing the
 release-identity check or the write-detection branch turns rows red.
 
-## What this repository has *not* verified
+## Production qualification (2026-09-05) — FROZEN
 
-Stated plainly, because the alternative is someone assuming otherwise.
+Everything in "what this repository has not verified" below was true when this
+line was written. It no longer is. `73b6cb7` was qualified on the production
+VPS the same day it landed:
 
-- **The first production run of this path is unproven.** Everything above was
+```
+CI Run #23 / 9383226              PASS
+CI Run #24 / 73b6cb7              PASS
+real-Nix acceptance matrix        35/35 PASS
+VPS preflight                     PASS
+production rollback path          exercised successfully (see incident below)
+production activation             PASS
+real post-migration app write     PASS  (POST /language: survey_session 1->2,
+                                          session_instrument 0->1, audit_event
+                                          17->18 — the new table itself, not a
+                                          synthetic probe)
+restart persistence                PASS  (identical data fingerprint before/after)
+legacy activation entrypoints      tombstoned
+```
+
+The first activation attempt **failed for real** — a genuine
+`SQLite ErrorReadOnly` during migration, exit 12 — and the automatic recovery
+ran on this production host, not in a test harness: backup restored, previous
+release started, health confirmed. That is a stronger claim than the matrix
+alone could make: the rollback path has now executed successfully against the
+real database, once, under a real failure it did not expect.
+
+Root cause of that failure and the two host gaps it and preflight surfaced,
+neither of which the local matrix could ever catch because they are facts
+about *this host*, not about the script:
+
+- `/var/lib/relationship-fix` was `0700`, owned by `relationship-fix`. `deploy`
+  had no access at all. Fixed by adding `deploy` to the `relationship-fix`
+  group and setting the directory `0770`, the database file `0660`.
+- Opening that directory to the group meant re-examining everything else in
+  it: `client-session-key.aes` turned out to be `0644` at the file level,
+  protected only by the directory being `0700`. Tightened to `0600` *before*
+  loosening the directory, not after.
+- `RF_LOCK_FILE`'s default, `/var/lock/relationship-fix-activate.lock`,
+  resolves to `/run/lock` — root-owned, and tmpfs. `deploy` could not open it
+  at all. Fixed with a pre-created, correctly-owned file *and* a
+  `systemd-tmpfiles.d` rule, so the fix survives a reboot instead of being a
+  manual `chown` someone has to remember to redo.
+
+### Known incident: a procedure violation, not a design defect
+
+While diagnosing the failure above, `annotation-web-migrate migrate` was run
+directly against the live database while the previous release was still
+serving — outside `activate.sh`, in violation of the stop-the-world contract
+this whole document exists to enforce. Recorded plainly rather than quietly
+fixed and forgotten:
+
+```
+annotation-web-migrate migrate invoked directly
+  while the old service was running
+  bypassing stop-the-world
+integrity afterward:        ok
+old-table fingerprint:      unchanged
+new tables:                 empty (nothing had raced the write)
+observed data damage:       none
+```
+
+Classification: **procedure violation / near miss, no observed data loss or
+corruption** — not a defect in `activate.sh`, which was not in the loop for
+this operation at all. The useful conclusion is operational, not
+cryptographic: `annotation-web-migrate` is a mechanism, not a production
+entrypoint. Production migrations happen only through release-bound
+`activate.sh`. No token or lock can stop a person with root from running the
+binary directly; the boundary that matters is "don't," documented here, not a
+technical one that root can trivially route around anyway.
+
+### Known limitations (not backlog)
+
+Stated as accepted boundaries of this MVP, not as work still to schedule:
+
+- Backups stay on the same host and disk as the database they back up. A
+  verified copy here protects against a bad migration; it does not protect
+  against losing the disk.
+- Backups are never pruned.
+- A privileged human operator can always bypass the choreography; that is an
+  administrative fact, not a gap in the tooling.
+- One production qualification run is one data point, not a statistical
+  sample over many deploys.
+
+None of this weakens the actual guarantee: a schema-changing release either
+activates behind a verified migration, or restores the previous database and
+release before any post-activation write exists to lose; when it cannot prove
+which of those is safe, it refuses rather than guesses (exit 15). Off-host
+disaster recovery, backup retention, zero-downtime migration and HA/
+distributed deployment are explicitly out of scope until real usage demands
+otherwise.
+
+## What this repository had *not* verified, before the above
+
+Stated plainly, because the alternative is someone assuming otherwise. Kept
+here rather than deleted — it is what "verified" is being compared against.
+
+- **The first production run of this path was unproven.** Everything above was
   exercised against a fake host and against a real Nix release locally. None of
-  it has run on the VPS.
+  it had run on the VPS. (Resolved — see "Production qualification" above.)
 - **The previous `activate.sh` on the VPS was never in this repository.** It
-  lives at `/opt/relationship-fix/bin/activate.sh`, owned by `deploy`, and its
-  body is not recorded anywhere here — only its command-line and the `key=value`
-  lines it printed. This change replaces it with a script that ships in the
-  closure. The old file is now unused; it is not removed by anything.
-- **Sudo coverage is unknown.** The new script runs `sudo systemctl stop/start`
-  and `sudo nix-env --profile … --set`. The old one certainly needed the last
-  two; whether `deploy` may `stop` the unit has not been confirmed from here.
-- **Filesystem access is unknown.** The script copies the database into
-  `RF_BACKUP_DIR` and, on rollback, copies it back over the live file. That
-  requires `deploy` to be able to read and write both `/var/lib/relationship-fix/`
-  and the database file, which is normally owned by the service account.
+  lived at `/opt/relationship-fix/bin/activate.sh`, owned by `deploy`, and its
+  body was not recorded anywhere here — only its command-line and the
+  `key=value` lines it printed. It has since been replaced by a tombstone (see
+  "Retire the old entrypoint" below); the file that lived there is not
+  recovered by anything and was never meant to be.
+- **Sudo coverage was unknown.** The new script runs `sudo systemctl stop/start`
+  and `sudo nix-env --profile … --set`. Both are now granted to `deploy` via a
+  narrow, argument-fixed `sudoers.d` entry (the `nix-env` rule's only variable
+  part is the store path, which `nix-env` itself validates).
+- **Filesystem access was unknown.** Resolved as described in "Production
+  qualification" above — `deploy` was added to the `relationship-fix` group
+  rather than granted broader access, and `client-session-key.aes` was
+  independently tightened in the same pass.
 
 ### Operational qualification, before the first real deploy
 
@@ -272,6 +368,7 @@ All of these are defaulted for the production host and overridable:
 | `RF_DB_PATH` | read from the unit's `Environment`, else `/var/lib/relationship-fix/annotation.db` |
 | `RF_BACKUP_DIR` | `/var/lib/relationship-fix/backups` |
 | `RF_HEALTH_URL` | `http://127.0.0.1:8080/` |
+| `RF_LOCK_FILE` | `/var/lock/relationship-fix-activate.lock`, i.e. `/run/lock/…` — root-owned tmpfs by default; `deploy` needs a pre-created, correctly-owned file there (see "Production qualification" above) plus a `systemd-tmpfiles.d` rule so it survives a reboot |
 | `RF_ACTIVATE_BACKEND` | `backends/systemd.sh` beside the script |
 
 `RF_DB_PATH` is asked of the unit rather than duplicated, because a backup of a
