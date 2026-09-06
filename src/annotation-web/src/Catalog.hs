@@ -13,11 +13,11 @@ items =
       , itemSourceLanguage = RU
       , itemSource =
           [ Message "A" "Я проснулась от холода." False
-          , Message "B" "Ты вчера оставил окно открытым, и утром в комнате было холодно." True
+          , Message "B" "Ты вчера оставила окно открытым, и утром в комнате было холодно." True
           ]
       , itemPresentationRU = Presentation
           "Я проснулась от холода."
-          "Ты вчера оставил окно открытым, и утром в комнате было холодно."
+          "Ты вчера оставила окно открытым, и утром в комнате было холодно."
           "source"
       , itemPresentationEN = Presentation
           "I woke up because I was cold."

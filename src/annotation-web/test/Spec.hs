@@ -80,7 +80,7 @@ domainSpec = do
   describe "evidence validation" $ do
     let item = itemById "dg-04"
     it "accepts an exact continuous span" $
-      validEvidence RU item "оставил окно открытым" `shouldBe` True
+      validEvidence RU item "оставила окно открытым" `shouldBe` True
     it "rejects a paraphrase" $
       validEvidence RU item "забыл закрыть окно" `shouldBe` False
     it "rejects empty evidence" $
@@ -88,7 +88,7 @@ domainSpec = do
     it "tells a blank answer apart from a wrong one" $ do
       checkEvidence RU item "   " `shouldBe` Left EvidenceBlank
       checkEvidence RU item "забыл закрыть окно" `shouldBe` Left EvidenceNotASpan
-      checkEvidence RU item "  оставил окно открытым  " `shouldBe` Right "оставил окно открытым"
+      checkEvidence RU item "  оставила окно открытым  " `shouldBe` Right "оставила окно открытым"
 
   describe "wire codes" $ do
     it "round-trips all labels" $
@@ -246,11 +246,11 @@ formSpec = ydescribe "rejected submissions" $ do
     reachEvidenceStep ["B.BLAME_CRITICISM", "B.PRESSURE_FOR_CHANGE"]
     rowsBefore <- rowCounts
     submitStep (EvidenceR 0)
-      [ ("evidence_B.BLAME_CRITICISM", "оставил окно открытым")
+      [ ("evidence_B.BLAME_CRITICISM", "оставила окно открытым")
       , ("evidence_B.PRESSURE_FOR_CHANGE", "этого нет в сообщении")
       ]
     statusIs 200
-    bodyContains "оставил окно открытым"
+    bodyContains "оставила окно открытым"
     bodyContains "этого нет в сообщении"
     htmlCount ".field-error" 1
     rowsAfter <- rowCounts
@@ -323,7 +323,7 @@ formSpec = ydescribe "rejected submissions" $ do
       setUrl (OriginalR 0)
       addToken_ "#reveal-form"
     followTo "/item/0"
-    bodyContains "Ты вчера оставил окно открытым"
+    bodyContains "Ты вчера оставила окно открытым"
     submitStep (DecisionR 0) [("decision", "assigned")]
     followTo "/item/0"
     submitStep (LabelsR 0) [("labels", "B.BLAME_CRITICISM")]
@@ -331,7 +331,7 @@ formSpec = ydescribe "rejected submissions" $ do
     submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "not in the target message")]
     statusIs 200
     bodyContains "not in the target message"
-    bodyContains "Ты вчера оставил окно открытым"
+    bodyContains "Ты вчера оставила окно открытым"
     bodyContains "You left the window open yesterday"
 
   yit "persists a valid decision exactly once and moves to the next item" $ do
@@ -414,7 +414,7 @@ decisionSpec = ydescribe "reconsidering a decision" $ do
   yit "B. assigned to abstained drops categories and quotes" $ do
     startSession "ru"
     reachEvidenceStep ["B.BLAME_CRITICISM"]
-    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставил окно открытым")]
+    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставила окно открытым")]
     followTo "/item/0"
     get (EditDecisionR 0)
     submitStep (DecisionR 0) [("decision", "abstained")]
@@ -443,7 +443,7 @@ decisionSpec = ydescribe "reconsidering a decision" $ do
   yit "D. confirming the same decision keeps the work already done" $ do
     startSession "ru"
     reachEvidenceStep ["B.BLAME_CRITICISM"]
-    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставил окно открытым")]
+    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставила окно открытым")]
     followTo "/item/0"
     get (EditDecisionR 0)
     submitStep (DecisionR 0) [("decision", "assigned")]
@@ -451,7 +451,7 @@ decisionSpec = ydescribe "reconsidering a decision" $ do
     labels <- labelsFor "dg-04"
     assertEq "categories survive" ["B.BLAME_CRITICISM"] labels
     quotes <- evidenceFor "dg-04"
-    assertEq "quotes survive" ["оставил окно открытым"] quotes
+    assertEq "quotes survive" ["оставила окно открытым"] quotes
 
   yit "E. an invalid edit submission re-renders and writes nothing" $ do
     startSession "ru"
@@ -479,7 +479,7 @@ feedbackSpec = ydescribe "optional item feedback" $ do
   yit "assigned reaches feedback after the quotes" $ do
     startSession "ru"
     reachEvidenceStep ["B.BLAME_CRITICISM"]
-    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставил окно открытым")]
+    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставила окно открытым")]
     followTo "/item/0"
     bodyContains "Замечания к примеру"
     skipFeedback 0
@@ -532,7 +532,7 @@ feedbackSpec = ydescribe "optional item feedback" $ do
   yit "leaves the decision and the categories alone" $ do
     startSession "ru"
     reachEvidenceStep ["B.BLAME_CRITICISM"]
-    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставил окно открытым")]
+    submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставила окно открытым")]
     followTo "/item/0"
     submitStep (FeedbackR 0) [("feedback_flags", "unnatural_example")]
     followTo "/item/1"
@@ -541,7 +541,7 @@ feedbackSpec = ydescribe "optional item feedback" $ do
     labels <- labelsFor "dg-04"
     assertEq "categories unchanged" ["B.BLAME_CRITICISM"] labels
     quotes <- evidenceFor "dg-04"
-    assertEq "quotes unchanged" ["оставил окно открытым"] quotes
+    assertEq "quotes unchanged" ["оставила окно открытым"] quotes
 
   yit "reports feedback as its own field of the submission, never as a label" $ do
     startSession "ru"
