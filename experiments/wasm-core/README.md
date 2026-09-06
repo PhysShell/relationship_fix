@@ -37,7 +37,7 @@ them explicitly.
 
     wasmtime run relationship-fix-core.wasm contract
     wasmtime run relationship-fix-core.wasm selftest
-    wasmtime run relationship-fix-core.wasm validate ru dg-04 "оставил окно открытым"
+    wasmtime run relationship-fix-core.wasm validate ru dg-04 "оставила окно открытым"
     wasmtime run relationship-fix-core.wasm read /etc/hostname
     wasmtime run --dir /etc relationship-fix-core.wasm read /etc/hostname
 

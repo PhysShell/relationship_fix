@@ -72,11 +72,11 @@ here.
    invocation, jco's generated bindings, and the by-hand decoder in
    `host-js/trace.mjs`:
 
-        (ru, "dg-04", "оставил окно открытым") -> ok({displayed-target: "Ты вчера…", quote: "оставил окно открытым"})
+        (ru, "dg-04", "оставила окно открытым") -> ok({displayed-target: "Ты вчера…", quote: "оставила окно открытым"})
         (ru, "dg-04", "забыл закрыть окно")    -> err(not-exact-span)
         (ru, "dg-04", "   ")                   -> err(blank-evidence)
         (ru, "nope",  "x")                     -> err(unknown-item("nope"))
-        (en, "dg-04", "оставил окно открытым") -> err(not-exact-span)
+        (en, "dg-04", "оставила окно открытым") -> err(not-exact-span)
         (en, "dg-04", "left the window open")  -> ok({displayed-target: "You left…", quote: "left the window open"})
 
    The fifth line is the point of the whole instrument: the same quote is valid
@@ -143,7 +143,7 @@ points at.
 guest memory using the guest's own allocator and has no way to release them, so
 they are the guest's to free. Freeing them exposed this:
 
-    validate-evidence(ru, "dg-04", "оставил окно открытым")
+    validate-evidence(ru, "dg-04", "оставила окно открытым")
       -> err(unknown-item("\u{0}\u{0}\u{0}\u{0}\u{0}"))
 
 Right length, all zero bytes. `decodeUtf8 <$> unsafePackCStringLen` shares the

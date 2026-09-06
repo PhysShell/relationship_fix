@@ -37,7 +37,7 @@ items:
       - author: a
         text: "Я проснулась от холода."
       - author: b
-        text: "Ты вчера оставил окно открытым, и утром в комнате было холодно."
+        text: "Ты вчера оставила окно открытым, и утром в комнате было холодно."
         target: true
     design_note: >-
       Tests whether the current blame definition cleanly distinguishes a concrete episode

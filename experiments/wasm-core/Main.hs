@@ -114,7 +114,7 @@ selftest = do
       , ("every item has an RU and an EN presentation", all bothPresentations items)
       , ("an RU presentation of an RU source offers no original", maybe False (not . shouldOfferOriginal RU) dg04)
       , ("an EN presentation of an RU source offers the original", maybe False (shouldOfferOriginal EN) dg04)
-      , ("an exact span is accepted", maybe False (\i -> validEvidence RU i "оставил окно открытым") dg04)
+      , ("an exact span is accepted", maybe False (\i -> validEvidence RU i "оставила окно открытым") dg04)
       , ("a paraphrase is rejected", maybe False (\i -> not (validEvidence RU i "забыл закрыть окно")) dg04)
       , ("blank evidence is rejected", maybe False (\i -> not (validEvidence RU i "   ")) dg04)
       , ("label codes round-trip", map (parseBehaviorLabel . labelCode) allBehaviorLabels == map Just allBehaviorLabels)

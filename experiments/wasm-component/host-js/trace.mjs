@@ -114,11 +114,11 @@ function validate(languageIndex, itemId, quote) {
 // unknown item, and the cross-language case. If any of them reaches for the
 // host, this is where it shows up.
 const vectors = [
-  [0, 'dg-04', 'оставил окно открытым'],
+  [0, 'dg-04', 'оставила окно открытым'],
   [0, 'dg-04', 'забыл закрыть окно'],
   [0, 'dg-04', '   '],
   [0, 'nope', 'x'],
-  [1, 'dg-04', 'оставил окно открытым'],
+  [1, 'dg-04', 'оставила окно открытым'],
   [1, 'dg-04', 'left the window open'],
 ];
 for (const [language, itemId, quote] of vectors) {
