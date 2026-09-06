@@ -20,11 +20,26 @@
       # stops being GHC 9.10.
       haskellFor = system: (pkgsFor system).haskellPackages;
 
+      # The activation choreography ships inside the same store path as the two
+      # binaries it drives, which is what makes "release identity" a fact rather
+      # than a convention. One `nix copy` moves the server, the migrator and the
+      # script that sequences them; there is no way to end up running migration
+      # 17 against application 18, because there is only ever one path.
       annotationWebFor = system:
-        (haskellFor system).callCabal2nix
+        ((haskellFor system).callCabal2nix
           "relationship-fix-annotation-web"
           ./src/annotation-web
-          { };
+          { }).overrideAttrs (old: {
+            postInstall = (old.postInstall or "") + ''
+              install -Dm755 ${./deploy/activate.sh} \
+                $out/libexec/annotation-web/activate.sh
+              install -Dm644 ${./deploy/backends/systemd.sh} \
+                $out/libexec/annotation-web/backends/systemd.sh
+              mkdir -p $out/bin
+              ln -s ../libexec/annotation-web/activate.sh \
+                $out/bin/annotation-web-activate
+            '';
+          });
 
       # justStaticExecutables here means the Haskell package dependencies are
       # linked statically — not "a single freestanding ELF with no libc": the
@@ -47,6 +62,13 @@
         annotation-web = {
           type = "app";
           program = "${annotationWebFor system}/bin/annotation-web";
+        };
+        # The two halves of the migration contract are both runnable, because
+        # "the server will not start until you have run the other one" is much
+        # less annoying when the other one is one command away.
+        annotation-web-migrate = {
+          type = "app";
+          program = "${annotationWebFor system}/bin/annotation-web-migrate";
         };
         default = annotation-web;
       });

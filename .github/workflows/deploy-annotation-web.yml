@@ -19,8 +19,8 @@ on:
 # Never kill a production deploy midway to start a fresher one — a live
 # rollback racing an in-flight activation is exactly how one deploy's
 # failure ends up reverting a different, successful one. GitHub's queue
-# only protects GitHub's side; activate.sh's own flock (see the VPS script)
-# protects against a concurrent MANUAL invocation of the same script.
+# only protects GitHub's side; the activation script's own flock protects
+# against a concurrent MANUAL invocation of it on the host.
 concurrency:
   group: annotation-web-production
   cancel-in-progress: false
@@ -136,23 +136,57 @@ jobs:
           nix copy --to ssh-ng://${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
             "${{ needs.build.outputs.store_path }}"
 
-      # activate.sh lives on the VPS (owned by `deploy`, not shipped by this
-      # workflow): switch profile generation, restart relationship-fix.service,
-      # check localhost health, and — on failure — roll back and restart
-      # automatically by itself. Never touches Caddy.
+      # The activation script comes out of the closure we just copied, not from
+      # a copy living on the VPS. That is the whole point: one store path
+      # carries the server, the migrator and the script that sequences them, so
+      # a release cannot be activated by some other release's choreography or
+      # migrated by some other release's migrator.
+      #
+      # It quiesces the service, verifies and backs up the database, migrates,
+      # verifies again, activates, health-checks, and on failure puts both the
+      # database and the previous release back. It stops short of exactly one
+      # thing: if rows were written to the new schema before the health check
+      # failed, restoring the backup would destroy them, so it refuses and asks
+      # for a person (exit 14). Never touches Caddy.
       - name: Activate new release
         id: activate
         run: |
           set +e
           OUTPUT=$(ssh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
-            /opt/relationship-fix/bin/activate.sh "${{ needs.build.outputs.store_path }}" 2>&1)
+            "${{ needs.build.outputs.store_path }}/bin/annotation-web-activate" \
+            "${{ needs.build.outputs.store_path }}" \
+            "${{ needs.build.outputs.git_sha }}" 2>&1)
           STATUS=$?
           echo "$OUTPUT"
           {
             echo "activate_status=$STATUS"
-            echo "$OUTPUT" | grep -E '^(activated_store_path|previous_store_path|generation|local_health|rollback_performed|rolled_back_to)='
+            echo "$OUTPUT" | grep -E '^(activated_store_path|previous_store_path|generation|local_health|rollback_performed|rolled_back_to|outcome|release_identity|db_path|backup_path|backup_verified|pre_migration_integrity|migration|post_migration_schema|post_activation_writes|db_restored|operator_required)='
           } >> "$GITHUB_OUTPUT"
           exit $STATUS
+
+      # Exit 14 is the one outcome that leaves the service down on purpose and
+      # cannot be resolved by re-running anything. It deserves to be impossible
+      # to miss in the run summary rather than one line in a wall of log.
+      - name: Flag an outcome that needs a person
+        if: always() && steps.activate.outputs.activate_status == '14'
+        run: |
+          {
+            echo "## Deployment stopped and needs an operator"
+            echo
+            echo "The new release was activated, became reachable, failed its health check,"
+            echo "and rows were written to the database in between. The pre-migration backup"
+            echo "no longer describes the database, so restoring it would discard a"
+            echo "respondent's answers. Nothing was restored automatically and the service is"
+            echo "stopped."
+            echo
+            echo "- database: \`${{ steps.activate.outputs.db_path }}\`"
+            echo "- pre-migration backup: \`${{ steps.activate.outputs.backup_path }}\`"
+            echo "- unhealthy release: \`${{ needs.build.outputs.store_path }}\`"
+            echo "- previous release: \`${{ steps.activate.outputs.previous_store_path }}\`"
+            echo
+            echo "See docs/runbooks/annotation-web-deploy.md."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Public HTTPS health check
         id: public_health
@@ -178,5 +212,21 @@ jobs:
             echo "- deployment_timestamp: \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`"
             echo "- local_health: \`${{ steps.activate.outputs.local_health }}\`"
             echo "- public_health: \`${{ steps.public_health.outputs.public_health }}\`"
+            echo "- outcome: \`${{ steps.activate.outputs.outcome }}\`"
+            echo "- activate_status: \`${{ steps.activate.outputs.activate_status }}\`"
+            echo ""
+            echo "Schema:"
+            echo "- release_identity: \`${{ steps.activate.outputs.release_identity }}\`"
+            echo "- pre_migration_integrity: \`${{ steps.activate.outputs.pre_migration_integrity }}\`"
+            echo "- backup_path: \`${{ steps.activate.outputs.backup_path }}\`"
+            echo "- backup_verified: \`${{ steps.activate.outputs.backup_verified }}\`"
+            echo "- migration: \`${{ steps.activate.outputs.migration }}\`"
+            echo "- post_migration_schema: \`${{ steps.activate.outputs.post_migration_schema }}\`"
+            echo ""
+            echo "Rollback:"
             echo "- rollback_performed: \`${{ steps.activate.outputs.rollback_performed }}\`"
+            echo "- rolled_back_to: \`${{ steps.activate.outputs.rolled_back_to }}\`"
+            echo "- db_restored: \`${{ steps.activate.outputs.db_restored }}\`"
+            echo "- post_activation_writes: \`${{ steps.activate.outputs.post_activation_writes }}\`"
+            echo "- operator_required: \`${{ steps.activate.outputs.operator_required }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

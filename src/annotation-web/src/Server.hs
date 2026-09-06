@@ -17,17 +17,20 @@
 module Server where
 
 import Catalog (items)
-import Control.Monad (forM, forM_, unless, void, when)
+import Control.Exception (throwIO)
+import Control.Monad (forM, forM_, unless, when)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Int (Int64)
-import Data.Maybe (catMaybes, isJust, isNothing)
+import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Read as TR
 import Data.Time (UTCTime, getCurrentTime)
-import Database.Persist.Sql (ConnectionPool, SqlBackend, fromSqlKey, runMigrationQuiet, runSqlPool, toSqlKey)
-import Database.Persist.Sqlite (createSqlitePool)
+import Database.Persist.Sql (ConnectionPool, SqlBackend, fromSqlKey, runSqlPool, showMigration, toSqlKey)
+import Database.Persist.Sqlite (createSqlitePool, withSqlitePool)
 import Domain
+import qualified Feedback as F
+import qualified Schema
 import Yesod
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
@@ -35,6 +38,20 @@ SurveySession
     presentationLanguage Text
     startedAt UTCTime
     completedAt UTCTime Maybe
+    deriving Show
+-- | The instrument a session is being taken under.
+--
+-- A separate table rather than a column on SurveySession, and not for taste:
+-- persistent-sqlite migrates an added column by rebuilding the table --
+-- CREATE backup, INSERT, DROP survey_session, CREATE, INSERT back -- and
+-- dropping a table that annotation rows reference fails the foreign key check
+-- outright. On the live database that is a server that will not start.
+-- Creating a new table has no such problem, and a session with no row here is
+-- one that began before this table existed: historical hs-v1.
+SessionInstrument
+    surveySessionId SurveySessionId
+    version Text
+    UniqueSessionInstrument surveySessionId
     deriving Show
 Annotation
     surveySessionId SurveySessionId
@@ -55,6 +72,15 @@ Evidence
     labelId Text
     quote Text
     UniqueEvidence annotationId labelId
+    deriving Show
+ItemFeedback
+    annotationId AnnotationId
+    unnaturalExample Bool
+    insufficientContext Bool
+    wordingOrTranslation Bool
+    other Bool
+    note Text Maybe
+    UniqueItemFeedback annotationId
     deriving Show
 AuditEvent
     surveySessionId SurveySessionId
@@ -77,10 +103,12 @@ mkYesod "App" [parseRoutes|
 /intro IntroR GET
 /item/#Int ItemR GET
 /item/#Int/decision DecisionR POST
+/item/#Int/decision/edit EditDecisionR GET
 /item/#Int/labels LabelsR POST
 /item/#Int/evidence EvidenceR POST
 /item/#Int/abstain AbstainR POST
 /item/#Int/original OriginalR POST
+/item/#Int/feedback FeedbackR POST
 /done DoneR GET
 /submission.json SubmissionR GET
 |]
@@ -130,8 +158,15 @@ instance Yesod App where
         form > div { margin-bottom: 14px; }
         form label { line-height: 1.45; }
         form input[type=text], form textarea, form select { width: 100%; border: 1px solid #c9cdd2; border-radius: 10px; padding: 12px; background: white; }
-        form ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 10px; }
-        form li label { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid #d7dade; border-radius: 12px; }
+        form textarea { min-height: 96px; resize: vertical; }
+        .field > label { display: block; font-weight: 650; margin-bottom: 8px; }
+        .choices { display: grid; gap: 10px; }
+        .choice { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px; border: 1px solid #d7dade; border-radius: 12px; cursor: pointer; }
+        .choice:hover { background: #f8f9fa; }
+        .choice > input { margin: 3px 0 0; }
+        .choice-text { overflow-wrap: anywhere; }
+        .step-back { margin: 0 0 4px; }
+        .step-back a { color: #3b5bdb; text-decoration: none; }
         form input[type=checkbox], form input[type=radio] { margin-top: 4px; }
         .message-banner { padding: 12px 14px; border: 1px solid #b42318; border-radius: 10px; color: #8a1c13; background: #fff5f4; }
         .field-error { margin: 6px 0 0; color: #8a1c13; }
@@ -168,9 +203,38 @@ instance YesodPersist App where
 instance RenderMessage App FormMessage where
   renderMessage _ _ = defaultFormMessage
 
+-- | Which instrument a session is being taken under.
+--
+-- The version is a property of the session, not of the deployment: a
+-- respondent who started before the item-feedback step existed took hs-v1, and
+-- must keep taking hs-v1 for the rest of that session however many times the
+-- server is redeployed underneath them. Reading it off the running binary
+-- instead would rewrite the provenance of an already-completed run, which is
+-- the one thing a research instrument must never do to its own record.
+data InstrumentVersion = InstrumentV1 | InstrumentV2
+  deriving stock (Eq, Show)
+
+instrumentVersionCode :: InstrumentVersion -> Text
+instrumentVersionCode InstrumentV1 = "annotation-web-dogfood-hs-v1"
+instrumentVersionCode InstrumentV2 = "annotation-web-dogfood-hs-v2"
+
+-- | The version new sessions are started under.
+currentInstrument :: InstrumentVersion
+currentInstrument = InstrumentV2
+
+-- | Anything not recognisably hs-v2 -- no row at all from before this table
+-- existed, the hs-v1 string itself, or a value from some future version this
+-- binary has never heard of -- is hs-v1, and is never offered the newer steps.
+instrumentFor :: SurveySessionId -> Handler InstrumentVersion
+instrumentFor sid = do
+  stored <- runDB $ getBy (UniqueSessionInstrument sid)
+  pure $ case sessionInstrumentVersion . entityVal <$> stored of
+    Just recorded | recorded == instrumentVersionCode InstrumentV2 -> InstrumentV2
+    _ -> InstrumentV1
+
 type AppForm a = Html -> MForm Handler (FormResult a, Widget)
 
-data Step = StepDecision | StepLabels | StepEvidence | StepAbstain
+data Step = StepDecision | StepLabels | StepEvidence | StepAbstain | StepFeedback
   deriving stock (Eq, Show)
 
 -- | Option values carry the stable wire code instead of yesod-form's positional
@@ -206,6 +270,53 @@ labelOptions lang = wireOptions labelCode display allBehaviorLabels
 
 reasonOptions :: Language -> OptionList AbstentionReason
 reasonOptions lang = wireOptions abstentionCode (abstentionName lang) allAbstentionReasons
+
+feedbackOptions :: Language -> OptionList F.FeedbackFlag
+feedbackOptions lang = wireOptions F.feedbackFlagCode (F.feedbackFlagName lang) F.allFeedbackFlags
+
+-- | One option as one row: the control, then all of its text beside it.
+--
+-- yesod-form's own renderers do not give this. @checkboxesField'@ emits the
+-- inputs and their labels as flat siblings inside a single span, with no
+-- element per option at all, so on a narrow screen ten inline elements reflow
+-- into each other and it stops being clear which box belongs to which
+-- category. That cannot be fixed from a stylesheet, because there is nothing
+-- to style. Putting the input inside the label also makes the whole row a tap
+-- target rather than just the box.
+choiceRow :: Text -> Text -> Text -> [(Text, Text)] -> Bool -> Bool -> Option a -> Widget
+choiceRow inputType groupId name attrs isRequired isChosen option =
+  let optionId = groupId <> "-" <> optionExternalValue option
+   in [whamlet|
+        <label .choice for=#{optionId}>
+          <input ##{optionId} type=#{inputType} name=#{name} value=#{optionExternalValue option} *{attrs} :isRequired:required :isChosen:checked>
+          <span .choice-text>#{optionDisplay option}
+      |]
+
+radioChoiceField :: Eq a => Handler (OptionList a) -> Field Handler a
+radioChoiceField options = (radioField' options) { fieldView = view }
+  where
+    view groupId name attrs val isRequired = do
+      choices <- olOptions <$> handlerToWidget options
+      [whamlet|
+        <span ##{groupId} .choices>
+          $forall option <- choices
+            ^{choiceRow "radio" groupId name attrs isRequired (chosen val option) option}
+      |]
+    chosen (Right value) option = optionInternalValue option == value
+    chosen (Left _) _ = False
+
+checkboxChoiceField :: Eq a => Handler (OptionList a) -> Field Handler [a]
+checkboxChoiceField options = (checkboxesField' options) { fieldView = view }
+  where
+    view groupId name attrs val _isRequired = do
+      choices <- olOptions <$> handlerToWidget options
+      [whamlet|
+        <span ##{groupId} .choices>
+          $forall option <- choices
+            ^{choiceRow "checkbox" groupId name attrs False (chosen val option) option}
+      |]
+    chosen (Right values) option = optionInternalValue option `elem` values
+    chosen (Left _) _ = False
 
 -- | One field, its label and the validation message that belongs to it.
 --
@@ -245,22 +356,24 @@ fieldSettings label name = FieldSettings
 
 languageForm :: AppForm Language
 languageForm = renderFields $ areq
-  (radioField' (pure languageOptions))
+  (radioChoiceField (pure languageOptions))
   (fieldSettings "Язык предъявления / Presentation language" "language")
   Nothing
 
-decisionForm :: Language -> AppForm Decision
-decisionForm lang = renderFields $ areq
-  (radioField' (pure (decisionOptions lang)))
+-- | The current decision is offered back as the default so that revisiting the
+-- step shows what was chosen rather than an empty form.
+decisionForm :: Language -> Maybe Decision -> AppForm Decision
+decisionForm lang current = renderFields $ areq
+  (radioChoiceField (pure (decisionOptions lang)))
   (fieldSettings (tr lang "Решение" "Decision") "decision")
-  Nothing
+  current
 
 -- | A single multi-valued field rather than five booleans: "at least one
 -- category" is then a failure of that field, so the message lands under the
 -- checkbox group instead of floating at the top of the page.
 labelsForm :: Language -> AppForm [BehaviorLabel]
 labelsForm lang = renderFields $ areqMsg
-  (checkboxesField' (pure (labelOptions lang)))
+  (checkboxChoiceField (pure (labelOptions lang)))
   (fieldSettings (tr lang "Категории" "Categories") "labels")
   (tr lang "Выберите хотя бы одну категорию." "Select at least one category.")
   Nothing
@@ -321,6 +434,30 @@ nonBlank raw
   where
     stripped = T.strip raw
 
+-- | Dogfood remarks about the item. Everything is optional: an empty
+-- submission is a valid answer and simply moves on.
+feedbackForm :: Language -> Maybe ItemFeedback -> AppForm ([F.FeedbackFlag], Maybe Text)
+feedbackForm lang stored = renderFields $
+  (,)
+    <$> (fromMaybe [] <$> aopt
+          (checkboxChoiceField (pure (feedbackOptions lang)))
+          (fieldSettings (tr lang "Что не так с примером? (необязательно)" "What is wrong with the example? (optional)") "feedback_flags")
+          (Just (Just (maybe [] feedbackFlagsOf stored))))
+    <*> (fmap unTextarea <$> aopt textareaField
+          (fieldSettings (tr lang "Комментарий (необязательно)" "Comment (optional)") "feedback_note")
+          (Just (Textarea <$> (stored >>= itemFeedbackNote))))
+
+feedbackFlagFields :: [(F.FeedbackFlag, ItemFeedback -> Bool)]
+feedbackFlagFields =
+  [ (F.UnnaturalExample, itemFeedbackUnnaturalExample)
+  , (F.InsufficientContext, itemFeedbackInsufficientContext)
+  , (F.WordingOrTranslation, itemFeedbackWordingOrTranslation)
+  , (F.OtherFeedback, itemFeedbackOther)
+  ]
+
+feedbackFlagsOf :: ItemFeedback -> [F.FeedbackFlag]
+feedbackFlagsOf row = [flag | (flag, present) <- feedbackFlagFields, present row]
+
 csrfForm :: AppForm ()
 csrfForm = renderFields $ pure ()
 
@@ -344,7 +481,10 @@ postLanguageR = do
   case result of
     FormSuccess lang -> do
       now <- liftIO getCurrentTime
-      sid <- runDB $ insert $ SurveySession (languageCode lang) now Nothing
+      sid <- runDB $ do
+        created <- insert $ SurveySession (languageCode lang) now Nothing
+        insert_ $ SessionInstrument created (instrumentVersionCode currentInstrument)
+        pure created
       setSession "annotation_session_id" (T.pack $ show $ fromSqlKey sid)
       logEvent sid Nothing "language_selected" (Just $ languageCode lang)
       redirect IntroR
@@ -390,6 +530,8 @@ data ItemContext = ItemContext
   , ctxAnnotation :: Annotation
   , ctxLabels :: [BehaviorLabel]
   , ctxEvidence :: [(BehaviorLabel, Text)]
+  , ctxFeedback :: Maybe ItemFeedback
+  , ctxInstrument :: InstrumentVersion
   }
 
 itemContext :: Int -> Handler ItemContext
@@ -400,6 +542,8 @@ itemContext index = do
   Entity aid annotation <- ensureAnnotation sid (itemId item)
   labels <- loadLabels aid
   evidence <- loadEvidence aid
+  feedback <- loadFeedback aid
+  instrument <- instrumentFor sid
   pure ItemContext
     { ctxSessionId = sid
     , ctxLanguage = lang
@@ -409,26 +553,47 @@ itemContext index = do
     , ctxAnnotation = annotation
     , ctxLabels = labels
     , ctxEvidence = evidence
+    , ctxFeedback = feedback
+    , ctxInstrument = instrument
     }
+
+-- | Which step the respondent is on. Once the annotation itself is complete
+-- the remaining step is the optional dogfood feedback, which is a step in the
+-- flow but never a condition on the annotation being correct.
+currentStep :: ItemContext -> Step
+currentStep ctx
+  | ctxInstrument ctx == InstrumentV2
+  , annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx) = StepFeedback
+  | otherwise = stepFor (ctxAnnotation ctx) (ctxLabels ctx)
 
 getItemR :: Int -> Handler Html
 getItemR index = do
   ctx <- itemContext index
-  if annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx)
+  if itemDone (ctxInstrument ctx) (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx) (ctxFeedback ctx)
     then advanceFrom index
     else do
       let lang = ctxLanguage ctx
-      case stepFor (ctxAnnotation ctx) (ctxLabels ctx) of
-        StepDecision -> generateFormPost (decisionForm lang) >>= uncurry (renderStep ctx StepDecision)
+      case currentStep ctx of
+        StepDecision -> generateFormPost (decisionForm lang (storedDecision ctx)) >>= uncurry (renderStep ctx StepDecision)
         StepLabels -> generateFormPost (labelsForm lang) >>= uncurry (renderStep ctx StepLabels)
         StepEvidence -> generateFormPost (evidenceForm lang (ctxItem ctx) (ctxLabels ctx)) >>= uncurry (renderStep ctx StepEvidence)
         StepAbstain -> generateFormPost (abstainForm lang) >>= uncurry (renderStep ctx StepAbstain)
+        StepFeedback -> generateFormPost (feedbackForm lang (ctxFeedback ctx)) >>= uncurry (renderStep ctx StepFeedback)
+
+-- | Lets a respondent reconsider the decision of the item they are on without
+-- using browser Back. Renders only; every write stays in 'postDecisionR'.
+getEditDecisionR :: Int -> Handler Html
+getEditDecisionR index = do
+  ctx <- itemContext index
+  generateFormPost (decisionForm (ctxLanguage ctx) (storedDecision ctx))
+    >>= uncurry (renderStep ctx StepDecision)
 
 stepRoute :: Step -> Int -> Route App
 stepRoute StepDecision = DecisionR
 stepRoute StepLabels = LabelsR
 stepRoute StepEvidence = EvidenceR
 stepRoute StepAbstain = AbstainR
+stepRoute StepFeedback = FeedbackR
 
 stepTitle :: Language -> Step -> Text
 stepTitle lang step = case step of
@@ -436,6 +601,7 @@ stepTitle lang step = case step of
   StepLabels -> tr lang "Категории" "Categories"
   StepEvidence -> tr lang "Цитаты-доказательства" "Evidence quotes"
   StepAbstain -> tr lang "Причина abstained" "Abstention reason"
+  StepFeedback -> tr lang "Замечания к примеру" "Remarks about the example"
 
 -- | Renders one step of one item. A rejected POST hands its own form widget
 -- back here, so the respondent keeps every value they submitted.
@@ -448,6 +614,9 @@ renderStep ctx step widget enctype = do
       annotation = ctxAnnotation ctx
       presentation = presentationFor lang item
       action = stepRoute step index
+      -- Hamlet's interpolation grammar has no infix operators, so the test
+      -- has to be a plain name by the time the template sees it.
+      canEditDecision = step `elem` [StepLabels, StepEvidence, StepAbstain]
   defaultLayout [whamlet|
     <section .card>
       <p .eyebrow>#{index + 1} / #{length items}
@@ -466,6 +635,9 @@ renderStep ctx step widget enctype = do
             <form #reveal-form method=post action=@{OriginalR index} enctype=#{originalEnctype}>
               ^{originalWidget}
               <button type=submit .secondary>#{tr lang "Показать оригинал" "Show original"}
+      $if canEditDecision
+        <p .step-back>
+          <a href=@{EditDecisionR index}>← #{tr lang "Изменить решение" "Change decision"}
       <h2>#{stepTitle lang step}
       <form #step-form method=post action=@{action} enctype=#{enctype} .stack>
         ^{widget}
@@ -479,20 +651,27 @@ renderStep ctx step widget enctype = do
 postDecisionR :: Int -> Handler Html
 postDecisionR index = do
   ctx <- itemContext index
-  ((result, widget), enctype) <- runFormPost (decisionForm (ctxLanguage ctx))
+  ((result, widget), enctype) <- runFormPost (decisionForm (ctxLanguage ctx) (storedDecision ctx))
   case result of
-    FormSuccess decision -> do
-      let aid = ctxAnnotationId ctx
-      runDB $ do
-        update aid
-          [ AnnotationDecision =. Just (decisionCode decision)
-          , AnnotationAbstentionReason =. Nothing
-          , AnnotationAbstentionNote =. Nothing
-          ]
-        deleteWhere [AnnotationLabelAnnotationId ==. aid]
-        deleteWhere [EvidenceAnnotationId ==. aid]
-      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "decision_submitted" (Just $ decisionCode decision)
-      if decision == NoneObserved then advanceFrom index else redirect (ItemR index)
+    -- Confirming the decision already on record is not the same act as
+    -- changing it. Re-selecting Assigned from the edit screen must not discard
+    -- categories and quotes the respondent has already entered.
+    FormSuccess decision
+      | storedDecision ctx == Just decision -> do
+          logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "decision_confirmed" (Just $ decisionCode decision)
+          redirect (ItemR index)
+      | otherwise -> do
+          let aid = ctxAnnotationId ctx
+          runDB $ do
+            update aid
+              [ AnnotationDecision =. Just (decisionCode decision)
+              , AnnotationAbstentionReason =. Nothing
+              , AnnotationAbstentionNote =. Nothing
+              ]
+            deleteWhere [AnnotationLabelAnnotationId ==. aid]
+            deleteWhere [EvidenceAnnotationId ==. aid]
+          logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "decision_submitted" (Just $ decisionCode decision)
+          redirect (ItemR index)
     _ -> renderStep ctx StepDecision widget enctype
 
 postLabelsR :: Int -> Handler Html
@@ -525,7 +704,7 @@ postEvidenceR index = do
         deleteWhere [EvidenceAnnotationId ==. aid]
         forM_ pairs $ \(label, quote) -> insert_ $ Evidence aid (labelCode label) quote
       logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "evidence_submitted" (Just $ T.intercalate "," $ map (labelCode . fst) pairs)
-      advanceFrom index
+      redirect (ItemR index)
     _ -> renderStep ctx StepEvidence widget enctype
 
 postAbstainR :: Int -> Handler Html
@@ -540,8 +719,36 @@ postAbstainR index = do
         , AnnotationAbstentionNote =. note
         ]
       logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "abstention_submitted" (Just $ abstentionCode reason)
-      advanceFrom index
+      redirect (ItemR index)
     _ -> renderStep ctx StepAbstain widget enctype
+
+postFeedbackR :: Int -> Handler Html
+postFeedbackR index = do
+  ctx <- itemContext index
+  -- This step does not exist in hs-v1. Refusing rather than ignoring keeps a
+  -- grandfathered session from being quietly turned into a hybrid of two
+  -- instruments by a stale tab or a hand-made request.
+  when (ctxInstrument ctx == InstrumentV1) notFound
+  -- The step exists only after the annotation itself is finished; reaching it
+  -- otherwise is a stale URL.
+  unless (annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx)) $
+    redirect (ItemR index)
+  ((result, widget), enctype) <- runFormPost (feedbackForm (ctxLanguage ctx) (ctxFeedback ctx))
+  case result of
+    FormSuccess (flags, rawNote) -> do
+      let aid = ctxAnnotationId ctx
+      runDB $ do
+        deleteBy (UniqueItemFeedback aid)
+        insert_ $ ItemFeedback aid
+          (F.UnnaturalExample `elem` flags)
+          (F.InsufficientContext `elem` flags)
+          (F.WordingOrTranslation `elem` flags)
+          (F.OtherFeedback `elem` flags)
+          (rawNote >>= nonBlank)
+      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "feedback_submitted"
+        (Just $ T.intercalate "," (map F.feedbackFlagCode flags))
+      advanceFrom index
+    _ -> renderStep ctx StepFeedback widget enctype
 
 postOriginalR :: Int -> Handler Html
 postOriginalR index = do
@@ -559,7 +766,8 @@ getDoneR :: Handler Html
 getDoneR = do
   (sid, session) <- requireSurveySession
   lang <- sessionLanguage session
-  incomplete <- firstIncomplete sid
+  instrument <- instrumentFor sid
+  incomplete <- firstIncomplete instrument sid
   case incomplete of
     Just index -> redirect (ItemR index)
     Nothing -> do
@@ -579,7 +787,8 @@ getDoneR = do
 getSubmissionR :: Handler Value
 getSubmissionR = do
   (sid, session0) <- requireSurveySession
-  incomplete <- firstIncomplete sid
+  instrument <- instrumentFor sid
+  incomplete <- firstIncomplete instrument sid
   when (isJust incomplete) $ permissionDenied "submission is incomplete"
   now <- liftIO getCurrentTime
   unless (isJust $ surveySessionCompletedAt session0) $ runDB $ update sid [SurveySessionCompletedAt =. Just now]
@@ -589,9 +798,10 @@ getSubmissionR = do
     Entity aid annotation <- ensureAnnotation sid (itemId item)
     labels <- loadLabels aid
     evidence <- loadEvidence aid
+    feedback <- loadFeedback aid
     let presentation = presentationFor lang item
         evidenceFor label = lookup label evidence
-    pure $ object
+    pure $ object $
       [ "item_id" .= itemId item
       , "source_language" .= languageCode (itemSourceLanguage item)
       , "presentation_language" .= languageCode lang
@@ -602,9 +812,15 @@ getSubmissionR = do
       , "abstention_note" .= annotationAbstentionNote annotation
       , "original_revealed" .= annotationOriginalRevealed annotation
       ]
+        -- A separate axis from labels[]: what the respondent thinks of the
+        -- item, not what they observed inside it. An hs-v1 submission does not
+        -- carry the key at all, because that contract did not have it.
+        <> case instrument of
+             InstrumentV1 -> []
+             InstrumentV2 -> ["feedback" .= feedbackValue feedback]
   addHeader "Content-Disposition" "attachment; filename=relationship-fix-submission.json"
   returnJson $ object
-    [ "instrument_version" .= ("annotation-web-dogfood-hs-v1" :: Text)
+    [ "instrument_version" .= instrumentVersionCode instrument
     , "presentation_version" .= ("presentation-v1" :: Text)
     , "ontology_version" .= ("behavior-v0.2-candidate" :: Text)
     , "presentation_language" .= languageCode lang
@@ -612,6 +828,13 @@ getSubmissionR = do
     , "completed_at" .= surveySessionCompletedAt session
     , "annotations" .= annotationValues
     ]
+
+feedbackValue :: Maybe ItemFeedback -> Value
+feedbackValue Nothing = Null
+feedbackValue (Just row) = object
+  [ "flags" .= map F.feedbackFlagCode (feedbackFlagsOf row)
+  , "note" .= itemFeedbackNote row
+  ]
 
 requireSurveySession :: Handler (SurveySessionId, SurveySession)
 requireSurveySession = do
@@ -653,6 +876,24 @@ loadLabels aid = do
   rows <- runDB $ selectList [AnnotationLabelAnnotationId ==. aid] [Asc AnnotationLabelId]
   pure $ catMaybes [parseBehaviorLabel $ annotationLabelLabelId value | Entity _ value <- rows]
 
+loadFeedback :: AnnotationId -> Handler (Maybe ItemFeedback)
+loadFeedback aid = fmap entityVal <$> runDB (getBy (UniqueItemFeedback aid))
+
+storedDecision :: ItemContext -> Maybe Decision
+storedDecision ctx = annotationDecision (ctxAnnotation ctx) >>= parseDecision
+
+-- | Navigation-level completion for one item.
+--
+-- Deliberately not 'annotationComplete', which stays a statement about the
+-- annotation alone. Feedback content is optional -- an empty submission is a
+-- valid answer -- but the step is part of the flow, so an item is finished
+-- once it has been passed through.
+itemDone :: InstrumentVersion -> Annotation -> [BehaviorLabel] -> [(BehaviorLabel, Text)] -> Maybe ItemFeedback -> Bool
+itemDone instrument annotation labels evidence feedback =
+  annotationComplete annotation labels evidence && case instrument of
+    InstrumentV1 -> True
+    InstrumentV2 -> isJust feedback
+
 loadEvidence :: AnnotationId -> Handler [(BehaviorLabel, Text)]
 loadEvidence aid = do
   rows <- runDB $ selectList [EvidenceAnnotationId ==. aid] [Asc EvidenceId]
@@ -673,15 +914,16 @@ annotationComplete annotation labels evidence = case annotationDecision annotati
   Just Abstained -> isJust (annotationAbstentionReason annotation >>= parseAbstentionReason)
   Just Assigned -> not (null labels) && all (`elem` map fst evidence) labels
 
-firstIncomplete :: SurveySessionId -> Handler (Maybe Int)
-firstIncomplete sid = go 0 items
+firstIncomplete :: InstrumentVersion -> SurveySessionId -> Handler (Maybe Int)
+firstIncomplete instrument sid = go 0 items
   where
     go _ [] = pure Nothing
     go index (item : rest) = do
       Entity aid annotation <- ensureAnnotation sid (itemId item)
       labels <- loadLabels aid
       evidence <- loadEvidence aid
-      if annotationComplete annotation labels evidence then go (index + 1) rest else pure $ Just index
+      feedback <- loadFeedback aid
+      if itemDone instrument annotation labels evidence feedback then go (index + 1) rest else pure $ Just index
 
 -- | A step guard, not a validation rule: reaching the labels step without an
 -- assigned decision is a stale URL, so send the respondent back to the item.
@@ -700,14 +942,39 @@ logEvent sid itemID kind value = do
   now <- liftIO getCurrentTime
   runDB $ insert_ $ AuditEvent sid itemID kind value now
 
--- | Opens the pool, brings the schema up to date and returns the foundation.
--- Kept here rather than in the executable so tests can drive the real app.
+-- | Opens the pool against a database that is already at the current schema,
+-- and refuses to return a foundation otherwise. Kept here rather than in the
+-- executable so tests can drive the real app.
+--
+-- Nothing on this path writes schema. That used to be a @runMigrationQuiet@
+-- call, which on the production file meant "the server decided, while starting,
+-- to rebuild a table that other rows reference". Schema is annotation-web-migrate's
+-- job now; the server only checks, and a database it does not recognise is a
+-- refusal to start rather than a repair attempt.
 makeFoundation :: FilePath -> FilePath -> Bool -> IO App
 makeFoundation dbPath sessionKeyPath secureCookies = do
+  Schema.assertCurrent dbPath
   pool <- runNoLoggingT $ createSqlitePool (T.pack dbPath) 4
-  void $ runSqlPool (runMigrationQuiet migrateAll) pool
+  -- Migrant says the history is complete and the structure matches what that
+  -- history builds. Persistent is asked the same question independently, from
+  -- the entity model rather than from the migration list: anything it would
+  -- still change is a schema the application cannot actually use.
+  pending <- pendingEntityChanges pool
+  unless (null pending) $ throwIO (Schema.SchemaPersistentDisagrees pending)
   pure App
     { appPool = pool
     , appSessionKeyPath = sessionKeyPath
     , appSecureCookies = secureCookies
     }
+
+-- | The statements persistent would run to bring this database in line with the
+-- entity model, without running them. Empty on a database the migration history
+-- built correctly.
+pendingEntityChanges :: ConnectionPool -> IO [Text]
+pendingEntityChanges = runSqlPool (showMigration migrateAll)
+
+-- | The same question asked of a file rather than a pool, so a test can put
+-- persistent on the stand without standing up the whole application.
+pendingEntityChangesAt :: FilePath -> IO [Text]
+pendingEntityChangesAt dbPath =
+  runNoLoggingT $ withSqlitePool (T.pack dbPath) 1 (liftIO . pendingEntityChanges)
