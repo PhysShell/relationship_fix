@@ -167,6 +167,10 @@ instance Yesod App where
         .choice-text { overflow-wrap: anywhere; }
         .step-back { margin: 0 0 4px; }
         .step-back a { color: #3b5bdb; text-decoration: none; }
+        .feedback-disclosure { margin-top: 28px; border-top: 1px solid #eceff1; padding-top: 16px; }
+        .feedback-disclosure summary { cursor: pointer; color: #697077; font-size: .92rem; font-weight: 600; }
+        .feedback-disclosure summary:hover { color: #202124; }
+        .feedback-disclosure form { margin-top: 14px; }
         form input[type=checkbox], form input[type=radio] { margin-top: 4px; }
         .message-banner { padding: 12px 14px; border: 1px solid #b42318; border-radius: 10px; color: #8a1c13; background: #fff5f4; }
         .field-error { margin: 6px 0 0; color: #8a1c13; }
@@ -206,7 +210,7 @@ instance RenderMessage App FormMessage where
 -- | Which instrument a session is being taken under.
 --
 -- The version is a property of the session, not of the deployment: a
--- respondent who started before the item-feedback step existed took hs-v1, and
+-- respondent who started before item feedback existed took hs-v1, and
 -- must keep taking hs-v1 for the rest of that session however many times the
 -- server is redeployed underneath them. Reading it off the running binary
 -- instead would rewrite the provenance of an already-completed run, which is
@@ -234,7 +238,7 @@ instrumentFor sid = do
 
 type AppForm a = Html -> MForm Handler (FormResult a, Widget)
 
-data Step = StepDecision | StepLabels | StepEvidence | StepAbstain | StepFeedback
+data Step = StepDecision | StepLabels | StepEvidence | StepAbstain
   deriving stock (Eq, Show)
 
 -- | Option values carry the stable wire code instead of yesod-form's positional
@@ -557,19 +561,17 @@ itemContext index = do
     , ctxInstrument = instrument
     }
 
--- | Which step the respondent is on. Once the annotation itself is complete
--- the remaining step is the optional dogfood feedback, which is a step in the
--- flow but never a condition on the annotation being correct.
+-- | Which step the respondent is on, among the ones the annotation itself can
+-- be incomplete on. Item feedback is not one of these: it is optional,
+-- available inline alongside every step rather than gating any of them, and
+-- never a condition on the annotation being correct.
 currentStep :: ItemContext -> Step
-currentStep ctx
-  | ctxInstrument ctx == InstrumentV2
-  , annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx) = StepFeedback
-  | otherwise = stepFor (ctxAnnotation ctx) (ctxLabels ctx)
+currentStep ctx = stepFor (ctxAnnotation ctx) (ctxLabels ctx)
 
 getItemR :: Int -> Handler Html
 getItemR index = do
   ctx <- itemContext index
-  if itemDone (ctxInstrument ctx) (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx) (ctxFeedback ctx)
+  if annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx)
     then advanceFrom index
     else do
       let lang = ctxLanguage ctx
@@ -578,7 +580,6 @@ getItemR index = do
         StepLabels -> generateFormPost (labelsForm lang) >>= uncurry (renderStep ctx StepLabels)
         StepEvidence -> generateFormPost (evidenceForm lang (ctxItem ctx) (ctxLabels ctx)) >>= uncurry (renderStep ctx StepEvidence)
         StepAbstain -> generateFormPost (abstainForm lang) >>= uncurry (renderStep ctx StepAbstain)
-        StepFeedback -> generateFormPost (feedbackForm lang (ctxFeedback ctx)) >>= uncurry (renderStep ctx StepFeedback)
 
 -- | Lets a respondent reconsider the decision of the item they are on without
 -- using browser Back. Renders only; every write stays in 'postDecisionR'.
@@ -593,7 +594,6 @@ stepRoute StepDecision = DecisionR
 stepRoute StepLabels = LabelsR
 stepRoute StepEvidence = EvidenceR
 stepRoute StepAbstain = AbstainR
-stepRoute StepFeedback = FeedbackR
 
 stepTitle :: Language -> Step -> Text
 stepTitle lang step = case step of
@@ -601,13 +601,18 @@ stepTitle lang step = case step of
   StepLabels -> tr lang "Категории" "Categories"
   StepEvidence -> tr lang "Цитаты-доказательства" "Evidence quotes"
   StepAbstain -> tr lang "Причина abstained" "Abstention reason"
-  StepFeedback -> tr lang "Замечания к примеру" "Remarks about the example"
 
 -- | Renders one step of one item. A rejected POST hands its own form widget
 -- back here, so the respondent keeps every value they submitted.
 renderStep :: ItemContext -> Step -> Widget -> Enctype -> Handler Html
 renderStep ctx step widget enctype = do
   (originalWidget, originalEnctype) <- generateFormPost csrfForm
+  -- Generated on every render, alongside whatever step is showing, rather
+  -- than only after the annotation is complete: a respondent may notice
+  -- something wrong with the example before they have decided how to
+  -- annotate it. hs-v1 sessions never had this UI at all and must not gain
+  -- it retroactively underneath an already-running session.
+  (feedbackWidget, feedbackEnctype) <- generateFormPost (feedbackForm (ctxLanguage ctx) (ctxFeedback ctx))
   let lang = ctxLanguage ctx
       item = ctxItem ctx
       index = ctxIndex ctx
@@ -617,6 +622,7 @@ renderStep ctx step widget enctype = do
       -- Hamlet's interpolation grammar has no infix operators, so the test
       -- has to be a plain name by the time the template sees it.
       canEditDecision = step `elem` [StepLabels, StepEvidence, StepAbstain]
+      showFeedback = ctxInstrument ctx == InstrumentV2
   defaultLayout [whamlet|
     <section .card>
       <p .eyebrow>#{index + 1} / #{length items}
@@ -642,6 +648,12 @@ renderStep ctx step widget enctype = do
       <form #step-form method=post action=@{action} enctype=#{enctype} .stack>
         ^{widget}
         <button type=submit .primary>#{tr lang "Продолжить" "Continue"}
+      $if showFeedback
+        <details .feedback-disclosure>
+          <summary>#{tr lang "Проблемы с вопросом?" "Problems with this question?"}
+          <form #feedback-form method=post action=@{FeedbackR index} enctype=#{feedbackEnctype} .stack>
+            ^{feedbackWidget}
+            <button type=submit .secondary>#{tr lang "Отправить" "Submit"}
   |]
 
 -- Every POST below follows the same rule: persist and redirect only once the
@@ -725,15 +737,14 @@ postAbstainR index = do
 postFeedbackR :: Int -> Handler Html
 postFeedbackR index = do
   ctx <- itemContext index
-  -- This step does not exist in hs-v1. Refusing rather than ignoring keeps a
+  -- This UI does not exist in hs-v1. Refusing rather than ignoring keeps a
   -- grandfathered session from being quietly turned into a hybrid of two
   -- instruments by a stale tab or a hand-made request.
   when (ctxInstrument ctx == InstrumentV1) notFound
-  -- The step exists only after the annotation itself is finished; reaching it
-  -- otherwise is a stale URL.
-  unless (annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx)) $
-    redirect (ItemR index)
-  ((result, widget), enctype) <- runFormPost (feedbackForm (ctxLanguage ctx) (ctxFeedback ctx))
+  -- Independent of the annotation's own progress: a respondent may flag the
+  -- example before, during or after deciding how to annotate it, and none of
+  -- that is a condition on submitting feedback about it.
+  ((result, _widget), _enctype) <- runFormPost (feedbackForm (ctxLanguage ctx) (ctxFeedback ctx))
   case result of
     FormSuccess (flags, rawNote) -> do
       let aid = ctxAnnotationId ctx
@@ -747,8 +758,12 @@ postFeedbackR index = do
           (rawNote >>= nonBlank)
       logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "feedback_submitted"
         (Just $ T.intercalate "," (map F.feedbackFlagCode flags))
-      advanceFrom index
-    _ -> renderStep ctx StepFeedback widget enctype
+      redirect (ItemR index)
+    -- aopt fields on every part of this form make FormFailure practically
+    -- unreachable; falling back to the item page (which will itself decide
+    -- whether the annotation is complete) is simpler and safer here than
+    -- trying to re-render a step from a widget that was never the step's own.
+    _ -> redirect (ItemR index)
 
 postOriginalR :: Int -> Handler Html
 postOriginalR index = do
@@ -766,8 +781,7 @@ getDoneR :: Handler Html
 getDoneR = do
   (sid, session) <- requireSurveySession
   lang <- sessionLanguage session
-  instrument <- instrumentFor sid
-  incomplete <- firstIncomplete instrument sid
+  incomplete <- firstIncomplete sid
   case incomplete of
     Just index -> redirect (ItemR index)
     Nothing -> do
@@ -788,7 +802,7 @@ getSubmissionR :: Handler Value
 getSubmissionR = do
   (sid, session0) <- requireSurveySession
   instrument <- instrumentFor sid
-  incomplete <- firstIncomplete instrument sid
+  incomplete <- firstIncomplete sid
   when (isJust incomplete) $ permissionDenied "submission is incomplete"
   now <- liftIO getCurrentTime
   unless (isJust $ surveySessionCompletedAt session0) $ runDB $ update sid [SurveySessionCompletedAt =. Just now]
@@ -882,18 +896,6 @@ loadFeedback aid = fmap entityVal <$> runDB (getBy (UniqueItemFeedback aid))
 storedDecision :: ItemContext -> Maybe Decision
 storedDecision ctx = annotationDecision (ctxAnnotation ctx) >>= parseDecision
 
--- | Navigation-level completion for one item.
---
--- Deliberately not 'annotationComplete', which stays a statement about the
--- annotation alone. Feedback content is optional -- an empty submission is a
--- valid answer -- but the step is part of the flow, so an item is finished
--- once it has been passed through.
-itemDone :: InstrumentVersion -> Annotation -> [BehaviorLabel] -> [(BehaviorLabel, Text)] -> Maybe ItemFeedback -> Bool
-itemDone instrument annotation labels evidence feedback =
-  annotationComplete annotation labels evidence && case instrument of
-    InstrumentV1 -> True
-    InstrumentV2 -> isJust feedback
-
 loadEvidence :: AnnotationId -> Handler [(BehaviorLabel, Text)]
 loadEvidence aid = do
   rows <- runDB $ selectList [EvidenceAnnotationId ==. aid] [Asc EvidenceId]
@@ -914,16 +916,15 @@ annotationComplete annotation labels evidence = case annotationDecision annotati
   Just Abstained -> isJust (annotationAbstentionReason annotation >>= parseAbstentionReason)
   Just Assigned -> not (null labels) && all (`elem` map fst evidence) labels
 
-firstIncomplete :: InstrumentVersion -> SurveySessionId -> Handler (Maybe Int)
-firstIncomplete instrument sid = go 0 items
+firstIncomplete :: SurveySessionId -> Handler (Maybe Int)
+firstIncomplete sid = go 0 items
   where
     go _ [] = pure Nothing
     go index (item : rest) = do
       Entity aid annotation <- ensureAnnotation sid (itemId item)
       labels <- loadLabels aid
       evidence <- loadEvidence aid
-      feedback <- loadFeedback aid
-      if itemDone instrument annotation labels evidence feedback then go (index + 1) rest else pure $ Just index
+      if annotationComplete annotation labels evidence then go (index + 1) rest else pure $ Just index
 
 -- | A step guard, not a validation rule: reaching the labels step without an
 -- assigned decision is a stale URL, so send the respondent back to the item.

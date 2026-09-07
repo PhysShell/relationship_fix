@@ -195,18 +195,21 @@ startSession language = do
     addPostParam "language" language
   followTo "/intro"
 
--- | Passes the dogfood feedback step without saying anything, which is a
--- valid answer and the common case in these tests.
-skipFeedback :: Int -> YesodExample App ()
-skipFeedback index = do
-  submitStep (FeedbackR index) []
-  followTo (T.pack ("/item/" <> show (index + 1)))
-
 submitStep :: Route App -> [(Text, Text)] -> YesodExample App ()
 submitStep route params = request $ do
   setMethod "POST"
   setUrl route
   addToken_ "#step-form"
+  mapM_ (uncurry addPostParam) params
+
+-- | Item feedback is its own form on the item page, separate from whichever
+-- step's form is showing -- a different CSRF token source, and a submission
+-- that never advances the item on its own.
+submitFeedback :: Int -> [(Text, Text)] -> YesodExample App ()
+submitFeedback index params = request $ do
+  setMethod "POST"
+  setUrl (FeedbackR index)
+  addToken_ "#feedback-form"
   mapM_ (uncurry addPostParam) params
 
 followTo :: Text -> YesodExample App ()
@@ -344,7 +347,9 @@ formSpec = ydescribe "rejected submissions" $ do
     assertEq "the decision is stored" [Just "none_observed"] (map annotationDecision stored)
     kinds <- auditKindsFor "dg-04"
     assertEq "exactly one audit event" ["decision_submitted"] kinds
-    skipFeedback 0
+    -- The item is already complete; visiting it again advances on its own,
+    -- with no feedback step in between.
+    followTo "/item/1"
 
 -- | What the respondent's thumb actually meets. The generic yesod-form
 -- renderer emitted inputs and labels as flat siblings, which on a narrow
@@ -356,7 +361,10 @@ markupSpec = ydescribe "option rows" $ do
     get (ItemR 0)
     submitStep (DecisionR 0) [("decision", "assigned")]
     followTo "/item/0"
-    htmlCount "label.choice" 5
+    -- Scoped to the step's own form: the page also carries the feedback
+    -- disclosure's checkbox row, which uses the same row markup and would
+    -- otherwise be counted here too.
+    htmlCount "#step-form label.choice" 5
     htmlCount "input[name=labels]" 5
     forM_ (map labelCode allBehaviorLabels) $ \code ->
       bodyContains . T.unpack $
@@ -368,7 +376,7 @@ markupSpec = ydescribe "option rows" $ do
   yit "gives the decision radios the same structure" $ do
     startSession "ru"
     get (ItemR 0)
-    htmlCount "label.choice" 3
+    htmlCount "#step-form label.choice" 3
     htmlCount "input[name=decision]" 3
     bodyContains "<label class=\"choice\" for=\"decision-assigned\"><input id=\"decision-assigned\""
 
@@ -409,7 +417,10 @@ decisionSpec = ydescribe "reconsidering a decision" $ do
     assertEq "quotes cleared" [] quotes
     stored <- annotationsFor "dg-04"
     assertEq "decision changed" [Just "none_observed"] (map annotationDecision stored)
-    bodyContains "Замечания к примеру"
+    -- The item is complete now and would auto-advance on a plain GET, but
+    -- explicitly reopening it for editing still shows feedback as available.
+    get (EditDecisionR 0)
+    bodyContains "Проблемы с вопросом?"
 
   yit "B. assigned to abstained drops categories and quotes" $ do
     startSession "ru"
@@ -468,42 +479,78 @@ decisionSpec = ydescribe "reconsidering a decision" $ do
 
 feedbackSpec :: YesodSpec App
 feedbackSpec = ydescribe "optional item feedback" $ do
-  yit "none_observed reaches feedback, then the next item" $ do
+  yit "is present but collapsed on the decision page, before any decision is made" $ do
+    startSession "ru"
+    get (ItemR 0)
+    statusIs 200
+    bodyContains "Проблемы с вопросом?"
+    -- No `open` attribute: collapsed by default, native <details> semantics,
+    -- no JavaScript involved in showing or hiding it.
+    bodyContains "<details class=\"feedback-disclosure\">"
+    bodyContains "<summary>"
+
+  yit "uses a real button and a real form, not a clickable div" $ do
+    startSession "ru"
+    get (ItemR 0)
+    htmlCount "#feedback-form" 1
+    bodyContains "action=\"/item/0/feedback\""
+    htmlCount "#feedback-form button[type=submit]" 1
+
+  yit "none_observed advances straight to the next item, with no separate feedback screen" $ do
     startSession "ru"
     get (ItemR 0)
     submitStep (DecisionR 0) [("decision", "none_observed")]
+    -- The decision handler's own redirect target is unchanged (this same
+    -- item); the item advances on the *next* GET, once it is complete.
     followTo "/item/0"
-    bodyContains "Замечания к примеру"
-    skipFeedback 0
+    followTo "/item/1"
 
-  yit "assigned reaches feedback after the quotes" $ do
+  yit "assigned advances straight to the next item after the quotes" $ do
     startSession "ru"
     reachEvidenceStep ["B.BLAME_CRITICISM"]
     submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставила окно открытым")]
     followTo "/item/0"
-    bodyContains "Замечания к примеру"
-    skipFeedback 0
+    followTo "/item/1"
 
-  yit "abstained reaches feedback after the reason" $ do
+  yit "abstained advances straight to the next item after the reason" $ do
     startSession "ru"
     get (ItemR 0)
     submitStep (DecisionR 0) [("decision", "abstained")]
     followTo "/item/0"
     submitStep (AbstainR 0) [("reason", "insufficient_context")]
     followTo "/item/0"
-    bodyContains "Замечания к примеру"
-    skipFeedback 0
+    followTo "/item/1"
 
-  yit "an empty submission is a valid answer and completes the item" $ do
+  yit "never opening the disclosure stores no feedback at all" $ do
     startSession "ru"
     get (ItemR 0)
     submitStep (DecisionR 0) [("decision", "none_observed")]
     followTo "/item/0"
-    skipFeedback 0
+    followTo "/item/1"
+    rows <- feedbackFor "dg-04"
+    assertEq "no feedback row exists" 0 (length rows)
+
+  yit "opening the disclosure and submitting nothing is a valid, empty answer" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitFeedback 0 []
+    followTo "/item/0"
     rows <- feedbackFor "dg-04"
     assertEq "one feedback row" 1 (length rows)
     assertEq "no flags" [] (concatMap flagCodes rows)
     assertEq "no note" [Nothing] (map itemFeedbackNote rows)
+
+  yit "submitting feedback does not by itself advance the item" $ do
+    startSession "ru"
+    get (ItemR 0)
+    submitFeedback 0 [("feedback_flags", "unnatural_example")]
+    -- Feedback is optional and separate: giving it is not the act that
+    -- completes the item, so the respondent lands back on the same item and
+    -- can still make (or has yet to make) the actual decision.
+    followTo "/item/0"
+    statusIs 200
+    stored <- annotationsFor "dg-04"
+    assertEq "no decision was recorded by submitting feedback" [Nothing] (map annotationDecision stored)
 
   yit "one flag persists" $ do
     startSession "ru"
@@ -529,19 +576,24 @@ feedbackSpec = ydescribe "optional item feedback" $ do
     assertEq "the note is stored, trimmed"
       [Just "так люди как будто не разговаривают"] (map itemFeedbackNote rows)
 
-  yit "leaves the decision and the categories alone" $ do
+  yit "feedback given after finishing leaves the decision and the categories alone" $ do
     startSession "ru"
     reachEvidenceStep ["B.BLAME_CRITICISM"]
     submitStep (EvidenceR 0) [("evidence_B.BLAME_CRITICISM", "оставила окно открытым")]
-    followTo "/item/0"
-    submitStep (FeedbackR 0) [("feedback_flags", "unnatural_example")]
-    followTo "/item/1"
+    -- The item is complete now, and a plain GET would auto-advance, but
+    -- reopening it for editing still renders the feedback form (with a fresh
+    -- CSRF token) -- feedback is addressed by item index, not by "the page
+    -- currently open in the browser".
+    get (EditDecisionR 0)
+    submitFeedback 0 [("feedback_flags", "unnatural_example")]
     stored <- annotationsFor "dg-04"
     assertEq "decision unchanged" [Just "assigned"] (map annotationDecision stored)
     labels <- labelsFor "dg-04"
     assertEq "categories unchanged" ["B.BLAME_CRITICISM"] labels
     quotes <- evidenceFor "dg-04"
     assertEq "quotes unchanged" ["оставила окно открытым"] quotes
+    rows <- feedbackFor "dg-04"
+    assertEq "and the feedback was recorded" ["unnatural_example"] (concatMap flagCodes rows)
 
   yit "reports feedback as its own field of the submission, never as a label" $ do
     startSession "ru"
@@ -574,13 +626,19 @@ flagCodes row = map F.feedbackFlagCode $ concat
   , [F.OtherFeedback | itemFeedbackOther row]
   ]
 
--- | none_observed on one item, then the given feedback, then on to the next.
+-- | Feedback (given inline, before finishing), then none_observed, which now
+-- advances straight to the next item on its own -- feedback is never a
+-- condition on that.
 completeItemWithFeedback :: Int -> [(Text, Text)] -> YesodExample App ()
 completeItemWithFeedback index feedback = do
   get (ItemR index)
-  submitStep (DecisionR index) [("decision", "none_observed")]
+  submitFeedback index feedback
   followTo (T.pack ("/item/" <> show index))
-  submitStep (FeedbackR index) feedback
+  submitStep (DecisionR index) [("decision", "none_observed")]
+  -- The decision handler's own redirect still targets this same item; the
+  -- item only actually advances on the *next* GET, once it notices the
+  -- annotation is complete.
+  followTo (T.pack ("/item/" <> show index))
   followTo (if index + 1 < length items then T.pack ("/item/" <> show (index + 1)) else "/done")
 
 -- | The instrument a session is taken under is a property of that session.
@@ -595,29 +653,27 @@ instrumentSpec = ydescribe "instrument version is bound to the session" $ do
     versions <- runDb (map (sessionInstrumentVersion . entityVal) <$> selectList ([] :: [Filter SessionInstrument]) [])
     assertEq "a new session is hs-v2" ["annotation-web-dogfood-hs-v2"] versions
 
-  yit "never shows the feedback step to a session that predates it" $ do
+  yit "never shows the feedback disclosure to a session that predates it" $ do
     startSession "ru"
     grandfatherSession
     get (ItemR 0)
-    bodyNotContains "Замечания к примеру"
+    bodyNotContains "Проблемы с вопросом?"
     submitStep (DecisionR 0) [("decision", "none_observed")]
     followTo "/item/0"
     followTo "/item/1"
     rows <- feedbackFor "dg-04"
     assertEq "and stores no feedback for it" 0 (length rows)
 
-  yit "refuses the feedback step outright under the older instrument" $ do
+  yit "refuses feedback submission outright under the older instrument" $ do
     startSession "ru"
     get (ItemR 0)
-    submitStep (DecisionR 0) [("decision", "none_observed")]
-    followTo "/item/0"
-    bodyContains "Замечания к примеру"
+    bodyContains "Проблемы с вопросом?"
     grandfatherSession
     rowsBefore <- rowCounts
-    submitStep (FeedbackR 0) [("feedback_flags", "unnatural_example")]
+    submitFeedback 0 [("feedback_flags", "unnatural_example")]
     statusIs 404
     rowsAfter <- rowCounts
-    assertEq "a refused step writes nothing" rowsBefore rowsAfter
+    assertEq "a refused submission writes nothing" rowsBefore rowsAfter
 
   yit "exports a grandfathered session under hs-v1, without the newer field" $ do
     startSession "ru"
