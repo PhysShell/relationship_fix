@@ -14,6 +14,10 @@ response-слои, пишет pilot-report.json + pilot-report.md. Ничего 
   manifest.deferred_labels; это «не искали») != underpowered_not_estimable
   («искали, но positives слишком мало для оценки»).
 - bootstrap CI: resample pairable units, percentile 2.5/97.5, fixed seed.
+- item feedback (необязательное поле `feedback` в ответе, коды как в annotation-web
+  Feedback.hs): кросс-табы unnatural_example × disagreement / abstention / stratum /
+  item — единственный способ post hoc отделить плохой stimulus от плохого definition
+  (dialogue-naturalness-gate §3, §9).
 
 Запуск (гейтящие числа — только отсюда, не из notebook):
     uv run python -m metrics.agreement --pilot-dir ../../data/pilot/v0
@@ -36,6 +40,9 @@ BOOTSTRAP_ITERATIONS = 2000
 BOOTSTRAP_SEED = 42
 
 DECISIONS = ("assigned", "none_observed", "abstained")
+# Коды item feedback = annotation-web Feedback.hs; UNNATURAL — ось naturalness gate.
+FEEDBACK_FLAGS = ("unnatural_example", "insufficient_context", "wording_or_translation", "other")
+UNNATURAL = "unnatural_example"
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -158,6 +165,10 @@ def build_unit_rows(items: list[dict], responses_a: list[dict], responses_b: lis
             "labels_b": set(rb.get("labels") or []),
             "reason_a": ra.get("abstention_reason"),
             "reason_b": rb.get("abstention_reason"),
+            "feedback_collected_a": "feedback" in ra,
+            "feedback_collected_b": "feedback" in rb,
+            "feedback_a": set((ra.get("feedback") or {}).get("flags") or []),
+            "feedback_b": set((rb.get("feedback") or {}).get("flags") or []),
         })
     return rows
 
@@ -200,7 +211,78 @@ def validate_responses(items: list[dict], responses: list[dict], layer: str, act
                     issues.append(f"{layer}/{r['item_id']}: quote for '{label}' is not a verbatim substring of target")
         if decision == "abstained" and not r.get("abstention_reason"):
             issues.append(f"{layer}/{r['item_id']}: abstained without reason")
+        if "feedback" in r:
+            feedback = r["feedback"]
+            if not isinstance(feedback, dict) or not isinstance(feedback.get("flags", []), list):
+                issues.append(f"{layer}/{r.get('item_id')}: feedback must be an object with a 'flags' list")
+            else:
+                for flag in feedback.get("flags", []):
+                    if flag not in FEEDBACK_FLAGS:
+                        issues.append(f"{layer}/{r.get('item_id')}: unknown feedback flag '{flag}'")
     return issues
+
+
+def feedback_crosstab(rows: list[dict], strata: dict[str, str]) -> dict:
+    """unnatural_example × disagreement / abstention / stratum / item.
+
+    high disagreement + high unnatural  → подозревается stimulus;
+    high disagreement + low unnatural   → бьёт по definition/boundary.
+    Смешивать эти два диагноза нельзя, поэтому таблица обязательна в отчёте."""
+    collected = any(r["feedback_collected_a"] or r["feedback_collected_b"] for r in rows)
+    if not collected:
+        return {"collected": False,
+                "note": "ни один ответ не нёс поле feedback — кросс-табы unnatural_example недоступны"}
+
+    per_item = []
+    for r in rows:
+        unnatural = int(UNNATURAL in r["feedback_a"]) + int(UNNATURAL in r["feedback_b"])
+        decision_disagreement = r["decision_a"] != r["decision_b"]
+        label_disagreement = (r["decision_a"] == r["decision_b"] == "assigned"
+                              and r["labels_a"] != r["labels_b"])
+        per_item.append({
+            "item_id": r["item_id"],
+            "stratum": strata.get(r["item_id"]),
+            "unnatural_flags": unnatural,
+            "other_flags": sorted((r["feedback_a"] | r["feedback_b"]) - {UNNATURAL}),
+            "decision_disagreement": decision_disagreement,
+            "label_disagreement": label_disagreement,
+            "any_disagreement": decision_disagreement or label_disagreement,
+            "abstentions": int(r["decision_a"] == "abstained") + int(r["decision_b"] == "abstained"),
+        })
+
+    def bucket(predicate):
+        flagged = [p for p in per_item if p["unnatural_flags"] > 0]
+        clean = [p for p in per_item if p["unnatural_flags"] == 0]
+        return {
+            "flagged_any": {"yes": sum(predicate(p) for p in flagged), "no": sum(not predicate(p) for p in flagged)},
+            "not_flagged": {"yes": sum(predicate(p) for p in clean), "no": sum(not predicate(p) for p in clean)},
+        }
+
+    by_stratum: dict[str, dict] = {}
+    for p in per_item:
+        s = by_stratum.setdefault(p["stratum"], {"n_items": 0, "flagged_any": 0, "flagged_both": 0})
+        s["n_items"] += 1
+        s["flagged_any"] += p["unnatural_flags"] > 0
+        s["flagged_both"] += p["unnatural_flags"] == 2
+
+    flag_totals = {}
+    for flag in FEEDBACK_FLAGS:
+        flag_totals[flag] = {
+            "a": sum(flag in r["feedback_a"] for r in rows),
+            "b": sum(flag in r["feedback_b"] for r in rows),
+            "items_any": sum(flag in (r["feedback_a"] | r["feedback_b"]) for r in rows),
+            "items_both": sum(flag in (r["feedback_a"] & r["feedback_b"]) for r in rows),
+        }
+
+    return {
+        "collected": True,
+        "flag_totals": flag_totals,
+        "unnatural_by_stratum": by_stratum,
+        "unnatural_x_disagreement": bucket(lambda p: p["any_disagreement"]),
+        "unnatural_x_decision_disagreement": bucket(lambda p: p["decision_disagreement"]),
+        "unnatural_x_abstention": bucket(lambda p: p["abstentions"] > 0),
+        "per_item": per_item,
+    }
 
 
 def check_eligibility(pilot_dir: Path, annotators: list[str]) -> str | None:
@@ -310,6 +392,7 @@ def run(pilot_dir: Path) -> int:
             "natural": confusion_analysis([r for r in rows if strata[r["item_id"]] == "natural"]),
         },
         "abstention_reasons": abstention_reasons,
+        "item_feedback": feedback_crosstab(rows, strata),
     }
 
     out_dir = pilot_dir / "report"
@@ -347,6 +430,20 @@ def render_markdown(report: dict) -> str:
               json.dumps(report["confusion"]["all"], ensure_ascii=False, indent=2), "```",
               "", "## Abstentions", "```json",
               json.dumps(report["abstention_reasons"], ensure_ascii=False, indent=2), "```", ""]
+    feedback = report.get("item_feedback", {})
+    if not feedback.get("collected"):
+        lines += ["## Item feedback (unnatural_example)", "", feedback.get("note", "not collected"), ""]
+    else:
+        summary = {k: feedback[k] for k in ("flag_totals", "unnatural_by_stratum", "unnatural_x_disagreement",
+                                            "unnatural_x_decision_disagreement", "unnatural_x_abstention")}
+        lines += ["## Item feedback (unnatural_example)", "",
+                  "| item | stratum | unnatural | disagreement | abstentions | other flags |",
+                  "|---|---|---|---|---|---|"]
+        for p in feedback["per_item"]:
+            lines.append(f"| {p['item_id']} | {p['stratum']} | {p['unnatural_flags']} "
+                         f"| {'yes' if p['any_disagreement'] else 'no'} | {p['abstentions']} "
+                         f"| {', '.join(p['other_flags']) or '—'} |")
+        lines += ["", "```json", json.dumps(summary, ensure_ascii=False, indent=2), "```", ""]
     return "\n".join(lines)
 
 
