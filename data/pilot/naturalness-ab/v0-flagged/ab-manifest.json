@@ -59,10 +59,14 @@
   },
   "eligibility": [
     "did_not_author_items",
+    "did_not_author_candidates",
+    "not_the_veto_reviewer",
+    "not_the_blind_auditor",
     "not_an_annotator_of_pilot_v0_1",
     "fluent_ru",
     "fluent_en"
   ],
+  "role_separation": "hard: auditor ≠ A/B rater ≠ pilot annotator, авторы кандидатов и veto-reviewer не оценщики; при нехватке людей уменьшается число оценщиков, роли не смешиваются",
   "blind_rules": [
     "оценщик работает ТОЛЬКО со своим packets/rater-N.json (opaque pair ids, свой порядок, своя сторона оригинала)",
     "оценщики не видят candidates.json, packet-map/ и файлы друг друга",
@@ -76,5 +80,7 @@
     "record": "снятый кандидат переносится в vetoed[] с candidate_id, checklist (пункты), reason и vetoed_by; rejected[] — negative controls, не переписываются",
     "gate": "metrics.naturalness_ab check — обязателен перед build; build отказывает при любой проблеме admissibility"
   },
-  "acceptance_rule": "reject_meaning_shift при любом 'substantial'; eligible если кандидата предпочли строго больше оценщиков, чем оригинал; итоговый accept/reject — вручную (gate §4, шаг 6), принятая версия получает authoring.accepted_via = blinded_ab."
+  "acceptance_rule": "PREREGISTERED 2026-09-07, до первого выданного пакета: reject_meaning_shift при любом 'substantial'; eligible если кандидата предпочли строго больше оценщиков, чем оригинал (no_difference нейтрален, slight не блокирует); итоговый accept/reject — вручную (gate §4, шаг 6), принятая версия получает authoring.accepted_via = blinded_ab.",
+  "adjudication_principle": "ineligible-кандидат не может быть принят; eligible-кандидат может быть отклонён только с записанной причиной, независимой от личного предпочтения естественности; числовой extra-threshold не вводится",
+  "issuance": "после veto-review записываются sha256 candidates.json, vetoed/admissible counts, issued_at, псевдоним ревьюера; после этого --force запрещён процедурой, расхождение с packets/checksums.json инвалидирует выдачу"
 }

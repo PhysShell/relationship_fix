@@ -234,7 +234,37 @@ Checker: оба действия на месте («понимаю… стрём
 | 9 | Cross-tab `unnatural_example` × disagreement | подготовлено в `metrics.agreement` (`item_feedback`); **ждёт ответов с полем `feedback`** |
 | 10 | Automation only after enough adjudicated data | не раньше 50–100+ правок |
 
-Самый сильный результат §7 — распределение natural 1/20, challenge 8/20, dogfood 4/6 — говорит, где рождается дефект: synthetic boundary pressure. Поэтому массовой переписи корпуса нет; лечатся страты, где конструкция stimulus слишком явно обслуживает онтологию. Но это распределение пока стоит на одном проходе одного критика, и критик — модель; evidence оно станет только после слепого аудита 4a. Правило contamination accounting: auditor ≠ A/B rater ≠ pilot annotator, насколько позволяет число людей; при нехватке людей auditor = A/B rater допустимо, pilot annotator — никогда, иначе `has_not_seen_items` превращается из критерия в художественную литературу.
+Самый сильный результат §7 — распределение natural 1/20, challenge 8/20, dogfood 4/6 — говорит, где рождается дефект: synthetic boundary pressure. Поэтому массовой переписи корпуса нет; лечатся страты, где конструкция stimulus слишком явно обслуживает онтологию. Но это распределение пока стоит на одном проходе одного критика, и критик — модель; evidence оно станет только после слепого аудита 4a. Правило contamination accounting — **hard separation**: auditor ≠ A/B rater ≠ pilot annotator, без исключений при нехватке людей; авторы кандидатов и veto-reviewer тоже не оценщики. Аудитор в роли оценщика узнаёт оригиналы, оценщик в роли аудитора заранее видел альтернативы, любой из них в pilot — нарушенный `has_not_seen_items`. Если людей не хватает, уменьшается число оценщиков или откладывается этап; вынужденное отклонение записывается в `contamination-ledger.json` до выдачи.
+
+### Решения human phase (2026-09-07, зафиксированы до первого выданного пакета)
+
+1. **Auditor-only находки Pass A чинятся в том же цикле v0.1** через generation 2: отдельный каталог кандидатов, собственный veto-review, собственные blinded-пакеты для тех же или других независимых оценщиков (gen-1 оценщики слепы для gen 2 по построению — наборы items не пересекаются). Generation 1 не перевыдаётся. Auditor-only находка не обязывает менять item: без admissible edit оригинал остаётся, причина записывается.
+2. **Decision rule — текущий, preregistered, код не меняется**: любой `substantial` → ineligible; eligible при `candidate > original` среди направленных голосов; `no_difference` нейтрален (ближе к abstention, чем к голосу за status quo); `slight` не блокирует. Пример: candidate 2, original 1, no_difference 2, substantial 0 → eligible.
+3. **Принцип adjudication**: ineligible-кандидат **не может** быть принят; eligible-кандидат **может** быть отклонён, но с записанной причиной, независимой от личного предпочтения естественности. Числовой extra-threshold на adjudication не вводится — это было бы изменение decision rule через заднюю дверь.
+4. **--force после записи выдачи запрещён процедурой, не кодом**: модель — provenance/detection, не cryptographic prevention. Любое расхождение выданного пакета с записанным SHA инвалидирует выдачу и требует новой; старые ответы к новой выдаче не относятся.
+5. **Hard role separation** — см. выше.
+
+Окончательная последовательность human phase:
+
+| # | Шаг | Lock |
+|---|---|---|
+| 0 | Veto-review generation 1 (только V1–V10, не «нравится») | issuance record: sha256 candidates.json, vetoed/admissible counts, issued_at, псевдоним ревьюера |
+| 1 | Independent Pass A по всем 46 | sha256 ответов в первом закоммиченном `audit-result.json` |
+| 2 | Pass B: critic-1 vs auditor, обе клетки расхождения | — |
+| 3 | Generation 2 для auditor-only: кандидаты → veto-review | issuance record gen 2 |
+| 4 | Выдача A/B gen 1 + gen 2 независимым оценщикам | packet SHA per rater |
+| 5 | Lock ответов оценщиков | sha256 per rater |
+| 6 | Score по preregistered rule | `ab-result.json` |
+| 7 | Adjudication: ineligible нельзя; eligible можно отклонить с причиной | adjudication record |
+| 8 | Freeze adjudication record | — |
+| 9 | Сборка v0.1 один раз из финального accepted set (по мере поступления голосов — никогда) | — |
+| 10 | validate_items: lineage, новый package hash; плюс ручная сверка каждой ревизии с текстом eligible-кандидата из `candidates.json` и статусом из `ab-result.json` (машиной не проверяется — cutover work) | package hash |
+| 11 | Cutover: реестр статусов пакетов, `v0` не выдаётся runtime'ом, pc-08 в живом glossary `Domain.hs` перефразирован, критерий eligibility по ledger | — |
+| 12 | Pilot | — |
+
+Evidence bundle окончания human phase: veto (sha candidates.json, vetoed + причины), blind audit (packet SHA, псевдоним, response SHA, counts critic-1 vs auditor по стратам, список расхождений), A/B (packet SHA per rater, псевдонимы, response SHA, preference и semantic-change counts, adjudication outcome per item), ledger заморожен, итог: accepted / rejected / unchanged flagged. Что из этого пишется руками: issuance records, псевдонимы, adjudication record; сборщика v0.1 нет, гейт — `validate_items`.
+
+**Статус: dialogue naturalness code phase CLOSED. Next gate: HUMAN EVIDENCE REQUIRED. Никакие ревизии корпуса не admissible до полного закрытия и lock veto-review, blind audit и A/B.**
 
 ## Источники
 
