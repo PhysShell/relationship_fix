@@ -6,6 +6,7 @@ import unittest
 from metrics.naturalness_ab import (
     assert_no_leak,
     build_packet,
+    check_candidates,
     recommend,
     score,
     validate_responses,
@@ -20,11 +21,24 @@ def candidates(n_items=4):
             "original": {"messages": [{"author": "a", "text": f"A{k}"}, {"author": "b", "text": f"B{k} original"}],
                          "target_index": 1},
             "candidates": [
-                {"candidate_id": f"pc-{k:02d}-c1", "messages": [{"author": "a", "text": f"A{k}"}, {"author": "b", "text": f"B{k} one"}]},
-                {"candidate_id": f"pc-{k:02d}-c2", "messages": [{"author": "a", "text": f"A{k}"}, {"author": "b", "text": f"B{k} two"}]},
+                {"candidate_id": f"pc-{k:02d}-c1", "checker": "ok",
+                 "messages": [{"author": "a", "text": f"A{k}"}, {"author": "b", "text": f"B{k} one"}]},
+                {"candidate_id": f"pc-{k:02d}-c2", "checker": "ok",
+                 "messages": [{"author": "a", "text": f"A{k}"}, {"author": "b", "text": f"B{k} two"}]},
             ],
+            "vetoed": [],
+            "source_package": "annotation-pilot-v0",
         })
-    return {"schema_version": "rf.naturalness-ab-candidates.v1", "ab_id": "test", "items": items}
+    return {"schema_version": "rf.naturalness-ab-candidates.v1", "ab_id": "test",
+            "veto_checklist": [{"id": "V1", "check": "construct"}, {"id": "V3", "check": "no new action"}],
+            "items": items}
+
+
+def corpus_for(c):
+    return {"annotation-pilot-v0": {
+        i["item_id"]: {"messages": [(m["author"], m["text"]) for m in i["original"]["messages"]],
+                       "target_index": i["original"]["target_index"]}
+        for i in c["items"]}}
 
 
 class BuildTests(unittest.TestCase):
@@ -66,6 +80,73 @@ class BuildTests(unittest.TestCase):
             assert_no_leak({**packet, "pairs": [{**packet["pairs"][0], "original_side": "left"}]}, c)
         with self.assertRaises(ValueError):  # id in a value
             assert_no_leak({**packet, "pairs": [{**packet["pairs"][0], "pair_id": "pc-01-c1"}]}, c)
+
+
+class AdmissibilityTests(unittest.TestCase):
+    """Veto-review оставляет след: кандидат либо допущен, либо vetoed с причиной и пунктом
+    чек-листа, либо rejected как negative control. Ничего не исчезает бесследно."""
+
+    def test_clean_fixture_is_admissible(self):
+        c = candidates()
+        issues, notes = check_candidates(c, corpus_for(c))
+        self.assertEqual(issues, [])
+        self.assertEqual(notes, [])
+
+    def test_vetoed_needs_reason_checklist_and_single_home(self):
+        c = candidates(n_items=1)
+        cand = c["items"][0]["candidates"][1]
+        c["items"][0]["vetoed"] = [{"candidate_id": cand["candidate_id"], "messages": cand["messages"],
+                                    "vetoed_by": "facilitator", "checklist": ["V9"], "reason": ""}]
+        issues, _ = check_candidates(c, corpus_for(c))
+        joined = "\n".join(issues)
+        self.assertIn("vetoed without reason", joined)
+        self.assertIn("existing veto_checklist ids", joined)
+        self.assertIn("appears 2 times", joined)
+
+    def test_proper_veto_is_recorded_and_excluded_from_pairs(self):
+        c = candidates(n_items=1)
+        cand = c["items"][0]["candidates"].pop(1)
+        c["items"][0]["vetoed"] = [{**cand, "vetoed_by": "facilitator", "checklist": ["V3"], "reason": "adds an apology"}]
+        issues, _ = check_candidates(c, corpus_for(c))
+        self.assertEqual(issues, [])
+        packet, mapping = build_packet(c, "rater-1", "seed-1")
+        self.assertEqual(len(packet["pairs"]), 1)
+        self.assertNotIn(cand["candidate_id"], [v["candidate_id"] for v in mapping["map"].values()])
+        result = score(c, {}, {})
+        self.assertTrue(result["compared_only_admissible"])
+        self.assertEqual(result["n_vetoed"], 1)
+        self.assertEqual(result["per_item"][0]["vetoed_before_issuance"][0]["reason"], "adds an apology")
+
+    def test_candidate_shape_rules(self):
+        c = candidates(n_items=1)
+        item = c["items"][0]
+        item["candidates"][0]["messages"] = list(item["original"]["messages"])            # identical
+        item["candidates"][1]["messages"] = item["candidates"][1]["messages"] + [{"author": "a", "text": "extra"}]  # new message
+        item["candidates"][1]["checker"] = ""
+        issues, _ = check_candidates(c, corpus_for(c))
+        joined = "\n".join(issues)
+        for fragment in ("identical to the original", "message count/authors differ", "without checker note"):
+            self.assertIn(fragment, joined)
+
+    def test_original_is_verified_against_corpus(self):
+        c = candidates(n_items=1)
+        corpus = corpus_for(c)
+        corpus["annotation-pilot-v0"]["pc-01"]["messages"][1] = ("b", "B1 something else")
+        issues, _ = check_candidates(c, corpus)
+        self.assertTrue(any("differs from the corpus" in i for i in issues))
+        c["items"][0]["source_package"] = "annotation-ux-v6"
+        issues, notes = check_candidates(c, corpus)
+        self.assertEqual(issues, [])
+        self.assertTrue(any("not verified" in n for n in notes))
+
+    def test_missing_vetoed_list_or_checklist_is_an_issue(self):
+        c = candidates(n_items=1)
+        del c["items"][0]["vetoed"]
+        c["veto_checklist"] = []
+        issues, _ = check_candidates(c)
+        joined = "\n".join(issues)
+        self.assertIn("'vetoed' list is required", joined)
+        self.assertIn("veto_checklist", joined)
 
 
 class ScoreTests(unittest.TestCase):

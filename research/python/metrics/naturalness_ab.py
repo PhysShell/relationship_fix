@@ -9,6 +9,12 @@ packet-map/rater-N.json (facilitator-only обратная карта) и packet
     more_natural:  left | right | no_difference   («какой вариант больше похож на реальную переписку пары?»)
     meaning_shift: same | slight | substantial    («отличаются ли варианты по смыслу или накалу?»)
 
+`check` — admissibility bookkeeping до выдачи (veto-review фасилитатора): кандидат лежит
+ровно в одном из списков candidates | vetoed (пункт veto_checklist + причина) | rejected
+(negative control, история не переписывается); оригиналы сверяются с корпусом по
+manifest.sources. `build` отказывает, если check нашёл проблемы: A/B сравнивает только
+admissible candidates, и это должно быть видно из записи.
+
 `score` читает responses/rater-N.jsonl, возвращает ответы в canonical пространство и
 пишет ab-result.json/.md с рекомендацией на кандидата:
 
@@ -19,6 +25,7 @@ packet-map/rater-N.json (facilitator-only обратная карта) и packet
 Рекомендация не является решением: accept/reject делает фасилитатор вручную (шаг 6),
 и принятая версия получает authoring.accepted_via = blinded_ab.
 
+    uv run python -m metrics.naturalness_ab check --ab-dir ../../data/pilot/naturalness-ab/v0-flagged
     uv run python -m metrics.naturalness_ab build --ab-dir ../../data/pilot/naturalness-ab/v0-flagged
     uv run python -m metrics.naturalness_ab score --ab-dir ../../data/pilot/naturalness-ab/v0-flagged
 """
@@ -47,6 +54,97 @@ def pair_id(seed: str, item_id: str, candidate_id: str) -> str:
 
 def _display(messages: list[dict]) -> list[dict]:
     return [{"author": m["author"].upper(), "text": m["text"]} for m in messages]
+
+
+def load_sources(ab_dir: Path, manifest: dict) -> tuple[dict[str, dict[str, dict]], list[str]]:
+    """package_id → {item_id → {'messages': [(author, text)], 'target_index'}} из manifest.sources.
+    sha256, если он записан, обязан совпадать: оригинал сверяется с тем корпусом, который пинили."""
+    corpus: dict[str, dict[str, dict]] = {}
+    issues: list[str] = []
+    for source in manifest.get("sources", []):
+        path = ab_dir / source["items_file"]
+        if not path.exists():
+            issues.append(f"sources/{source['package_id']}: {path} not found")
+            continue
+        if source.get("sha256"):
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            if actual != source["sha256"]:
+                issues.append(f"sources/{source['package_id']}: sha256 mismatch — источник менялся после пина")
+                continue
+        package = {}
+        for item in load_jsonl(path):
+            ids = [m["message_id"] for m in item["messages"]]
+            package[item["item_id"]] = {
+                "messages": [(m["author"], m["text"]) for m in item["messages"]],
+                "target_index": ids.index(item["target_message_id"]),
+            }
+        corpus[source["package_id"]] = package
+    return corpus, issues
+
+
+def check_candidates(candidates: dict, corpus: dict[str, dict[str, dict]] | None = None) -> tuple[list[str], list[str]]:
+    """Admissibility bookkeeping. Возвращает (issues, notes): issues блокируют build."""
+    issues: list[str] = []
+    notes: list[str] = []
+    checklist = candidates.get("veto_checklist") or []
+    checklist_ids = [c.get("id") for c in checklist]
+    if not checklist or len(set(checklist_ids)) != len(checklist_ids) or not all(c.get("check") for c in checklist):
+        issues.append("veto_checklist: обязателен непустой список {id, check} с уникальными id")
+    seen_ids: Counter = Counter()
+
+    for item in candidates.get("items", []):
+        iid = item.get("item_id", "?")
+        original = item.get("original", {})
+        orig_msgs = [(m.get("author"), m.get("text")) for m in original.get("messages", [])]
+        if not orig_msgs or not (0 <= original.get("target_index", -1) < len(orig_msgs)):
+            issues.append(f"{iid}: original needs messages and a valid target_index")
+        if corpus is not None:
+            package = corpus.get(item.get("source_package"))
+            if package is None:
+                notes.append(f"{iid}: original not verified — source '{item.get('source_package')}' не резолвится в JSONL-пакет")
+            elif iid not in package:
+                issues.append(f"{iid}: not found in source package '{item.get('source_package')}'")
+            elif package[iid]["messages"] != orig_msgs or package[iid]["target_index"] != original.get("target_index"):
+                issues.append(f"{iid}: original differs from the corpus text — исходник должен быть дословным")
+
+        admissible = item.get("candidates", [])
+        vetoed = item.get("vetoed", [])
+        if "vetoed" not in item:
+            issues.append(f"{iid}: 'vetoed' list is required (пустой, если вето не было)")
+        if not admissible:
+            notes.append(f"{iid}: no admissible candidates — item остаётся оригиналом")
+
+        for cand in admissible:
+            cid = cand.get("candidate_id", "?")
+            seen_ids[cid] += 1
+            msgs = [(m.get("author"), m.get("text")) for m in cand.get("messages", [])]
+            if not cand.get("checker"):
+                issues.append(f"{iid}/{cid}: candidate without checker note")
+            if not msgs or any(not t or not str(t).strip() for _, t in msgs):
+                issues.append(f"{iid}/{cid}: empty message text")
+            if msgs == orig_msgs:
+                issues.append(f"{iid}/{cid}: candidate identical to the original")
+            if [a for a, _ in msgs] != [a for a, _ in orig_msgs]:
+                issues.append(f"{iid}/{cid}: message count/authors differ from the original — это новый item, не edit (V7)")
+        for veto in vetoed:
+            cid = veto.get("candidate_id", "?")
+            seen_ids[cid] += 1
+            if not veto.get("messages"):
+                issues.append(f"{iid}/{cid}: vetoed entry must keep the candidate text")
+            if not (veto.get("reason") or "").strip():
+                issues.append(f"{iid}/{cid}: vetoed without reason")
+            if not veto.get("vetoed_by"):
+                issues.append(f"{iid}/{cid}: vetoed_by is required")
+            refs = veto.get("checklist") or []
+            if not refs or any(r not in checklist_ids for r in refs):
+                issues.append(f"{iid}/{cid}: vetoed must reference existing veto_checklist ids, got {refs}")
+        for rej in item.get("rejected", []):
+            if not rej.get("messages") or not (rej.get("why") or "").strip():
+                issues.append(f"{iid}: rejected entry needs messages and why")
+    for cid, count in seen_ids.items():
+        if count > 1:
+            issues.append(f"candidate id '{cid}' appears {count} times across candidates/vetoed — ровно один список")
+    return issues, notes
 
 
 def build_packet(candidates: dict, rater_id: str, seed: str) -> tuple[dict, dict]:
@@ -184,12 +282,16 @@ def score(candidates: dict, layers: dict[str, list[dict]], maps: dict[str, dict]
         per_item.append({
             "item_id": item["item_id"],
             "candidates": [t["candidate_id"] for t in own],
+            "vetoed_before_issuance": [{"candidate_id": v["candidate_id"], "checklist": v.get("checklist"), "reason": v.get("reason")}
+                                       for v in item.get("vetoed", [])],
             "best_eligible": best["candidate_id"] if best else None,
             "suggested_outcome": "accept_best_eligible" if best else "keep_original",
         })
     return {
         "schema_version": "rf.naturalness-ab-result.v1",
         "ab_id": candidates["ab_id"],
+        "compared_only_admissible": True,
+        "n_vetoed": sum(len(i.get("vetoed", [])) for i in candidates["items"]),
         "n_raters": len(layers),
         "per_candidate": list(tallies.values()),
         "per_item": per_item,
@@ -208,15 +310,49 @@ def render_markdown(result: dict) -> str:
         lines.append(f"| {t['item_id']} | {t['candidate_id']} | {t['n_raters']} | {t['prefers_candidate']} "
                      f"| {t['prefers_original']} | {t['no_difference']} | {ms['same']}/{ms['slight']}/{ms['substantial']} "
                      f"| {t['recommendation']} |")
-    lines += ["", "| item | best eligible | suggested outcome |", "|---|---|---|"]
+    lines += ["", "| item | best eligible | suggested outcome | vetoed before issuance |", "|---|---|---|---|"]
     for p in result["per_item"]:
-        lines.append(f"| {p['item_id']} | {p['best_eligible'] or '—'} | {p['suggested_outcome']} |")
+        vetoed = ", ".join(v["candidate_id"] for v in p.get("vetoed_before_issuance", [])) or "—"
+        lines.append(f"| {p['item_id']} | {p['best_eligible'] or '—'} | {p['suggested_outcome']} | {vetoed} |")
+    lines += ["", f"A/B compared admissible candidates only; {result.get('n_vetoed', 0)} vetoed before issuance (see candidates.json)."]
     return "\n".join(lines) + "\n"
+
+
+def run_check(ab_dir: Path, manifest: dict, candidates: dict) -> list[str]:
+    corpus, issues = load_sources(ab_dir, manifest)
+    cand_issues, notes = check_candidates(candidates, corpus)
+    issues += cand_issues
+    for note in notes:
+        print(f"note: {note}")
+    n_adm = sum(len(i.get("candidates", [])) for i in candidates["items"])
+    n_veto = sum(len(i.get("vetoed", [])) for i in candidates["items"])
+    n_rej = sum(len(i.get("rejected", [])) for i in candidates["items"])
+    print(f"admissibility: {len(candidates['items'])} items, {n_adm} admissible, {n_veto} vetoed, {n_rej} rejected (negative controls)")
+    return issues
+
+
+def cmd_check(ab_dir: Path) -> int:
+    manifest = json.loads((ab_dir / "ab-manifest.json").read_text(encoding="utf-8"))
+    candidates = json.loads((ab_dir / manifest["candidates_file"]).read_text(encoding="utf-8"))
+    issues = run_check(ab_dir, manifest, candidates)
+    if issues:
+        print("CANDIDATES NOT ADMISSIBLE FOR ISSUANCE:", file=sys.stderr)
+        for issue in issues:
+            print(f"- {issue}", file=sys.stderr)
+        return 1
+    print("OK: candidates admissible")
+    return 0
 
 
 def cmd_build(ab_dir: Path, force: bool) -> int:
     manifest = json.loads((ab_dir / "ab-manifest.json").read_text(encoding="utf-8"))
     candidates = json.loads((ab_dir / manifest["candidates_file"]).read_text(encoding="utf-8"))
+    issues = run_check(ab_dir, manifest, candidates)
+    if issues:
+        print("REFUSED: candidates failed admissibility check — run `check` and fix candidates.json first:", file=sys.stderr)
+        for issue in issues:
+            print(f"- {issue}", file=sys.stderr)
+        return 1
     packets_dir = ab_dir / manifest["packets_dir"]
     map_dir = ab_dir / manifest["packet_map_dir"]
     packets_dir.mkdir(exist_ok=True)
@@ -279,12 +415,16 @@ def cmd_score(ab_dir: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+    check = sub.add_parser("check", help="admissibility bookkeeping кандидатов (veto-review) без генерации")
+    check.add_argument("--ab-dir", type=Path, required=True)
     build = sub.add_parser("build", help="сгенерировать blinded per-rater пакеты")
     build.add_argument("--ab-dir", type=Path, required=True)
     build.add_argument("--force", action="store_true", help="перезаписать пакеты (ТОЛЬКО до выдачи)")
     sc = sub.add_parser("score", help="свести ответы оценщиков")
     sc.add_argument("--ab-dir", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "check":
+        return cmd_check(args.ab_dir)
     if args.command == "build":
         return cmd_build(args.ab_dir, args.force)
     return cmd_score(args.ab_dir)
