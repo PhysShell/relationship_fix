@@ -1,0 +1,136 @@
+{
+  "schema_version": "rf.naturalness-ab-packet-map.v1",
+  "rater_id": "rater-4",
+  "map": {
+    "pair-9f2aed": {
+      "item_id": "pc-02",
+      "candidate_id": "pc-02-c1",
+      "original_side": "left"
+    },
+    "pair-d08817": {
+      "item_id": "pc-02",
+      "candidate_id": "pc-02-c2",
+      "original_side": "left"
+    },
+    "pair-906743": {
+      "item_id": "pc-05",
+      "candidate_id": "pc-05-c1",
+      "original_side": "left"
+    },
+    "pair-e060ce": {
+      "item_id": "pc-05",
+      "candidate_id": "pc-05-c2",
+      "original_side": "right"
+    },
+    "pair-19e917": {
+      "item_id": "pc-06",
+      "candidate_id": "pc-06-c1",
+      "original_side": "left"
+    },
+    "pair-06f3a9": {
+      "item_id": "pc-06",
+      "candidate_id": "pc-06-c2",
+      "original_side": "right"
+    },
+    "pair-610210": {
+      "item_id": "pc-09",
+      "candidate_id": "pc-09-c1",
+      "original_side": "right"
+    },
+    "pair-7133e2": {
+      "item_id": "pc-09",
+      "candidate_id": "pc-09-c2",
+      "original_side": "right"
+    },
+    "pair-e7e2e1": {
+      "item_id": "pc-12",
+      "candidate_id": "pc-12-c1",
+      "original_side": "right"
+    },
+    "pair-d87876": {
+      "item_id": "pc-12",
+      "candidate_id": "pc-12-c2",
+      "original_side": "right"
+    },
+    "pair-fc4b44": {
+      "item_id": "pc-13",
+      "candidate_id": "pc-13-c1",
+      "original_side": "left"
+    },
+    "pair-74fb39": {
+      "item_id": "pc-13",
+      "candidate_id": "pc-13-c2",
+      "original_side": "right"
+    },
+    "pair-7f88a5": {
+      "item_id": "pc-16",
+      "candidate_id": "pc-16-c1",
+      "original_side": "right"
+    },
+    "pair-600f2b": {
+      "item_id": "pc-16",
+      "candidate_id": "pc-16-c2",
+      "original_side": "right"
+    },
+    "pair-2db149": {
+      "item_id": "pc-17",
+      "candidate_id": "pc-17-c1",
+      "original_side": "right"
+    },
+    "pair-46eb5e": {
+      "item_id": "pc-17",
+      "candidate_id": "pc-17-c2",
+      "original_side": "left"
+    },
+    "pair-580b39": {
+      "item_id": "pn-10",
+      "candidate_id": "pn-10-c1",
+      "original_side": "right"
+    },
+    "pair-d5c406": {
+      "item_id": "pn-10",
+      "candidate_id": "pn-10-c2",
+      "original_side": "left"
+    },
+    "pair-b2aa29": {
+      "item_id": "dg-04",
+      "candidate_id": "dg-04-c1",
+      "original_side": "right"
+    },
+    "pair-03102e": {
+      "item_id": "dg-04",
+      "candidate_id": "dg-04-c2",
+      "original_side": "left"
+    },
+    "pair-b51a1c": {
+      "item_id": "dg-05",
+      "candidate_id": "dg-05-c1",
+      "original_side": "right"
+    },
+    "pair-2b804e": {
+      "item_id": "dg-05",
+      "candidate_id": "dg-05-c2",
+      "original_side": "right"
+    },
+    "pair-84ee08": {
+      "item_id": "dg-06",
+      "candidate_id": "dg-06-c1",
+      "original_side": "left"
+    },
+    "pair-abcaf7": {
+      "item_id": "dg-06",
+      "candidate_id": "dg-06-c2",
+      "original_side": "left"
+    },
+    "pair-7d3bb8": {
+      "item_id": "dg-09",
+      "candidate_id": "dg-09-c1",
+      "original_side": "left"
+    },
+    "pair-444a6f": {
+      "item_id": "dg-09",
+      "candidate_id": "dg-09-c2",
+      "original_side": "left"
+    }
+  }
+}

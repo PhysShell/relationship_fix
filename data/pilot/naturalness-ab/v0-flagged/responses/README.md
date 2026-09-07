@@ -1,0 +1,1 @@
+Ответы оценщиков: rater-N.jsonl (rf.naturalness-ab-response.v1), одна строка на pair из своего packets/rater-N.json. Сдаются фасилитатору; после сдачи не редактируются. Оценщики не видят candidates.json, packet-map/ и файлы друг друга.

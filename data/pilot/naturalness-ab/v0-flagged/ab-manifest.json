@@ -1,0 +1,61 @@
+{
+  "schema_version": "rf.naturalness-ab-manifest.v1",
+  "ab_id": "naturalness-ab-v0-flagged",
+  "created": "2026-09-07",
+  "purpose": "Blinded human A/B для 13 flagged items naturalness gate: решает, какие minimal edits входят в annotation-pilot-v0.1 (и в dogfood-набор для dg-*). Ответы людей — оракул; кандидаты модели — только вход.",
+  "candidates_file": "candidates.json",
+  "packets_dir": "packets/",
+  "packet_map_dir": "packet-map/",
+  "responses_dir": "responses/",
+  "raters": {
+    "rater-1": {
+      "seed": "rf-naturalness-ab/v0-flagged/rater-1/2026-09-07"
+    },
+    "rater-2": {
+      "seed": "rf-naturalness-ab/v0-flagged/rater-2/2026-09-07"
+    },
+    "rater-3": {
+      "seed": "rf-naturalness-ab/v0-flagged/rater-3/2026-09-07"
+    },
+    "rater-4": {
+      "seed": "rf-naturalness-ab/v0-flagged/rater-4/2026-09-07"
+    },
+    "rater-5": {
+      "seed": "rf-naturalness-ab/v0-flagged/rater-5/2026-09-07"
+    }
+  },
+  "questions": {
+    "more_natural": {
+      "ru": "Какой из двух вариантов больше похож на реальную переписку пары?",
+      "en": "Which of the two reads more like a real couple's messaging?",
+      "options": [
+        "left",
+        "right",
+        "no_difference"
+      ]
+    },
+    "meaning_shift": {
+      "ru": "Отличаются ли варианты по смыслу или по накалу сказанного?",
+      "en": "Do the two differ in what is said or how heated it is?",
+      "options": [
+        "same",
+        "slight",
+        "substantial"
+      ]
+    }
+  },
+  "eligibility": [
+    "did_not_author_items",
+    "not_an_annotator_of_pilot_v0_1",
+    "fluent_ru",
+    "fluent_en"
+  ],
+  "blind_rules": [
+    "оценщик работает ТОЛЬКО со своим packets/rater-N.json (opaque pair ids, свой порядок, своя сторона оригинала)",
+    "оценщики не видят candidates.json, packet-map/ и файлы друг друга",
+    "оценщикам не сообщаются категории онтологии, флаги и то, какая сторона — оригинал",
+    "обсуждение пар запрещено до сдачи всех ответов",
+    "после выдачи пакета перегенерация (--force) запрещена"
+  ],
+  "acceptance_rule": "reject_meaning_shift при любом 'substantial'; eligible если кандидата предпочли строго больше оценщиков, чем оригинал; итоговый accept/reject — вручную (gate §4, шаг 6), принятая версия получает authoring.accepted_via = blinded_ab."
+}
