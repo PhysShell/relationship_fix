@@ -67,6 +67,7 @@ model update
 | [docs/research/evaluation-contract.md](docs/research/evaluation-contract.md) | Finding contract, faithfulness, calibrated confidence, E0/E1/E2, IPR-оси, baseline A/B/C |
 | [docs/research/research-hypotheses.md](docs/research/research-hypotheses.md) | Что пока только проверяется и может быть опровергнуто |
 | [docs/research/roadmap-microscope.md](docs/research/roadmap-microscope.md) | Этапы MVP, real-data gates, Living Couple Sanity Set, data governance и WTP |
+| [docs/research/dialogue-naturalness-gate.md](docs/research/dialogue-naturalness-gate.md) | Naturalness/adjacency gate для stimulus-корпуса: диагноз «пластмассы», проверенный prior art (готового нет), rubric критика, инварианты minimal edit, ручной проход по 46 items |
 
 ## Ключевые развилки, уже решённые
 
