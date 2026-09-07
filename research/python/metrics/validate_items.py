@@ -56,28 +56,43 @@ def structural_issues(items: list[dict]) -> list[str]:
     return issues
 
 
-def package_items_lookup(packages_root: Path):
-    """parent_lookup для authoring_issues: ищет пакет по pilot_id среди
-    <packages_root>/*/pilot-manifest.json и отдаёт его item по item_id."""
-    cache: dict[str, dict[str, dict] | None] = {}
+def index_packages(packages_root: Path) -> tuple[dict[str, Path], list[str]]:
+    """pilot_id → каталог пакета среди <packages_root>/*/pilot-manifest.json.
 
-    def find_package(package_id: str) -> dict[str, dict] | None:
-        if package_id in cache:
-            return cache[package_id]
-        found = None
-        for manifest_path in sorted(packages_root.glob("*/pilot-manifest.json")):
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("pilot_id") == package_id:
-                found = {i["item_id"]: i for i in load_jsonl(manifest_path.parent / manifest["items_file"])}
-                break
-        cache[package_id] = found
-        return found
+    Fail-closed: pilot_id, объявленный больше чем одним каталогом, не резолвится вообще
+    и попадает в issues. Provenance либо разрешается однозначно, либо lineage
+    unverifiable; «первый по сортировке» — не семантика для происхождения данных."""
+    declared: dict[str, list[Path]] = {}
+    for manifest_path in sorted(packages_root.glob("*/pilot-manifest.json")):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        pilot_id = manifest.get("pilot_id")
+        if pilot_id:
+            declared.setdefault(pilot_id, []).append(manifest_path.parent)
+    issues = [
+        f"packages: pilot_id '{pid}' declared by {len(dirs)} packages ({', '.join(d.name for d in dirs)}) — "
+        f"lineage через него не резолвится, пока дубликат не устранён"
+        for pid, dirs in declared.items() if len(dirs) > 1
+    ]
+    index = {pid: dirs[0] for pid, dirs in declared.items() if len(dirs) == 1}
+    return index, issues
+
+
+def package_items_lookup(packages_root: Path):
+    """parent_lookup для authoring_issues: пакет по pilot_id (однозначно, см. index_packages),
+    item по item_id. Возвращает (lookup, issues): issues — дубликаты pilot_id."""
+    index, issues = index_packages(packages_root)
+    cache: dict[str, dict[str, dict]] = {}
 
     def lookup(package_id: str, item_id: str) -> dict | None:
-        package = find_package(package_id)
-        return None if package is None else package.get(item_id)
+        package_dir = index.get(package_id)
+        if package_dir is None:
+            return None
+        if package_id not in cache:
+            manifest = json.loads((package_dir / "pilot-manifest.json").read_text(encoding="utf-8"))
+            cache[package_id] = {i["item_id"]: i for i in load_jsonl(package_dir / manifest["items_file"])}
+        return cache[package_id].get(item_id)
 
-    return lookup
+    return lookup, issues
 
 
 def validate(pilot_dir: Path, ontology_path: Path) -> list[str]:
@@ -91,8 +106,9 @@ def validate(pilot_dir: Path, ontology_path: Path) -> list[str]:
     # --- items ---
     issues += structural_issues(items)
 
-    # --- authoring lineage (v2) ---
-    lookup = package_items_lookup(pilot_dir.resolve().parent)
+    # --- package identity + authoring lineage (v2) ---
+    lookup, package_issues = package_items_lookup(pilot_dir.resolve().parent)
+    issues += package_issues
     for item in items:
         if item.get("schema_version") == SCHEMA_V2:
             issues += authoring_issues(item, lookup)

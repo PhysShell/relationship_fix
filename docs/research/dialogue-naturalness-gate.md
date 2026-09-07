@@ -223,7 +223,7 @@ Checker: оба действия на месте («понимаю… стрём
 | # | Шаг | Статус |
 |---|---|---|
 | 1 | Freeze v0 as historical | сделано: `data/pilot/v0/README.md` |
-| 2 | Provenance/authoring representation | сделано: `rf.pilot-item.v2`, `metrics/items.py`, lineage-проверки в `validate_items`, v1-проекция в `presentation` |
+| 2 | Provenance/authoring representation | сделано: `rf.pilot-item.v2`, `metrics/items.py`, lineage-проверки в `validate_items` (родитель — явная тройка package_id + item_id + content_sha256; дубликат pilot_id среди пакетов — fail-closed, lineage через него не резолвится), v1-проекция в `presentation` |
 | 3 | Remove v0.2-candidate target leakage | сделано: три примера B.AVOIDANCE_TOPIC_SHIFT заменены; частичная утечка контекста pc-08 в glossary annotation-web записана (§3) |
 | 4 | Minimal-edit candidates for 13 flagged items | сделано: `candidates.json`, 26 кандидатов + 4 отклонённых (negative controls); veto-review фасилитатора — только по чек-листу V1–V10, след `vetoed` с причиной, `metrics.naturalness_ab check` гейтит `build`; **ждёт veto-review** |
 | 4a | Independent blind audit of all 46 items | подготовлено: `data/pilot/naturalness-audit/v0-all/` — стерильный Pass A (opaque ids, свой порядок, только реплики, три вопроса), Pass B после заморозки ответов (`metrics.naturalness_audit report` пишет sha256 ответов и counts против critic-1 по стратам); contamination ledger `data/pilot/contamination-ledger.json`; **ждёт аудитора, который не автор, не A/B rater и никогда не pilot annotator** |

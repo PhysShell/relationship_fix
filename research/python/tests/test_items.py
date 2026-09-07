@@ -143,6 +143,27 @@ class PackageLineageTests(unittest.TestCase):
             (pkg / "items.jsonl").write_text(json.dumps(child_bad, ensure_ascii=False) + "\n", encoding="utf-8")
             self.assertTrue(any("identical" in i for i in validate(pkg, ontology)))
 
+    def test_duplicate_pilot_id_is_fail_closed(self):
+        """Два каталога с одним pilot_id: родитель не резолвится ни через один из них,
+        и сам дубликат — issue. «Первый по сортировке» здесь не семантика."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ontology = root / "ontology.json"
+            ontology.write_text(json.dumps({"ontology_version": "t", "labels": [{"id": "B.X", "allowed_units": ["utterance"]}]}), encoding="utf-8")
+            parent = v1()
+            self.write_package(root, "v0", "annotation-pilot-v0", [parent], ontology)
+            self.write_package(root, "v0-copy", "annotation-pilot-v0", [parent], ontology)
+            child = v2({"origin": "llm_assisted", "revision_reason": "naturalness", "accepted_via": "blinded_ab",
+                        "parent_item_version": parent_ref(parent)}, texts=("Раз.", "ну два"))
+            pkg = self.write_package(root, "v0.1", "annotation-pilot-v0.1", [child], ontology)
+            issues = validate(pkg, ontology)
+            joined = "\n".join(issues)
+            self.assertIn("declared by 2 packages", joined)
+            self.assertIn("v0, v0-copy", joined)
+            self.assertIn("lineage unverifiable", joined)
+            # the duplicate is reported even when validating one of the duplicates itself
+            self.assertTrue(any("declared by 2 packages" in i for i in validate(root / "v0", ontology)))
+
     def test_presentation_must_not_leak_authoring(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
