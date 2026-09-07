@@ -194,9 +194,9 @@
       "inclusion_criteria": ["смена темы непосредственно после поднятого вопроса без uptake", "отшучивание от содержания вопроса", "неопределённое откладывание без конкретного возврата"],
       "exclusion_criteria": ["короткий ответ без topic shift", "ответ по теме с естественным переходом", "конкретный согласованный перенос", "наблюдаемая repair/de-escalation функция, если она поддерживается контекстом"],
       "examples": [
-        {"language":"ru","text":"[сразу после вопроса партнёра о кредите] Слушай, а ты видела, что Лена выложила?","unit":"utterance","verdict":"positive","rationale":"unrelated topic shift with no uptake"},
-        {"language":"ru","text":"Давай сегодня в восемь спокойно сядем и обсудим, сейчас я на созвоне.","unit":"utterance","verdict":"negative","rationale":"concrete return to topic"},
-        {"language":"ru","text":"Ясно.","unit":"utterance","verdict":"negative","rationale":"short/cold response alone does not establish topic shift"}
+        {"language":"ru","text":"[сразу после вопроса партнёра о деньгах] Кстати, ты видела, что придумали соседи?","unit":"utterance","verdict":"positive","rationale":"unrelated topic shift with no uptake"},
+        {"language":"ru","text":"Давай вечером обсудим, сейчас правда встреча.","unit":"utterance","verdict":"negative","rationale":"concrete return to topic"},
+        {"language":"ru","text":"Угу.","unit":"utterance","verdict":"negative","rationale":"short/cold response alone does not establish topic shift"}
       ],
       "confusable_with": ["B.WITHDRAWAL", "B.REPAIR_ATTEMPT"],
       "evidence_required": true,
