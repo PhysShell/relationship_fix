@@ -8,6 +8,12 @@
       "package_id": "annotation-pilot-v0",
       "items_file": "../../v0/items.jsonl",
       "sha256": "9d1a2690dc95e488a0cd204ae71f509e37d5d3b4d7237cce872ec55d17361bb2"
+    },
+    {
+      "package_id": "annotation-ux-v6",
+      "snapshot_file": "../../naturalness-audit/v0-all/sources/dogfood-v6-items.snapshot.json",
+      "source_file": "../../v0/form/dogfood-v6-items.yaml",
+      "source_sha256": "4b2cd0bfc2ba4dab87d5ca0d2e79465ed0e3eab01b9411917ae7a5a110daf8a8"
     }
   ],
   "candidates_file": "candidates.json",

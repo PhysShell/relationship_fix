@@ -225,7 +225,8 @@ Checker: оба действия на месте («понимаю… стрём
 | 1 | Freeze v0 as historical | сделано: `data/pilot/v0/README.md` |
 | 2 | Provenance/authoring representation | сделано: `rf.pilot-item.v2`, `metrics/items.py`, lineage-проверки в `validate_items`, v1-проекция в `presentation` |
 | 3 | Remove v0.2-candidate target leakage | сделано: три примера B.AVOIDANCE_TOPIC_SHIFT заменены; частичная утечка контекста pc-08 в glossary annotation-web записана (§3) |
-| 4 | Minimal-edit candidates for 13 flagged items | сделано: `candidates.json`, 26 кандидатов + 4 отклонённых с причинами; **ждёт ревью фасилитатора до выдачи пакетов** |
+| 4 | Minimal-edit candidates for 13 flagged items | сделано: `candidates.json`, 26 кандидатов + 4 отклонённых (negative controls); veto-review фасилитатора — только по чек-листу V1–V10, след `vetoed` с причиной, `metrics.naturalness_ab check` гейтит `build`; **ждёт veto-review** |
+| 4a | Independent blind audit of all 46 items | подготовлено: `data/pilot/naturalness-audit/v0-all/` — стерильный Pass A (opaque ids, свой порядок, только реплики, три вопроса), Pass B после заморозки ответов (`metrics.naturalness_audit report` пишет sha256 ответов и counts против critic-1 по стратам); contamination ledger `data/pilot/contamination-ledger.json`; **ждёт аудитора, который не автор, не A/B rater и никогда не pilot annotator** |
 | 5 | Human blinded A/B | подготовлено: 5 пакетов, инструкции, scoring; **ждёт людей** |
 | 6 | Accept/reject edits manually | ждёт результатов A/B |
 | 7 | Build v0.1 + new hash + regenerated presentation | ждёт шага 6; правила — [item-authoring-v0.1](../item-authoring-v0.1.md); dg-* уходят в dogfood yaml + `Catalog.hs`, не в pilot |
@@ -233,7 +234,7 @@ Checker: оба действия на месте («понимаю… стрём
 | 9 | Cross-tab `unnatural_example` × disagreement | подготовлено в `metrics.agreement` (`item_feedback`); **ждёт ответов с полем `feedback`** |
 | 10 | Automation only after enough adjudicated data | не раньше 50–100+ правок |
 
-Самый сильный результат §7 — распределение natural 1/20, challenge 8/20, dogfood 4/6 — говорит, где рождается дефект: synthetic boundary pressure. Поэтому массовой переписи корпуса нет; лечатся страты, где конструкция stimulus слишком явно обслуживает онтологию.
+Самый сильный результат §7 — распределение natural 1/20, challenge 8/20, dogfood 4/6 — говорит, где рождается дефект: synthetic boundary pressure. Поэтому массовой переписи корпуса нет; лечатся страты, где конструкция stimulus слишком явно обслуживает онтологию. Но это распределение пока стоит на одном проходе одного критика, и критик — модель; evidence оно станет только после слепого аудита 4a. Правило contamination accounting: auditor ≠ A/B rater ≠ pilot annotator, насколько позволяет число людей; при нехватке людей auditor = A/B rater допустимо, pilot annotator — никогда, иначе `has_not_seen_items` превращается из критерия в художественную литературу.
 
 ## Источники
 

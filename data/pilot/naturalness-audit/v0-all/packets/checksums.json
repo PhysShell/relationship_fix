@@ -1,0 +1,7 @@
+{
+  "schema_version": "rf.naturalness-audit-checksums.v1",
+  "sha256": {
+    "packets/auditor-1.json": "234b34b135020bf1cd7e1ae099278e20cdf8eecb82db126d2f9fb5102355f835",
+    "packets/auditor-2.json": "f169e75d66e294bd3a8330f80102e65cccda202a0890cbd326010c1a26256919"
+  }
+}

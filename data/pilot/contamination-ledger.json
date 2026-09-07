@@ -1,0 +1,15 @@
+{
+  "schema_version": "rf.contamination-ledger.v1",
+  "note": "Facilitator-only. Псевдонимные ключи людей (p1, p2, …), без персональных данных. Кто открыл audit- или A/B-пакет, тот больше не naive annotator: has_not_seen_items для него ложно по построению. Заполняется ДО выдачи пакета человеку.",
+  "rule": "auditor ≠ A/B rater ≠ pilot annotator, насколько позволяет число людей; при нехватке людей допустимо auditor = A/B rater, но никогда pilot annotator",
+  "persons": {},
+  "example": {
+    "p1": {
+      "roles": {
+        "naturalness-audit-v0-all": "auditor-1"
+      },
+      "pilot_annotator_eligible": false,
+      "since": "2026-09-08"
+    }
+  }
+}

@@ -62,23 +62,41 @@ def load_sources(ab_dir: Path, manifest: dict) -> tuple[dict[str, dict[str, dict
     corpus: dict[str, dict[str, dict]] = {}
     issues: list[str] = []
     for source in manifest.get("sources", []):
+        pid = source["package_id"]
+        package = {}
+        if "snapshot_file" in source:
+            # hash-pinned projection of a YAML source (dogfood): stdlib-only tooling cannot read YAML
+            snap_path = ab_dir / source["snapshot_file"]
+            src_path = ab_dir / source["source_file"]
+            if not snap_path.exists() or not src_path.exists():
+                issues.append(f"sources/{pid}: snapshot or source file not found")
+                continue
+            snapshot = json.loads(snap_path.read_text(encoding="utf-8"))
+            actual = hashlib.sha256(src_path.read_bytes()).hexdigest()
+            if actual != source.get("source_sha256") or actual != snapshot.get("source_sha256"):
+                issues.append(f"sources/{pid}: {src_path.name} changed since the snapshot was pinned — regenerate the snapshot")
+                continue
+            for item in snapshot["items"]:
+                package[item["item_id"]] = {"messages": [(m["author"], m["text"]) for m in item["messages"]],
+                                            "target_index": item["target_index"]}
+            corpus[pid] = package
+            continue
         path = ab_dir / source["items_file"]
         if not path.exists():
-            issues.append(f"sources/{source['package_id']}: {path} not found")
+            issues.append(f"sources/{pid}: {path} not found")
             continue
         if source.get("sha256"):
             actual = hashlib.sha256(path.read_bytes()).hexdigest()
             if actual != source["sha256"]:
-                issues.append(f"sources/{source['package_id']}: sha256 mismatch — источник менялся после пина")
+                issues.append(f"sources/{pid}: sha256 mismatch — источник менялся после пина")
                 continue
-        package = {}
         for item in load_jsonl(path):
             ids = [m["message_id"] for m in item["messages"]]
             package[item["item_id"]] = {
                 "messages": [(m["author"], m["text"]) for m in item["messages"]],
                 "target_index": ids.index(item["target_message_id"]),
             }
-        corpus[source["package_id"]] = package
+        corpus[pid] = package
     return corpus, issues
 
 

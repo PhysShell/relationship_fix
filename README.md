@@ -108,11 +108,14 @@ docs/item-authoring-v0.1.md       правила авторинга stimulus-ite
 data/pilot/v0/                    annotation-pilot-v0: 40 items (20 challenge + 20 natural, слепые страты),
                                   manifest (5 active labels + B.WITHDRAWAL deferred/not_applicable) —
                                   FROZEN historical, не выдавался (см. README там); преемник — v0.1
-data/pilot/naturalness-ab/        blinded human A/B по 13 flagged items: candidates (facilitator-only),
+data/pilot/naturalness-ab/        blinded human A/B по 13 flagged items: candidates + veto-след (facilitator-only),
                                   per-rater пакеты, scoring
+data/pilot/naturalness-audit/     слепой аудит всех 46 items: стерильный Pass A, Pass B после заморозки,
+                                  critic-1 triage (facilitator-only); contamination-ledger.json рядом
 research/python/                  uv-проект (stdlib-only): agreement (α, CI, positive agreement, confusion pairs,
                                   estimability, unnatural_example × disagreement), validate_items (+ lineage
-                                  rf.pilot-item.v2), presentation, naturalness_ab; гейтящие числа — только отсюда
+                                  rf.pilot-item.v2), presentation, naturalness_ab, naturalness_audit;
+                                  гейтящие числа — только отсюда
 ```
 
 Запуск (нужен .NET 10 SDK):

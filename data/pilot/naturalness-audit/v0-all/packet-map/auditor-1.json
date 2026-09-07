@@ -1,0 +1,236 @@
+{
+  "schema_version": "rf.naturalness-audit-packet-map.v1",
+  "auditor_id": "auditor-1",
+  "map": {
+    "audit-3b6350": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-01",
+      "n_messages": 3
+    },
+    "audit-a4d75e": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-02",
+      "n_messages": 4
+    },
+    "audit-83f400": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-03",
+      "n_messages": 3
+    },
+    "audit-ba06cd": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-04",
+      "n_messages": 3
+    },
+    "audit-2bdb15": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-05",
+      "n_messages": 2
+    },
+    "audit-a27a73": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-06",
+      "n_messages": 2
+    },
+    "audit-852ebe": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-07",
+      "n_messages": 2
+    },
+    "audit-95686e": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-08",
+      "n_messages": 2
+    },
+    "audit-f79dd6": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-09",
+      "n_messages": 2
+    },
+    "audit-cdf35c": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-10",
+      "n_messages": 3
+    },
+    "audit-caff20": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-11",
+      "n_messages": 3
+    },
+    "audit-915bb8": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-12",
+      "n_messages": 2
+    },
+    "audit-f09a7a": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-13",
+      "n_messages": 2
+    },
+    "audit-b93e9b": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-14",
+      "n_messages": 3
+    },
+    "audit-5e1800": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-15",
+      "n_messages": 2
+    },
+    "audit-6077bc": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-16",
+      "n_messages": 2
+    },
+    "audit-0a67f3": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-17",
+      "n_messages": 2
+    },
+    "audit-f15455": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-18",
+      "n_messages": 2
+    },
+    "audit-6575a3": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-19",
+      "n_messages": 2
+    },
+    "audit-3ce64f": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pc-20",
+      "n_messages": 2
+    },
+    "audit-736509": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-01",
+      "n_messages": 2
+    },
+    "audit-4815f1": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-02",
+      "n_messages": 2
+    },
+    "audit-f48504": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-03",
+      "n_messages": 2
+    },
+    "audit-d2932f": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-04",
+      "n_messages": 1
+    },
+    "audit-a7f55e": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-05",
+      "n_messages": 2
+    },
+    "audit-279df4": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-06",
+      "n_messages": 2
+    },
+    "audit-7f5cf1": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-07",
+      "n_messages": 2
+    },
+    "audit-727224": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-08",
+      "n_messages": 1
+    },
+    "audit-0903c9": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-09",
+      "n_messages": 2
+    },
+    "audit-e3019f": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-10",
+      "n_messages": 2
+    },
+    "audit-c9eefc": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-11",
+      "n_messages": 1
+    },
+    "audit-a4bbfd": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-12",
+      "n_messages": 2
+    },
+    "audit-bc6235": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-13",
+      "n_messages": 2
+    },
+    "audit-b30600": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-14",
+      "n_messages": 1
+    },
+    "audit-0525cf": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-15",
+      "n_messages": 2
+    },
+    "audit-1db37a": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-16",
+      "n_messages": 1
+    },
+    "audit-4f5a28": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-17",
+      "n_messages": 2
+    },
+    "audit-f1708a": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-18",
+      "n_messages": 1
+    },
+    "audit-5e1d7b": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-19",
+      "n_messages": 1
+    },
+    "audit-32ec87": {
+      "package_id": "annotation-pilot-v0",
+      "item_id": "pn-20",
+      "n_messages": 2
+    },
+    "audit-1fa4ca": {
+      "package_id": "annotation-ux-v6",
+      "item_id": "dg-04",
+      "n_messages": 2
+    },
+    "audit-a1a469": {
+      "package_id": "annotation-ux-v6",
+      "item_id": "dg-05",
+      "n_messages": 2
+    },
+    "audit-9dea77": {
+      "package_id": "annotation-ux-v6",
+      "item_id": "dg-06",
+      "n_messages": 2
+    },
+    "audit-f63476": {
+      "package_id": "annotation-ux-v6",
+      "item_id": "dg-07",
+      "n_messages": 2
+    },
+    "audit-d8bfa7": {
+      "package_id": "annotation-ux-v6",
+      "item_id": "dg-08",
+      "n_messages": 2
+    },
+    "audit-c52b69": {
+      "package_id": "annotation-ux-v6",
+      "item_id": "dg-09",
+      "n_messages": 2
+    }
+  }
+}
