@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 from metrics.agreement import load_jsonl
+from metrics.items import SCHEMA_V1, stimulus_only
 
 
 def opaque_id(seed: str, canonical_id: str) -> str:
@@ -43,7 +44,9 @@ def build_presentation(items: list[dict], seed: str) -> tuple[list[dict], dict[s
     random.Random(seed).shuffle(shuffled)
 
     presented = []
-    for item in shuffled:
+    for canonical in shuffled:
+        # Разметчик видит только stimulus: authoring/design notes v2 сюда не попадают.
+        item = stimulus_only(canonical)
         oid = inverse[item["item_id"]]
         messages = []
         msg_map = {}
@@ -52,7 +55,7 @@ def build_presentation(items: list[dict], seed: str) -> tuple[list[dict], dict[s
             msg_map[message["message_id"]] = new_id
             messages.append({"message_id": new_id, "author": message["author"], "text": message["text"]})
         presented.append({
-            "schema_version": "rf.pilot-item.v1",
+            "schema_version": SCHEMA_V1,
             "item_id": oid,
             "language": item["language"],
             "messages": messages,
@@ -63,6 +66,8 @@ def build_presentation(items: list[dict], seed: str) -> tuple[list[dict], dict[s
 
 def assert_no_canonical_leak(presented: list[dict], canonical_ids: set[str]) -> None:
     for item in presented:
+        if "authoring" in item or item.get("schema_version") != SCHEMA_V1:
+            raise ValueError(f"presentation item '{item.get('item_id')}' is not a plain v1 stimulus projection")
         ids = [item["item_id"], item["target_message_id"]] + [m["message_id"] for m in item["messages"]]
         for value in ids:
             for canonical in canonical_ids:
