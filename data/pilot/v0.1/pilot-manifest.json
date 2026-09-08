@@ -1,0 +1,89 @@
+{
+  "schema_version": "rf.pilot-manifest.v1",
+  "pilot_id": "annotation-pilot-v0.1",
+  "ontology_version": "behavior-v0.1",
+  "ontology_sha256": "3c067acc1685c42f6f26b6581c10e56bb806ab8137a517dca0d77f01ac5a67c3",
+  "unit_of_analysis": "utterance",
+  "active_labels": [
+    "B.BLAME_CRITICISM",
+    "B.PRESSURE_FOR_CHANGE",
+    "B.VALIDATION",
+    "B.REPAIR_ATTEMPT",
+    "B.AVOIDANCE_TOPIC_SHIFT"
+  ],
+  "deferred_labels": {
+    "B.WITHDRAWAL": {
+      "pilot_status": "deferred_until_exchange_segmentation",
+      "estimability_status": "not_applicable",
+      "reason": "allowed_units [turn, exchange] не входят в utterance-only sampling frame; это 'не искали', а не 'не нашли'"
+    }
+  },
+  "items_file": "items.jsonl",
+  "strata_file": "strata.json",
+  "responses_dir": "responses/",
+  "annotators": [
+    "annotator-1",
+    "annotator-2"
+  ],
+  "instructions": "docs/pilot-v0-instructions.md",
+  "blind_rules": [
+    "разметчик работает ТОЛЬКО со своим файлом presentation/annotator-N.jsonl (opaque ids, свой порядок)",
+    "разметчики не видят strata.json, canonical items.jsonl и presentation-map/",
+    "разметчики не видят слои друг друга до сдачи обоих",
+    "обсуждение items запрещено до заморозки обоих слоёв",
+    "после выдачи пакета reshuffle presentation запрещён"
+  ],
+  "presentation": {
+    "annotator-1": {
+      "seed": "rf-pilot-v0.1/annotator-1/2026-09-08"
+    },
+    "annotator-2": {
+      "seed": "rf-pilot-v0.1/annotator-2/2026-09-08"
+    }
+  },
+  "eligibility_criteria": [
+    "did_not_author_ontology",
+    "fluent_ru",
+    "fluent_en",
+    "has_not_seen_items"
+  ],
+  "replaces": {
+    "pc-02": {
+      "new_item_id": "pc-21",
+      "retired": {
+        "package_id": "annotation-pilot-v0",
+        "item_id": "pc-02",
+        "content_sha256": "7ffd50754014cfe82aac105eb76448b08878ff44497a5914f8357ec3f6e41100"
+      },
+      "accepted_candidate": "pc-02-d2",
+      "inherits_design_intent": true,
+      "accepted": "2026-09-08"
+    },
+    "pc-05": {
+      "new_item_id": "pc-22",
+      "retired": {
+        "package_id": "annotation-pilot-v0",
+        "item_id": "pc-05",
+        "content_sha256": "418fac13784ea132f72e352d015f75c00dc690628145bd516e3d8cc0f6835f3f"
+      },
+      "accepted_candidate": "pc-05-d2",
+      "inherits_design_intent": true,
+      "accepted": "2026-09-08"
+    }
+  },
+  "build": {
+    "schema_version": "rf.pilot-build.v1",
+    "tool": "metrics.materialize",
+    "contract": "docs/pilot-v0.1-cutover-contract.md",
+    "build_date": "2026-09-08",
+    "spec_file": "build-spec.json",
+    "spec_sha256": "f682281bb031195af14bd64ed16677b683bee21dd68646ef6439526bfd11e376",
+    "source_package": {
+      "pilot_id": "annotation-pilot-v0",
+      "dir": "../v0",
+      "items_sha256": "9d1a2690dc95e488a0cd204ae71f509e37d5d3b4d7237cce872ec55d17361bb2"
+    },
+    "candidates_file": "../naturalness-ab/v0-flagged-donor/candidates.json",
+    "candidates_sha256": "df3eb3eb69b4b6d3980ba131ca3922850beaf1aa93e69064a592fe07e3f8db72"
+  }
+}

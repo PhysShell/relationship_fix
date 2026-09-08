@@ -12,6 +12,8 @@
 
 ## Преемник
 
-`annotation-pilot-v0.1` собирается после blinded human A/B по flagged items (`data/pilot/naturalness-ab/v0-flagged/`) как **новый immutable package**: свой `items.jsonl` в схеме `rf.pilot-item.v2` (с блоком `authoring`: origin, revision_reason, accepted_via, parent_item_version → сюда), свой hash, свой manifest, заново сгенерированные presentation-слои. Правила авторинга для него: [docs/item-authoring-v0.1.md](../../../docs/item-authoring-v0.1.md).
+**Собран 2026-09-08:** [`annotation-pilot-v0.1`](../v0.1/README.md) — из этого frozen пакета (carried_over с hash-lineage сюда) и accepted donor-grounded candidates (13/13 facilitator verdicts; human A/B не проводился — путь без людей, см. gate §11). Собран `metrics.materialize` по [cutover contract](../../../docs/pilot-v0.1-cutover-contract.md), запечатан, **не выдан**. pc-02 и pc-05 retired (заменены pc-21, pc-22 — `replaces` в manifest v0.1). Этот каталог остаётся frozen и non-issuable.
+
+Исходное решение 2026-09-07: `annotation-pilot-v0.1` собирается как **новый immutable package**: свой `items.jsonl` в схеме `rf.pilot-item.v2` (с блоком `authoring`: origin, revision_reason, accepted_via, parent_item_version → сюда), свой hash, свой manifest, заново сгенерированные presentation-слои. Правила авторинга для него: [docs/item-authoring-v0.1.md](../../../docs/item-authoring-v0.1.md).
 
 Порядок работ (решение 2026-09-07): freeze v0 → provenance-схема → чистка утечки примеров в v0.2-candidate → кандидаты minimal edit → human A/B → ручной accept/reject → сборка v0.1 → pilot → кросс-табы `unnatural_example` × disagreement → автоматизация только после достаточного числа adjudicated правок.
