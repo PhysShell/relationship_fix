@@ -56,7 +56,7 @@ donor fragments (RESD, MIT) → interaction skeleton → target construct на �
 
 - Статус: 13/13 donor candidates accepted · 0 pending facilitator verdicts · **v0.1 not built** · human naturalness evidence: none · next gate: explicit v0.1 build/cutover. Принятие записано только здесь, корпус не изменён. Сборка v0.1 — отдельная работа с отдельным «го», не «собрать как очевидно»: четыре replacement, retirement, новые ids, lineage, dogfood/Catalog cutover — достаточно мест, где можно аккуратно соврать самому себе.
 - Корпус, пакеты и generation 1 не тронуты. Кода нет.
-- Сборка v0.1 (после 13/13): новые item ids для четырёх replacement (старые ids не переиспользуются — retired), `parent_item_version` для revision из `at_build` (content hash родителя посчитан из frozen v0 для pc-*; dg-* живут в dogfood yaml, не в v2-пакете — lineage там cutover work), `accepted_via: facilitator`, `revision_reason: naturalness`, `validate_items` как гейт, presentation перегенерировать.
+- Сборка v0.1 — по [docs/pilot-v0.1-cutover-contract.md](../../../../docs/pilot-v0.1-cutover-contract.md): retirement в manifest (`replaces`), fresh ids, design intent facilitator-only, dogfood provenance sidecar (не v2 lineage), accepted candidate как source of truth и exact equality accepted→built как gate; `at_build` у каждого принятого кандидата — вход для materialize. Три открытых пункта названы в контракте.
 - Cutover work (не сейчас): `build` должен пропускать `kind=replacement`, если A/B на donor-ревизиях когда-нибудь понадобится; представление retired status и связи «новый original ← retired item» в схеме item (в `rf.pilot-item.v2` такого поля нет).
 
 ## Provenance принятого кандидата (при сборке v0.1)
