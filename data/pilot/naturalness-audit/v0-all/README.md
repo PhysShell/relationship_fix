@@ -45,6 +45,22 @@
 
 Аудитор не должен быть автором items и не должен был видеть их раньше.
 
+## Как выдать человеку, который не знает, что такое GitHub
+
+Пакет JSON человеку не показывается. Из него делается один .xlsx на человека (лист «Инструкция» простыми словами + лист «Оценка» с выпадающими списками; жёлтые ячейки — единственное, что заполняется), а возвращённый .xlsx превращается обратно в canonical JSONL:
+
+```
+uv run --group human-interface python -m metrics.xlsx_interface render  --kind audit --dir ../../data/pilot/naturalness-audit/v0-all
+uv run --group human-interface python -m metrics.xlsx_interface collect --kind audit --dir ../../data/pilot/naturalness-audit/v0-all --person auditor-1 --returned ~/Downloads/auditor-1.xlsx
+```
+
+- `xlsx/auditor-N.xlsx` — derived artifact; source of truth — `packets/auditor-N.json`. В книге спрятаны sha256 пакета, схема и opaque ids; canonical ids, strata и флаги critic-1 туда не попадают, их нет и в пакете.
+- Один файл = один человек. Файл, отправленный человеку, не перерисовывается: его sha256 записывается в issuance record; `--force` — только до выдачи.
+- Инструкция человеку в трёх словах: «откройте файл, выберите ответы в жёлтых ячейках, сохраните и пришлите обратно».
+- `collect` отказывает, если книга сделана из другого пакета, выдана другому человеку, если изменены заголовки или текст переписок, удалены или продублированы строки, значение не из списка, «неприменимо» стоит не там, где положено. Только после чистой проверки пишется `responses/auditor-N.jsonl`; возвращённый файл копируется как получен в `responses/returned/` и получает sha256. Существующий JSONL не перезаписывается никогда; вторая версия ответов с другим sha256 не принимается.
+- Дальше как раньше: `metrics.naturalness_audit report`.
+- openpyxl разрешён только в этом слое (dependency group `human-interface` в `pyproject.toml`); core tooling его не видит.
+
 ## Фасилитатору
 
 ```

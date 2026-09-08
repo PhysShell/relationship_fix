@@ -43,6 +43,22 @@ uv run python -m metrics.naturalness_ab check --ab-dir ../../data/pilot/naturaln
 
 `check` сверяет оригиналы pc-*/pn-* с `items.jsonl` (sha256 запинен в `ab-manifest.json` → `sources`), требует у каждого кандидата `checker`-заметку, у каждого vetoed — причину и пункт чек-листа, и не даёт одному id жить в двух списках. `build` отказывает, пока `check` не чист, поэтому из записи всегда видно: A/B сравнивал только admissible candidates, а не весь модельный выхлоп. Оригиналы dg-* `check` сверить не может (источник — YAML), это отмечается в выводе как note.
 
+## Как выдать человеку, который не знает, что такое GitHub
+
+Пакет JSON человеку не показывается. Из него делается один .xlsx на человека (лист «Инструкция» простыми словами + лист «Оценка» с выпадающими списками; жёлтые ячейки — единственное, что заполняется), а возвращённый .xlsx превращается обратно в canonical JSONL:
+
+```
+uv run --group human-interface python -m metrics.xlsx_interface render  --kind ab --dir ../../data/pilot/naturalness-ab/v0-flagged
+uv run --group human-interface python -m metrics.xlsx_interface collect --kind ab --dir ../../data/pilot/naturalness-ab/v0-flagged --person rater-1 --returned ~/Downloads/rater-1.xlsx
+```
+
+- `xlsx/rater-N.xlsx` — derived artifact; source of truth — `packets/rater-N.json`. В книге спрятаны sha256 пакета, схема и opaque ids; item ids, флаги и сторона оригинала туда не попадают, их нет и в пакете.
+- Один файл = один человек. Файл, отправленный человеку, не перерисовывается: его sha256 записывается в issuance record; `--force` — только до выдачи.
+- Инструкция человеку в трёх словах: «откройте файл, выберите ответы в жёлтых ячейках, сохраните и пришлите обратно».
+- `collect` отказывает, если книга сделана из другого пакета, выдана другому человеку, если изменены заголовки или текст переписок, удалены или продублированы строки, значение не из списка, ответ пуст. Только после чистой проверки пишется `responses/rater-N.jsonl`; возвращённый файл копируется как получен в `responses/returned/` и получает sha256. Существующий JSONL не перезаписывается никогда; вторая версия ответов с другим sha256 не принимается.
+- Дальше как раньше: `metrics.naturalness_ab score`.
+- openpyxl разрешён только в этом слое (dependency group `human-interface` в `pyproject.toml`); core tooling его не видит.
+
 ## Фасилитатору
 
 ```

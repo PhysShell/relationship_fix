@@ -115,7 +115,8 @@ data/pilot/naturalness-audit/     слепой аудит всех 46 items: с�
 research/python/                  uv-проект (stdlib-only): agreement (α, CI, positive agreement, confusion pairs,
                                   estimability, unnatural_example × disagreement), validate_items (+ lineage
                                   rf.pilot-item.v2), presentation, naturalness_ab, naturalness_audit;
-                                  гейтящие числа — только отсюда
+                                  xlsx_interface — дверь для испытуемого (packet → .xlsx → JSONL), единственное
+                                  место с openpyxl (dependency group human-interface); гейтящие числа — только отсюда
 ```
 
 Запуск (нужен .NET 10 SDK):
