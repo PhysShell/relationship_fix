@@ -7,7 +7,7 @@
   "donor_report": "donor-report.md",
   "candidate_origin_note": "Все кандидаты — llm_assisted, method external_dialogue_seeded: из донорских реплик RESD (MIT) взята только структура взаимодействия, текст не копируется (source_text_copied=false, проверено n-gram сверкой в donor-report.md). Порядок: donor → skeleton → construct → candidate → V1–V10, восстановим из provenance каждого кандидата.",
   "kind_note": "kind=revision — факты и сюжет сохранены; при принятии это revision с parent lineage (accepted_via по тому, как принято: blinded_ab, если был A/B; facilitator — если принят фасилитатором без A/B, с записанной причиной). kind=replacement — сюжет/факты новые: при сборке v0.1 это новый original item с унаследованным design intent (authoring.origin=llm_assisted, accepted_via=facilitator, parent_item_version=null), старый item retired; притворяться revision запрещено. Для kind=replacement V3/V4 применяются к observable actions, которых требует design intent, а не к фактам и сюжету retired original (решение 2026-09-08).",
-  "admissibility_note": "Кандидат находится ровно в одном из трёх списков: candidates (допущен в veto-review), vetoed (снят фасилитатором до выдачи по пункту veto_checklist, с причиной) или rejected. Ничего не принято автоматически; корпус и пакеты не изменены. Запись `facilitator_review` у кандидата — след review, не acceptance.",
+  "admissibility_note": "Кандидат находится ровно в одном из трёх списков: candidates (допущен в veto-review), vetoed (снят фасилитатором до выдачи по пункту veto_checklist, с причиной) или rejected. Ничего не принято автоматически; принятие — только явный facilitator verdict в facilitator_review (outcome=accepted, причина, at_build); корпус и пакеты не изменены. Запись `facilitator_review` у кандидата — след review, не acceptance.",
   "veto_checklist": [
     {
       "id": "V1",
@@ -158,9 +158,21 @@
           "v1_v10": "V1 ✓ настойчивое требование изменить поведение впредь: императив к B, нажим сужением срока, «чтобы это было в последний раз»; оценки личности нет; V2 ✓ A требует от B во втором лице — не совместное предложение; V3 ✓ (replacement: против design intent, не против сюжета retired original) — нет извинения, обвинения, обобщения, объяснения; V4 ✓ span требования «Сделай второй комплект и оставь мне»; V5 ✓ уровень нажима сопоставим с «Каждый раз, без исключений»; V6 ✓ A ж. («замёрзла» в контексте), B м. («унёс»); V7 ✓ 4 сообщения B-A-B-A, B отвечает на A; V8 ✓ примеры онтологии не использованы («сколько можно», «я серьёзно»); V9 n/a; V10 ✓ span цитируем",
           "checker": "Replacement, второй заход после вето d1 (V1/V2): требование адресовано B во втором лице; сюжет ключей сохранён — вето касалось направления, не сюжета. Для review: «чтобы это было в последний раз» — маркер нажима на поведение впредь, не оценка личности; если читается как ультиматум, это всё ещё inclusion criterion B.PRESSURE_FOR_CHANGE. Путь при принятии: новый original в v0.1, старый pc-02 retired.",
           "facilitator_review": {
-            "date": null,
-            "outcome": "not_reviewed",
-            "note": "второй заход после вето d1; ждёт review фасилитатора по V1–V10"
+            "date": "2026-09-08",
+            "outcome": "accepted",
+            "by": "facilitator",
+            "reason": "Требование теперь действительно адресовано B во втором лице, direction восстановлен. «Сделай второй комплект… Завтра, не «на неделе»» сохраняет pressure-for-change без характеристики личности.",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "parent_item_version": null,
+              "new_item_id": "assign at build — retired id не переиспользуется",
+              "retires": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pc-02",
+                "content_sha256": "7ffd50754014cfe82aac105eb76448b08878ff44497a5914f8357ec3f6e41100"
+              },
+              "design_intent": "Target: настойчивое требование изменить поведение впредь, без оценки личности. Род: A женский, B мужской."
+            }
           },
           "provenance": {
             "origin": "llm_assisted",
@@ -331,9 +343,21 @@
           "v1_v10": "V1 ✓ признание переживания («Понимаю, тема и так больная» — перефраз того, что сообщает A) + ответственность и извинение («Зря сказал, не моё было рассказывать. Извини.»); V2 ✓ B → A; V3 ✓ (replacement: против design intent) — нет объяснения причины, нет «но», нет состояния, которого A не сообщает; V4 ✓ оба span'а на месте, цитируемы по отдельности; V5 ✓; V6 ✓ A без рода («тошно», «при них» — маркеров нет), B м. («сказал»); V7 ✓ 2 сообщения, B отвечает на A; V8 ✓ «Слышу тебя» нет; «понимаю» — обычное слово, не формула отражения; V9 n/a; V10 ✓",
           "checker": "Replacement, второй заход после вето d1 (V3/V5): признаваемое состояние теперь сообщено самим A, B его только перефразирует; объяснения причины нет. Граница validation/repair: обе половины наблюдаемы по отдельности. Замечание для review: «Мне и так от этой темы тошно» — разговорное называние состояния, не отчёт в регистре «мне было неприятно» (флаг EXPLICIT_EMOTION_REPORT оригинала); если фасилитатор считает и это отчётом — альтернатива без называния состояния лишает B того, что можно признать.",
           "facilitator_review": {
-            "date": null,
-            "outcome": "not_reviewed",
-            "note": "второй заход после вето d1; ждёт review фасилитатора по V1–V10"
+            "date": "2026-09-08",
+            "outcome": "accepted",
+            "by": "facilitator",
+            "reason": "A сам сообщает состояние, B его не выдумывает; validation + responsibility + apology остаются отдельными наблюдаемыми действиями. Объяснение причины из d1 убрано.",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "parent_item_version": null,
+              "new_item_id": "assign at build — retired id не переиспользуется",
+              "retires": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pc-05",
+                "content_sha256": "418fac13784ea132f72e352d015f75c00dc690628145bd516e3d8cc0f6835f3f"
+              },
+              "design_intent": "Target: признание переживания партнёра И извинение/ответственность в одном сообщении (граница validation/repair). Род A не установлен — не вводить; B мужской."
+            }
           },
           "provenance": {
             "origin": "llm_assisted",
@@ -493,8 +517,20 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "no_veto",
-            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
+            "outcome": "accepted",
+            "by": "facilitator",
+            "converted_from": "no_veto (проход 1)",
+            "reason": "проход 1: замечаний по V1–V10 нет; проход 2: переведено в явное facilitator acceptance при согласии checker'а",
+            "checker_concurrence": "повторная проверка по V1–V10 (см. v1_v10): изменена только контекстная реплика, факт тот же, эмоция не названа, род не введён, target не тронут — нарушений нет",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pc-06",
+                "content_sha256": "dfb6dc7d3de12317eb8ef09b48b8d3c3f084ee36bd678e9c9923b20ad704110e"
+              }
+            }
           }
         }
       ],
@@ -583,9 +619,19 @@
           "v1_v10": "V1 ✓ отсрочка с конкретным возвратом («В восемь освобожусь, сядем и обсудим»); V2 ✓; V3 ✓; V4 ✓ заверение сохранено в короткой форме («Я помню.») — по вето d1; V5 ✓; V6 ✓ род B не введён («освобожусь», «помню»; «не забыл» отвергнут — маркер рода); V7 ✓; V8 ✓; V9 n/a; V10 ✓",
           "checker": "Revision, второй заход после вето d1 (V4): «Я помню.» возвращает действие заверения без мета-хвоста. «Не забыл» не использован — ввёл бы род B.",
           "facilitator_review": {
-            "date": null,
-            "outcome": "not_reviewed",
-            "note": "второй заход после вето d1; ждёт review фасилитатора по V1–V10"
+            "date": "2026-09-08",
+            "outcome": "accepted",
+            "by": "facilitator",
+            "reason": "Конкретный возврат сохранён, «Я помню» возвращает потерянный acknowledgement и не вводит род. Аккуратная revision.",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pc-09",
+                "content_sha256": "a776ec9c45a78a764f179eb54d272f48103b9fd187e2a00826f5a8bb5f7fae6e"
+              }
+            }
           },
           "provenance": {
             "origin": "llm_assisted",
@@ -689,8 +735,8 @@
         {
           "source_ref": "02_anger_sadness a_054",
           "text": "Два дня я тебе не дам. Я тебе дам время до завтра. Сделаешь сегодня, если надо, сверхурочно. Иначе тебе не видать работы.",
-          "why": "нажим через контраст «не X, а Y»; структура переносится на EN, текст нет",
-          "chosen": true
+          "why": "контраст «не X, а Y» нёс d1/d2 и оба раза давал выдуманный или новый contract (вето); d3 без контраста",
+          "chosen": false
         },
         {
           "source_ref": "31_fear_enthusiasm_f_140",
@@ -717,10 +763,10 @@
           "chosen": false
         }
       ],
-      "skeleton": "[реакция на одностороннее изменение] → [требование как механизм на следующий раз (d31 f_140), нажим контрастом «не X, а Y» (d02 a_054), настойчивость «каждый раз… хватит» (d10 a_081)]; донор русский, переносится только структура; контекст: B предупредил(а) до ухода — ничего про «уже там»",
+      "skeleton": "[реакция на одностороннее изменение: короткий маркер приёма] → [требование как механизм на следующий раз (d31 f_140) с исходным требуемым поведением: сообщать, когда планы меняются] + [настойчивость «каждый раз… хватит» (d10 a_081)]; без контраста «не X, а Y» (вето d1/d2); донор русский, переносится только структура",
       "candidates": [
         {
-          "candidate_id": "pc-12-d2",
+          "candidate_id": "pc-12-d3",
           "origin": "llm_assisted",
           "kind": "revision",
           "scope": "target only",
@@ -731,17 +777,17 @@
             },
             {
               "author": "a",
-              "text": "ok. but next time you tell me the day before, not the day of. every time, I mean it"
+              "text": "ok but next time text me when plans change. every time. I mean it"
             }
           ],
-          "inherited": "contrast «не X, а Y» (d02 a_054); mechanism for next time (d31 f_140); insistence «every time … enough» (d10 a_081)",
-          "changed": "relative to d1: no invented context («already there» removed) — the contrast is now «the day before, not the day of», which B's own message entails (plans for after work today); insistence restored to the original's level («every time, I mean it»). Relative to the original: no «I need you to», no «start texting me» (B did text), lowercase as in EN natural items",
-          "v1_v10": "V1 ✓ demand for a behaviour change («next time you tell me the day before, not the day of») + insistence («every time, I mean it»), no evaluation; V2 ✓; V3 ✓ nothing invented: «the day of» is entailed by B's message; V4 ✓ demand span and insistence span both present; V5 ✓ kept at the original's level on purpose after the d1 veto («Every time. I'm serious.» ≈ «every time, I mean it»); V6 ✓ genders unspecified; V7 ✓ A replies to B's announcement; B has not left — nothing about arrival; V8 ✓ ontology EN example («I need you to actually start calling…») not reused; V9 n/a; V10 ✓",
-          "checker": "Revision, second pass after the d1 veto (V7/V3/V5): consistent with the context (B announced before going), insistence kept. Trade-off named for review: the tail «every time, I mean it» keeps the original's intensity and is the part closest to the SCRIPTED_DEMAND pattern; the donor-grounded part is the contrast «the day before, not the day of». Latent point inherited from the original: B did text this time, so the demanded change is «earlier», not «at all».",
+          "inherited": "shape only: [ok] + mechanism for next time (d31 f_140) + insistence tail (d10 a_081)",
+          "changed": "relative to d2: the demanded behaviour is the original's again — «text me when plans change» (no «the day before», no contrast); insistence kept. Relative to the original: no «I need you to start», lowercase as in EN natural items. «when plans change» (general standing rule) rather than «when the plan changes» (this one plan), because the original's demand is general.",
+          "v1_v10": "V1 ✓ insistent demand for a behaviour change («next time text me when plans change» + «every time. I mean it»), no evaluation; V2 ✓; V3 ✓ nothing added — «ok» is a discourse marker of receipt, not consent (present in d1/d2 without objection); V4 ✓ the original's demanded behaviour restored verbatim in meaning; V5 ✓ same level («Every time. I'm serious.» ≈ «every time. I mean it»); V6 ✓ genders unspecified; V7 ✓ reply to the announcement; the latent point that B did text this time is inherited from the original and kept on the facilitator's verdict; V8 ✓ ontology EN example («I need you to actually start calling…») not reused; «every time» shared with it as in the original; V9 n/a; V10 ✓ span «next time text me when plans change»",
+          "checker": "Revision, third pass. Honest note: lexically this is a minimal edit of the original; the donor's contribution is the shape only (ok + next-time mechanism + insistence tail), so provenance carries method_note. Facilitator's own line was «text me when the plan changes»; «plans change» chosen because the demand is a standing rule, as in the original — if the facilitator prefers the singular, that is a lexical veto, not a construct issue.",
           "facilitator_review": {
             "date": null,
             "outcome": "not_reviewed",
-            "note": "второй заход после вето d1; ждёт review фасилитатора по V1–V10"
+            "note": "третий/второй заход после вето; ждёт verdict фасилитатора по V1–V10"
           },
           "provenance": {
             "origin": "llm_assisted",
@@ -750,7 +796,6 @@
             "source_corpus": "Aniemore/resd_annotated",
             "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
             "source_ref": [
-              "02_anger_sadness a_054",
               "31_fear_enthusiasm_f_140",
               "10_happiness_anger a_081"
             ],
@@ -762,7 +807,8 @@
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
             "note": "donor language ru, item language en: interaction structure only",
-            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered"
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered",
+            "method_note": "thin: donor constrains shape only; text is a minimal edit of the original (recorded honestly, method unchanged)"
           }
         }
       ],
@@ -818,6 +864,59 @@
             "outcome": "vetoed",
             "note": "переписан как pc-12-d2"
           }
+        },
+        {
+          "candidate_id": "pc-12-d2",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Change of plans, I'm going to Max's after work."
+            },
+            {
+              "author": "a",
+              "text": "ok. but next time you tell me the day before, not the day of. every time, I mean it"
+            }
+          ],
+          "inherited": "contrast «не X, а Y» (d02 a_054); mechanism for next time (d31 f_140); insistence «every time … enough» (d10 a_081)",
+          "changed": "relative to d1: no invented context («already there» removed) — the contrast is now «the day before, not the day of», which B's own message entails (plans for after work today); insistence restored to the original's level («every time, I mean it»). Relative to the original: no «I need you to», no «start texting me» (B did text), lowercase as in EN natural items",
+          "v1_v10": "V1 ✓ demand for a behaviour change («next time you tell me the day before, not the day of») + insistence («every time, I mean it»), no evaluation; V2 ✓; V3 ✓ nothing invented: «the day of» is entailed by B's message; V4 ✓ demand span and insistence span both present; V5 ✓ kept at the original's level on purpose after the d1 veto («Every time. I'm serious.» ≈ «every time, I mean it»); V6 ✓ genders unspecified; V7 ✓ A replies to B's announcement; B has not left — nothing about arrival; V8 ✓ ontology EN example («I need you to actually start calling…») not reused; V9 n/a; V10 ✓",
+          "checker": "Revision, second pass after the d1 veto (V7/V3/V5): consistent with the context (B announced before going), insistence kept. Trade-off named for review: the tail «every time, I mean it» keeps the original's intensity and is the part closest to the SCRIPTED_DEMAND pattern; the donor-grounded part is the contrast «the day before, not the day of». Latent point inherited from the original: B did text this time, so the demanded change is «earlier», not «at all».",
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "vetoed",
+            "note": "переписан как pc-12-d3"
+          },
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "02_anger_sadness a_054",
+              "31_fear_enthusiasm_f_140",
+              "10_happiness_anger a_081"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "note": "donor language ru, item language en: interaction structure only",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered"
+          },
+          "checklist": [
+            "V3",
+            "V4"
+          ],
+          "reason": "Новый текст меняет само требуемое поведение: original требует сообщать, когда планы меняются, d2 требует сообщать за день до события — новый temporal contract, которого original не содержал (V3/V4, возможно V5). Планы людям свойственно менять не по утверждённому за сутки регламенту.",
+          "vetoed_by": "facilitator",
+          "vetoed_at": "2026-09-08"
         }
       ]
     },
@@ -906,8 +1005,18 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "not_reviewed",
-            "note": "в review 2026-09-08 явного вердикта нет; проверить по V1–V10 и принять/отклонить фасилитатором с записанной причиной."
+            "outcome": "accepted",
+            "by": "facilitator",
+            "reason": "«that's rough / I'd have been fuming» даёт содержательное acknowledgement без apology/explanation. «fuming» сильнее «upset», но это допустимая одна ступень V5, а не смена construct.",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pc-13",
+                "content_sha256": "3029a02abbe6b4a3f8d32c896f3494838b70d69b5967b1280303f0873dead086"
+              }
+            }
           }
         }
       ],
@@ -997,8 +1106,20 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "no_veto",
-            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
+            "outcome": "accepted",
+            "by": "facilitator",
+            "converted_from": "no_veto (проход 1)",
+            "reason": "проход 1: замечаний по V1–V10 нет; проход 2: переведено в явное facilitator acceptance при согласии checker'а",
+            "checker_concurrence": "повторная проверка по V1–V10: контекстная реплика без отчёта-формулы, факты и род сохранены, target не тронут — нарушений нет",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pc-16",
+                "content_sha256": "b961cf45f0fe52b6fabafb0701ba2db1d8e822e7b1282633d90c8a49e3da6406"
+              }
+            }
           }
         }
       ],
@@ -1031,8 +1152,8 @@
         {
           "source_ref": "31_fear_enthusiasm_f_050",
           "text": "Я не знаю, с кем ты была, но я знаю, что со мной было. Я твой телефон оборвала. Что с твоим телефоном?",
-          "why": "претензия через то, что делал говорящий, эмоция не названа",
-          "chosen": true
+          "why": "скелет d1 («что я делаю в это время») — требовал факта, которого в original нет (вето V3); d2 на нём не строится",
+          "chosen": false
         },
         {
           "source_ref": "42_anger_fear_a_040",
@@ -1045,10 +1166,68 @@
           "text": "Какая тебе разница, что я хочу? Я вообще замужем. Ты мне платье испортил на выпускной, помнишь?",
           "why": "уже использован для pc-06 — один скелет дважды не берём",
           "chosen": false
+        },
+        {
+          "source_ref": "14_anger_fear_a_030",
+          "text": "Да как так можно было ошибиться? Вы, по-моему, полностью перепутали заказы. Это вообще недопустимо. Я рассчитывала, что сейчас мне придут продукты. На борщ!",
+          "why": "претензия через риторический вопрос о поступке («как так можно было…») и оценку поступка, не личности; эмоция не названа",
+          "chosen": true
+        },
+        {
+          "source_ref": "42_anger_fear_a_090",
+          "text": "Ещё и больной, наверное, да. Пьёт таблетки. Ну вы вообще следите за своим ребёнком! Это нормально. Мне спать нужно! Мне нужен нормальный, полноценный отдых! Я весь день торчу на работе! Я очень устаю там!",
+          "why": "саркастическое «Это нормально.» как оценка поступка внутри претензии; сам донор — длинная тирада с требованиями, берётся только маркер",
+          "chosen": true
         }
       ],
-      "skeleton": "[что ты сделал, конкретно] + [что я в это время делаю, настоящее время, конкретно]; эмоция подразумевается",
+      "skeleton": "[что ты сделал, конкретно, факты original] + [риторический вопрос-оценка поступка, не личности (d14 a_030, d42 a_090)]; эмоция подразумевается, не названа; никаких фактов сверх original (вето d1)",
       "candidates": [
+        {
+          "candidate_id": "pc-17-d2",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "context line only (target «Понимаю.» unchanged)",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ты отменил встречу и даже не позвонил. Ну нормально вообще?"
+            },
+            {
+              "author": "b",
+              "text": "Понимаю."
+            }
+          ],
+          "inherited": "претензия = факт поступка + риторический вопрос-оценка поступка (d14 a_030); маркер «нормально?» как оценка поступка (d42 a_090)",
+          "changed": "относительно d1: выдуманный час и «я там» убраны; «встречу» возвращено, чтобы не терять факт контекста original. Относительно original: без «Меня задело, что» (отчёт об эмоции); обида выражена риторическим вопросом",
+          "v1_v10": "V1–V5 ✓ target «Понимаю.» не тронут; контекст: фактов сверх original нет (отменил встречу, не позвонил — оба из original); V6 ✓ A без рода (в реплике нет глаголов прошедшего времени от лица A), B м. («отменил», «позвонил»); V7 ⚠ мягко: «Понимаю.» после риторического вопроса читается как уклончивый ответ — пустота реплики и есть смысл item'а, но adjacency чуть слабее, чем после утверждения original; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Revision, второй заход после вето d1 (V3). Структура — предложенная фасилитатором, пропущена через edit_constraint: «A предъявляет обиду» — да, без emotion-report, без нового факта, без рода A; «встречу» сохранено. Два мягких замечания для verdict: (1) V7 — риторический вопрос чуть ослабляет adjacency неизменного «Понимаю.»; (2) «нормально вообще?» сдвигает обиду к возмущению (оценка поступка, не личности — не BLAME_CRITICISM). Запасной вариант без обоих: «Ты отменил встречу и даже не позвонил. Даже не позвонил.» (повтор как маркер обиды, d31 f_120 «Ну какой контроль? Ну какой контроль…»).",
+          "facilitator_review": {
+            "date": null,
+            "outcome": "not_reviewed",
+            "note": "третий/второй заход после вето; ждёт verdict фасилитатора по V1–V10"
+          },
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "14_anger_fear_a_030",
+              "42_anger_fear_a_090"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered"
+          }
+        }
+      ],
+      "vetoed": [
         {
           "candidate_id": "pc-17-d1",
           "origin": "llm_assisted",
@@ -1088,12 +1267,17 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "not_reviewed",
-            "note": "в review 2026-09-08 явного вердикта нет; проверить по V1–V10 и принять/отклонить фасилитатором с записанной причиной."
-          }
+            "outcome": "vetoed",
+            "note": "переписан как pc-17-d2"
+          },
+          "checklist": [
+            "V3"
+          ],
+          "reason": "Вводится новый факт: «А я там час торчу». В original нет ни часа ожидания на месте, ни вообще факта, что A уже находился там. Для revision это чистый V3.",
+          "vetoed_by": "facilitator",
+          "vetoed_at": "2026-09-08"
         }
-      ],
-      "vetoed": []
+      ]
     },
     {
       "item_id": "pn-10",
@@ -1179,8 +1363,20 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "no_veto",
-            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
+            "outcome": "accepted",
+            "by": "facilitator",
+            "converted_from": "no_veto (проход 1)",
+            "reason": "проход 1: замечаний по V1–V10 нет; проход 2: переведено в явное facilitator acceptance при согласии checker'а",
+            "checker_concurrence": "natural-страта: правка чисто лексическая (V9), construct и факты те же; правило 6 authoring guide дополнено — acceptance без A/B по решениям 2026-09-08",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pn-10",
+                "content_sha256": "4f7e610eb549790356c19eaaf28ef0cc89d233c750472e61e5aac327307fc2b6"
+              }
+            }
           }
         }
       ],
@@ -1271,8 +1467,23 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "no_veto",
-            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
+            "outcome": "accepted",
+            "by": "facilitator",
+            "converted_from": "no_veto (проход 1)",
+            "reason": "проход 1: замечаний по V1–V10 нет; проход 2: переведено в явное facilitator acceptance при согласии checker'а",
+            "checker_concurrence": "replacement: против design intent — обвинение через факт без обобщения, род A/B согласован внутри item (урок dg-04), нарушений нет",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "parent_item_version": null,
+              "new_item_id": "assign at build — retired id не переиспользуется",
+              "retires": {
+                "package_id": "annotation-ux-v6",
+                "item_id": "dg-04",
+                "content_sha256": "a64416bb8e55681eba91a724ecf8c4cd815b298e00857c32172c877246fa17cf",
+                "hash_basis": "canonical stimulus form over the pinned snapshot (yaml sha256 4b2cd0bfc2ba…); dogfood items не в v2-пакете — lineage для них cutover work"
+              },
+              "design_intent": "Target: конкретное причинное описание одного эпизода, без генерализации и без оценки личности. Род A женский."
+            }
           }
         }
       ],
@@ -1376,8 +1587,19 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "not_reviewed",
-            "note": "в review 2026-09-08 явного вердикта нет; проверить по V1–V10 и принять/отклонить фасилитатором с записанной причиной."
+            "outcome": "accepted",
+            "by": "facilitator",
+            "reason": "«Одной такое ждать — ещё бы не страшно. Там любой бы дёргался» остаётся substantive validation, а не голым «понятно»; род B не вводится.",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-ux-v6",
+                "item_id": "dg-05",
+                "content_sha256": "8587785c0f0a03f540bb0e95b0fc97685311e5490708ffa14edfc6d811affe1e",
+                "hash_basis": "canonical stimulus form over the pinned snapshot (yaml sha256 4b2cd0bfc2ba…); dogfood items не в v2-пакете — lineage для них cutover work"
+              }
+            }
           }
         }
       ],
@@ -1469,8 +1691,19 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "not_reviewed",
-            "note": "в review 2026-09-08 явного вердикта нет; проверить по V1–V10 и принять/отклонить фасилитатором с записанной причиной."
+            "outcome": "accepted",
+            "by": "facilitator",
+            "reason": "Пауза + конкретный возврат сохранены: «я пройдусь, в девять вернусь». Форма шероховатая, но это naturalness-вопрос, не veto. V1–V10 не нарушены.",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-ux-v6",
+                "item_id": "dg-06",
+                "content_sha256": "b358f1669a2fb1ef35cb5640c429104148d5b345759f162208be6e52f83aadf2",
+                "hash_basis": "canonical stimulus form over the pinned snapshot (yaml sha256 4b2cd0bfc2ba…); dogfood items не в v2-пакете — lineage для них cutover work"
+              }
+            }
           }
         }
       ],
@@ -1570,8 +1803,23 @@
           },
           "facilitator_review": {
             "date": "2026-09-08",
-            "outcome": "no_veto",
-            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
+            "outcome": "accepted",
+            "by": "facilitator",
+            "converted_from": "no_veto (проход 1)",
+            "reason": "проход 1: замечаний по V1–V10 нет; проход 2: переведено в явное facilitator acceptance при согласии checker'а",
+            "checker_concurrence": "replacement: против design intent — принятие ответственности без литерального «прости» (спорный пункт первого прохода закрыт verdict'ом), требование после «но» — pressure-for-change, не контратака",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "parent_item_version": null,
+              "new_item_id": "assign at build — retired id не переиспользуется",
+              "retires": {
+                "package_id": "annotation-ux-v6",
+                "item_id": "dg-09",
+                "content_sha256": "7544ea3772ec127bb8f7f6f56bd539161b22f75f496aa6a1b73ecd089f7a2eac",
+                "hash_basis": "canonical stimulus form over the pinned snapshot (yaml sha256 4b2cd0bfc2ba…); dogfood items не в v2-пакете — lineage для них cutover work"
+              },
+              "design_intent": "Target: извинение/ответственность И требование изменения в одном сообщении; «но» не должно читаться как контратака. Род A мужской, B женский."
+            }
           }
         }
       ],
@@ -1590,6 +1838,38 @@
         "Для kind=replacement V3/V4 применяются к observable actions, которых требует design intent, а не к конкретным фактам и сюжету retired original."
       ],
       "provenance_hygiene": "provenance.source_ref у admissible кандидатов приведён к правилу «только chosen=true» (donors_considered хранит и контрпримеры); тексты кандидатов не менялись: pc-13-d1, pc-16-d1, pc-17-d1, dg-04-d1, dg-05-d1, dg-06-d1"
+    },
+    {
+      "date": "2026-09-08",
+      "reviewer": "facilitator",
+      "pass": 2,
+      "scope": "8 кандидатов без verdict после прохода 1 + перевод 5 no_veto",
+      "accepted": [
+        "pc-02-d2",
+        "pc-05-d2",
+        "pc-09-d2",
+        "pc-13-d1",
+        "dg-05-d1",
+        "dg-06-d1",
+        "pc-06-d1",
+        "pc-16-d1",
+        "pn-10-d1",
+        "dg-04-d1",
+        "dg-09-d1"
+      ],
+      "vetoed": {
+        "pc-12-d2": "V3/V4 (возможно V5): новый temporal contract",
+        "pc-17-d1": "V3: новый факт «час торчу»"
+      },
+      "rewritten": {
+        "pc-12-d3": "исходное требуемое поведение возвращено",
+        "pc-17-d2": "обида без emotion-report и без нового факта"
+      },
+      "pending_verdict": [
+        "pc-12-d3",
+        "pc-17-d2"
+      ],
+      "note": "11/13 accepted. Принятие живёт здесь и в facilitator_review каждого кандидата (at_build — что писать в authoring при сборке v0.1). Корпус не изменён, v0.1 не собран: сборка после 13/13 verdicts и отдельного «го». Пять переводов из no_veto сделаны при согласии checker'а (checker_concurrence)."
     }
   ],
   "replacement_gate_note": "kind=replacement НЕ идёт через preregistered A/B acceptance gate (ab-manifest.acceptance_rule): тот gate сравнивает варианты одного и того же item; сравнение нового сюжета со старым измеряло бы предпочтение сюжета, а не правку. Путь replacement: donor → facilitator acceptance по V1–V10 против design intent (с записанной причиной) → новый original item в v0.1, старый retired → сигнал естественности только из pilot (`unnatural_example` × способ авторинга, exploratory). На этой генерации пакеты не собираются вовсе (см. ab_status).",
