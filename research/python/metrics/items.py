@@ -16,7 +16,11 @@ Facilitator-only: разметчику никогда не показывает�
     }
 
 Инварианты (проверяет authoring_issues):
-- parent_item_version = null  ⇔  accepted_via = original и revision_reason = null;
+- parent_item_version = null  ⇒  revision_reason = null и accepted_via ∈ {original, facilitator}
+  (original — текст без записанной приёмки; facilitator — новый original, принятый фасилитатором,
+  например replacement flagged item'а: чем он что заменяет — package-level `replaces` в manifest,
+  не поле item'а; изменение 2026-09-08, cutover contract);
+- accepted_via = facilitator без parent  ⇒  origin ≠ unrecorded (кто-то этот текст написал);
 - parent есть и revision_reason = null  ⇔  accepted_via = carried_over и content-hash
   ребёнка == content-hash родителя (текст перенесён без изменений);
 - parent есть и revision_reason задан  ⇒  accepted_via ∈ {blinded_ab, facilitator} и
@@ -43,8 +47,22 @@ ITEM_SCHEMAS = (SCHEMA_V1, SCHEMA_V2)
 ORIGINS = ("human", "llm_assisted", "unrecorded")
 REVISION_REASONS = ("naturalness", "adjacency", "grammar", "other")
 ACCEPTED_VIA = ("original", "carried_over", "blinded_ab", "facilitator")
+# Без parent допустимы только эти способы приёмки (replacement = новый original, принятый фасилитатором).
+ORIGINLESS_ACCEPTED_VIA = ("original", "facilitator")
 
 STIMULUS_KEYS = ("schema_version", "item_id", "language", "messages", "target_message_id")
+
+
+def canonical_content_sha256(language: str | None, messages: list[dict], target_index: int | None) -> str:
+    """Hash канонической формы stimulus'а (язык, авторы+тексты по порядку, индекс target) —
+    одна и та же для item'ов пакета и для источников без message_id (dogfood yaml snapshot)."""
+    canonical = {
+        "language": language,
+        "messages": [{"author": m.get("author"), "text": m.get("text")} for m in messages],
+        "target_index": target_index,
+    }
+    payload = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def item_content_sha256(item: dict) -> str:
@@ -52,13 +70,7 @@ def item_content_sha256(item: dict) -> str:
     messages = item["messages"]
     target_index = next(
         (i for i, m in enumerate(messages) if m.get("message_id") == item.get("target_message_id")), None)
-    canonical = {
-        "language": item.get("language"),
-        "messages": [{"author": m.get("author"), "text": m.get("text")} for m in messages],
-        "target_index": target_index,
-    }
-    payload = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return canonical_content_sha256(item.get("language"), messages, target_index)
 
 
 def stimulus_only(item: dict) -> dict:
@@ -101,10 +113,12 @@ def authoring_issues(item: dict, parent_lookup: ParentLookup) -> list[str]:
         issues.append(f"{item_id}: authoring.note must be a string")
 
     if parent is None:
-        if accepted != "original":
-            issues.append(f"{item_id}: no parent ⇒ accepted_via must be 'original', got {accepted!r}")
+        if accepted not in ORIGINLESS_ACCEPTED_VIA:
+            issues.append(f"{item_id}: no parent ⇒ accepted_via must be one of {ORIGINLESS_ACCEPTED_VIA}, got {accepted!r}")
         if reason is not None:
             issues.append(f"{item_id}: no parent ⇒ revision_reason must be null, got {reason!r}")
+        if accepted == "facilitator" and origin == "unrecorded":
+            issues.append(f"{item_id}: facilitator-accepted original cannot have origin 'unrecorded' — someone wrote it")
         return issues
 
     if not isinstance(parent, dict) or not all(k in parent for k in ("package_id", "item_id", "content_sha256")):

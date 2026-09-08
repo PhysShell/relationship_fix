@@ -61,7 +61,19 @@ class AuthoringRuleTests(unittest.TestCase):
 
     def test_original_cannot_claim_ab_acceptance(self):
         item = v2({"origin": "human", "revision_reason": None, "accepted_via": "blinded_ab", "parent_item_version": None})
-        self.assertTrue(any("must be 'original'" in i for i in authoring_issues(item, self.lookup)))
+        self.assertTrue(any("must be one of ('original', 'facilitator')" in i for i in authoring_issues(item, self.lookup)))
+        carried = v2({"origin": "unrecorded", "revision_reason": None, "accepted_via": "carried_over", "parent_item_version": None})
+        self.assertTrue(any("must be one of" in i for i in authoring_issues(carried, self.lookup)))
+
+    def test_facilitator_accepted_original_is_a_replacement_not_a_revision(self):
+        """Инвариант 2026-09-08: parent=null ⇒ accepted_via ∈ {original, facilitator}; replacement —
+        новый original, принятый фасилитатором; чем что заменено — package-level, не поле item'а."""
+        ok = v2({"origin": "llm_assisted", "revision_reason": None, "accepted_via": "facilitator", "parent_item_version": None})
+        self.assertEqual(authoring_issues(ok, self.lookup), [])
+        with_reason = v2({"origin": "llm_assisted", "revision_reason": "naturalness", "accepted_via": "facilitator", "parent_item_version": None})
+        self.assertTrue(any("revision_reason must be null" in i for i in authoring_issues(with_reason, self.lookup)))
+        unrecorded = v2({"origin": "unrecorded", "revision_reason": None, "accepted_via": "facilitator", "parent_item_version": None})
+        self.assertTrue(any("someone wrote it" in i for i in authoring_issues(unrecorded, self.lookup)))
 
     def test_carried_over_requires_identical_text(self):
         same = v2({"origin": "unrecorded", "revision_reason": None, "accepted_via": "carried_over",

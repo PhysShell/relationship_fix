@@ -114,7 +114,9 @@ data/pilot/naturalness-audit/     слепой аудит всех 46 items: с�
                                   critic-1 triage (facilitator-only); contamination-ledger.json рядом
 research/python/                  uv-проект (stdlib-only): agreement (α, CI, positive agreement, confusion pairs,
                                   estimability, unnatural_example × disagreement), validate_items (+ lineage
-                                  rf.pilot-item.v2), presentation, naturalness_ab, naturalness_audit;
+                                  rf.pilot-item.v2), presentation, naturalness_ab, naturalness_audit, materialize (build/verify/
+                                  seal пакета из accepted candidates: exact accepted→built equality как gate,
+                                  package-level replaces, dogfood v7 + provenance sidecar);
                                   xlsx_interface — дверь для испытуемого (packet → .xlsx → JSONL), единственное
                                   место с openpyxl (dependency group human-interface); гейтящие числа — только отсюда
 ```
