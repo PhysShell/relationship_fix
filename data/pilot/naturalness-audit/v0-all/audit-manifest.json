@@ -74,10 +74,30 @@
   },
   "contamination": {
     "rule": "auditor ≠ A/B rater ≠ pilot annotator — hard separation, без исключений при нехватке людей; авторы кандидатов и veto-reviewer тоже не оценщики A/B. Если людей физически не хватает, уменьшается число оценщиков или откладывается этап; роли не смешиваются молча",
-    "roles": {"auditor": ["not_item_author", "not_ab_rater", "not_pilot_annotator", "has_not_seen_items"], "ab_rater": ["not_item_author", "not_candidate_author", "not_veto_reviewer", "not_auditor", "not_pilot_annotator"], "pilot_annotator": ["has_not_seen_items", "did_not_participate_in_naturalness_audit_or_ab"]},
+    "roles": {
+      "auditor": [
+        "not_item_author",
+        "not_ab_rater",
+        "not_pilot_annotator",
+        "has_not_seen_items"
+      ],
+      "ab_rater": [
+        "not_item_author",
+        "not_candidate_author",
+        "not_veto_reviewer",
+        "not_auditor",
+        "not_pilot_annotator"
+      ],
+      "pilot_annotator": [
+        "has_not_seen_items",
+        "did_not_participate_in_naturalness_audit_or_ab"
+      ]
+    },
     "generation_2": "auditor-only находки Pass A → кандидаты generation 2 в отдельном каталоге naturalness-ab/, свой veto-review, свои пакеты; generation 1 не перевыдаётся; v0.1 собирается один раз после закрытия обеих генераций",
     "why": "аудитор видел все 46 items, оценщик A/B — 13 в двух версиях; has_not_seen_items для них ложно по построению",
     "ledger": "../../contamination-ledger.json",
-    "cutover_consequence": "eligibility пакета v0.1 получает критерий did_not_participate_in_naturalness_audit_or_ab, проверяемый по ledger (cutover work, не сейчас)"
+    "cutover_consequence": "eligibility пакета v0.1 получает критерий did_not_participate_in_naturalness_audit_or_ab, проверяемый по ledger (cutover work, не сейчас)",
+    "fallback": "единственный разрешённый при нехватке людей (2026-09-08): сначала A/B gen 1 на трёх оценщиках, затем один из них аудирует только 33 items вне A/B; записывается здесь ДО выдачи аудит-пакета; клетка 'critic flagged → human says fine' для 13 gen-1 items не независима и не читается как blind-audit evidence; auditor_only на 33 unseen остаётся чистым",
+    "item_level": "exposure заражает для увиденных item ids, не глобально: seen via dogfood → contaminated only for those item_ids; записывается в exposures с причиной и датой; годится для любого частичного exposure"
   }
 }

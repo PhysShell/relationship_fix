@@ -264,7 +264,17 @@ Checker: оба действия на месте («понимаю… стрём
 
 Evidence bundle окончания human phase: veto (sha candidates.json, vetoed + причины), blind audit (packet SHA, псевдоним, response SHA, counts critic-1 vs auditor по стратам, список расхождений), A/B (packet SHA per rater, псевдонимы, response SHA, preference и semantic-change counts, adjudication outcome per item), ledger заморожен, итог: accepted / rejected / unchanged flagged. Что из этого пишется руками: issuance records, псевдонимы, adjudication record; сборщика v0.1 нет, гейт — `validate_items`.
 
-**Статус: dialogue naturalness code phase CLOSED. Next gate: HUMAN EVIDENCE REQUIRED. Никакие ревизии корпуса не admissible до полного закрытия и lock veto-review, blind audit и A/B.**
+### Решения 2026-09-08: люди и поверхности
+
+1. **Единственный fallback при нехватке людей:** A/B gen 1 на трёх оценщиках, затем один из них аудирует только complement из 33 items вне A/B; запись в ledger до выдачи. Потеря evidence: «critic flagged → human says fine» для 13 gen-1 items не независима и не читается как blind-audit evidence; `auditor_only` на 33 unseen остаётся чистым. Идеальный состав без fallback: 1 аудитор + 3 оценщика + 2–3 наивных разметчика, 6–7 разных людей; наивных разметчиков искать последними и не показывать им ничего.
+2. **Item-level contamination:** exposure заражает для увиденных item ids, не глобально; `seen via dogfood → contaminated only for those item_ids` (все прошедшие dogfood — для dg-04…dg-09). В ledger — `exposures` с item ids, причиной и датой.
+3. **XLSX** — текущая operational human surface аудита и A/B; остаётся, не временная.
+4. **Web при cutover v0.1** — тупой renderer/collector, привязанный к sha256 выданного пакета и токену; порядок, сторона и состав из immutable packet, никакой собственной рандомизации; нужен самому pilot. Dashboard не нужен, token routing нужен.
+5. **Контакт-поле отложено** до непрямой выдачи ссылок: optional, отдельный consent, вне research export, удаляется отдельно, связь с данными только через facilitator-held pseudonym mapping, не quasi-identifier.
+
+Issuance: до отправки каждому человеку записывается sha256 именно того экземпляра файла, который уходит этому псевдониму, а не «пакет когда-то собран».
+
+**Статус: protocol decisions recorded · code phase CLOSED · human phase READY. Next: 1 auditor, 3 A/B raters, pilot annotators untouched. Никакие ревизии корпуса не admissible до полного закрытия и lock veto-review, blind audit и A/B.**
 
 ## Источники
 
