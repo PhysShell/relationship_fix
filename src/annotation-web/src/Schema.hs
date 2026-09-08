@@ -133,6 +133,30 @@ schemaMigrations =
             \CONSTRAINT \"unique_item_feedback\" UNIQUE (\"annotation_id\"))"
           ]
       }
+  , -- A pilot session is a survey session bound to one issuance record: which
+    -- sealed package, which annotator, which presentation file, which
+    -- instruction document, which ontology -- each by hash. The token itself
+    -- is never stored, only its sha256. One table, one CREATE, so a live
+    -- database with dogfood sessions in it is not rebuilt.
+    SchemaMigration
+      { smName = "0003-pilot-binding"
+      , smUp =
+          [ "CREATE TABLE \"pilot_binding\"(\
+            \\"id\" INTEGER PRIMARY KEY,\
+            \\"survey_session_id\" INTEGER NOT NULL REFERENCES \"survey_session\" ON DELETE RESTRICT ON UPDATE RESTRICT,\
+            \\"token_sha256\" VARCHAR NOT NULL,\
+            \\"package_id\" VARCHAR NOT NULL,\
+            \\"annotator_id\" VARCHAR NOT NULL,\
+            \\"items_sha256\" VARCHAR NOT NULL,\
+            \\"checksums_sha256\" VARCHAR NOT NULL,\
+            \\"presentation_sha256\" VARCHAR NOT NULL,\
+            \\"instructions_sha256\" VARCHAR NOT NULL,\
+            \\"ontology_sha256\" VARCHAR NOT NULL,\
+            \\"record_file\" VARCHAR NOT NULL,\
+            \CONSTRAINT \"unique_pilot_binding_session\" UNIQUE (\"survey_session_id\"),\
+            \CONSTRAINT \"unique_pilot_binding_token\" UNIQUE (\"token_sha256\"))"
+          ]
+      }
   ]
 
 migrationNames :: [SchemaMigration] -> [MigrationName]

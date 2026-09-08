@@ -116,7 +116,9 @@ research/python/                  uv-проект (stdlib-only): agreement (α, 
                                   estimability, unnatural_example × disagreement), validate_items (+ lineage
                                   rf.pilot-item.v2), presentation, naturalness_ab, naturalness_audit, materialize (build/verify/
                                   seal пакета из accepted candidates: exact accepted→built equality как gate,
-                                  package-level replaces, dogfood v7 + provenance sidecar);
+                                  package-level replaces, dogfood v7 + provenance sidecar), issuance (hash-pinned
+                                  issuance records for annotation-web: proves the sealed package, refuses without
+                                  eligibility, prints the token once, never stores it);
                                   xlsx_interface — дверь для испытуемого (packet → .xlsx → JSONL), единственное
                                   место с openpyxl (dependency group human-interface); гейтящие числа — только отсюда
 ```

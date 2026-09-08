@@ -1,5 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | The dogfood catalog: annotation-ux-v7, the debug surface.
+--
+-- Source texts here are the RU messages of data/pilot/v0.1/form/dogfood-v7-items.yaml,
+-- byte for byte; research/python/tests/test_catalog_dogfood.py checks that.
+-- This is not where pilot stimuli come from: a pilot session renders its
+-- sealed presentation packet and never consults this module.
+--
+-- EN presentations are translations and say so in their provenance string:
+-- "prototype_mt_v1" for the lines that were translated for the v6 prototype,
+-- "llm_translation_2026-09-08" for the lines that changed in v7. Nothing
+-- scientific depends on them.
 module Catalog
   ( items
   ) where
@@ -9,52 +20,52 @@ import Domain
 items :: [Item]
 items =
   [ Item
-      { itemId = "dg-04"
+      { itemId = "dg-10"
       , itemSourceLanguage = RU
       , itemSource =
-          [ Message "A" "Я проснулась от холода." False
-          , Message "B" "Ты вчера оставила окно открытым, и утром в комнате было холодно." True
+          [ Message "A" "Я ночью так замёрзла, кошмар." False
+          , Message "B" "Ну так вентилятор всю ночь работал, ты его не выключила." True
           ]
       , itemPresentationRU = Presentation
-          "Я проснулась от холода."
-          "Ты вчера оставила окно открытым, и утром в комнате было холодно."
+          "Я ночью так замёрзла, кошмар."
+          "Ну так вентилятор всю ночь работал, ты его не выключила."
           "source"
       , itemPresentationEN = Presentation
-          "I woke up because I was cold."
-          "You left the window open yesterday, and the room was cold in the morning."
-          "prototype_mt_v1"
+          "I was so cold last night, it was awful."
+          "Well, the fan was running all night, you didn't turn it off."
+          "llm_translation_2026-09-08"
       }
   , Item
       { itemId = "dg-05"
       , itemSourceLanguage = RU
       , itemSource =
           [ Message "A" "Мне было страшно одной ждать результаты обследования." False
-          , Message "B" "Понимаю, почему тебе было страшно. Это правда тяжёлое ожидание." True
+          , Message "B" "Одной такое ждать — ещё бы не страшно. Там любой бы дёргался." True
           ]
       , itemPresentationRU = Presentation
           "Мне было страшно одной ждать результаты обследования."
-          "Понимаю, почему тебе было страшно. Это правда тяжёлое ожидание."
+          "Одной такое ждать — ещё бы не страшно. Там любой бы дёргался."
           "source"
       , itemPresentationEN = Presentation
           "I was scared waiting for the test results alone."
-          "I understand why you were scared. That really is a hard wait."
-          "prototype_mt_v1"
+          "Waiting for something like that on your own — no wonder it was scary. Anyone would have been on edge."
+          "context: prototype_mt_v1; target: llm_translation_2026-09-08"
       }
   , Item
       { itemId = "dg-06"
       , itemSourceLanguage = RU
       , itemSource =
           [ Message "A" "Мы опять кричим друг на друга, это уже никуда не ведёт." False
-          , Message "B" "Стоп. Я сейчас злой и говорю лишнее. Давай на час разойдёмся и вернёмся к этому в девять." True
+          , Message "B" "Стоп. Я злой сейчас, наговорю. Давай час, ну давай — я пройдусь, в девять вернусь, и нормально поговорим." True
           ]
       , itemPresentationRU = Presentation
           "Мы опять кричим друг на друга, это уже никуда не ведёт."
-          "Стоп. Я сейчас злой и говорю лишнее. Давай на час разойдёмся и вернёмся к этому в девять."
+          "Стоп. Я злой сейчас, наговорю. Давай час, ну давай — я пройдусь, в девять вернусь, и нормально поговорим."
           "source"
       , itemPresentationEN = Presentation
           "We're yelling at each other again; this isn't getting us anywhere."
-          "Stop. I'm angry right now and saying things I shouldn't. Let's take an hour apart and come back to this at nine."
-          "prototype_mt_v1"
+          "Stop. I'm angry right now, I'll say too much. Give me an hour, come on — I'll take a walk, be back at nine, and we'll talk properly."
+          "context: prototype_mt_v1; target: llm_translation_2026-09-08"
       }
   , Item
       { itemId = "dg-07"
@@ -89,19 +100,19 @@ items =
           "prototype_mt_v1"
       }
   , Item
-      { itemId = "dg-09"
+      { itemId = "dg-11"
       , itemSourceLanguage = RU
       , itemSource =
-          [ Message "A" "Я опять забыл предупредить, что задержусь." False
-          , Message "B" "Я не должна была на тебя орать, прости. Но мне правда нужно, чтобы ты начал писать, когда задерживаешься. Каждый раз." True
+          [ Message "A" "Ну да, перевод забыл. Знаю." False
+          , Message "B" "Ладно, орать я зря начала. Но поставь ты уже напоминалку на первое число, чтобы мне каждый месяц не писать." True
           ]
       , itemPresentationRU = Presentation
-          "Я опять забыл предупредить, что задержусь."
-          "Я не должна была на тебя орать, прости. Но мне правда нужно, чтобы ты начал писать, когда задерживаешься. Каждый раз."
+          "Ну да, перевод забыл. Знаю."
+          "Ладно, орать я зря начала. Но поставь ты уже напоминалку на первое число, чтобы мне каждый месяц не писать."
           "source"
       , itemPresentationEN = Presentation
-          "I forgot again to say I'd be late."
-          "I shouldn't have yelled at you, I'm sorry. But I really need you to start texting me when you're running late. Every time."
-          "prototype_mt_v1"
+          "Yeah, I forgot the transfer. I know."
+          "Okay, I shouldn't have started yelling. But set yourself a reminder for the first of the month already, so I don't have to text you every month."
+          "llm_translation_2026-09-08"
       }
   ]

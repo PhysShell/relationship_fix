@@ -1,4 +1,4 @@
-# Cutover contract: annotation-pilot-v0.1 (materialization) — DECIDED 2026-09-08 · A–I EXECUTED 2026-09-08 · J not started
+# Cutover contract: annotation-pilot-v0.1 (materialization) — DECIDED 2026-09-08 · A–I EXECUTED · web cutover EXECUTED 2026-09-08 · J blocked
 
 Статус: решения по развилкам закрыты фасилитатором **до** сборки; три открытых пункта закрыты 2026-09-08 (ниже); GO получен на A–I (research artifact), **не** на web cutover и **не** на issuance. Пакет собран и запечатан: [data/pilot/v0.1](../data/pilot/v0.1/README.md). Порядок соблюдён: сначала механизм (commit `1c7c25f`: инвариант, build/verify/seal, dogfood sidecar, тесты), затем пакет. Вход сборки: [naturalness-ab/v0-flagged-donor/candidates.json](../data/pilot/naturalness-ab/v0-flagged-donor/candidates.json) (13/13 accepted, `facilitator_review.at_build`) и frozen [v0](../data/pilot/v0/README.md).
 
@@ -69,3 +69,28 @@ J блокируют три конкретные вещи, не исследов
 Erratum к sealed manifest: `pilot-manifest.json → instructions` называет v0-документ; manifest не правится, инструкция пакета при issuance — v0.1-документ по issuance record (README пакета). README пакета не входит в seal; команда проверки checksum там исправлена (относительные пути от каталога пакета).
 
 Следующий большой gate — **web cutover** (отдельная приёмка): token-bound exact-packet renderer/collector, runtime-отказ выдавать v0, `Catalog.hs` на v7 с EN-переводами новых текстов, pc-08 в glossary. Только затем issuance J и pilot.
+
+## Web cutover — выполнено 2026-09-08 (отдельная приёмка; GO от 2026-09-08)
+
+Authority один: issuance record (`rf.issuance-record.v1`: package_id, items_sha256, checksums_sha256, presentation sha256, instructions sha256, ontology sha256, псевдоним, issued_at, token_sha256). Sealed manifest говорит, что запечатано в research artifact; issuance record говорит, что конкретно увидел конкретный человек; web следует record'у и никогда не выбирает между v0/v0.1 instruction path. Erratum к `manifest.instructions` тем самым закрыт архитектурно, не правкой seal.
+
+Pilot renderer не получает stimuli из `Catalog.hs` вообще: sealed presentation packet → token/session binding → dumb renderer → collector. `Catalog.hs` — dogfood surface (v7 отдельной миграцией, см. ниже).
+
+| # | Gate | Как обеспечено | Доказательство |
+|---|---|---|---|
+| 1 | Package registry / status | `data/pilot/package-registry.json`: v0 `frozen_non_issuable`, v0.1 `issuable` + pin на sha256 `CHECKSUMS.sha256`; unknown/unsealed/frozen → сервер не стартует (`Registry.loadBindings`) | тесты loader: frozen, unknown, unsealed, pin mismatch |
+| 2 | Token-bound exact packet | `GET /t/<token>` → sha256 токена → запись → session с `pilot_binding` (все hash'и); токен не хранится; запись, изменившаяся после старта сессии, отвергается (`bindingUnchanged`) | тесты: unknown token 404; hash mismatch presentation/instructions; duplicate token |
+| 3 | Renderer тупой | `pilotStimulus`: сообщения packet-строки в её порядке, её target; ни randomization, ни rewriting, ни translation, ни lookup через Catalog; сервер вообще не читает `items.jsonl` и `presentation-map/` (фикстура без них) | «renders each item as the packet has it»; annotator-2 в своём порядке; real package: тексты первой/последней строки |
+| 4 | Collector связан с packet identity | ответы по (session, opaque item id); сессия ↔ одна запись; другой токен — другая сессия; экспорт требует все N ровно по одному разу | «keeps two tokens' sessions apart»; «refuses to export an incomplete session and says which items»; 40/40 на real package |
+| 5 | Feedback semantics | канал показан на каждом item пилота; canonical export несёт `"feedback": {"flags": [], "note": ""}` для каждого item; «не открывал» и «открыл пусто» экспортируются одинаково пусто; флаг/заметка — как введены | «exports one canonical line per item … empty meaning empty»; dogfood hs-v1 (канал не собирался) — поля нет |
+| 6 | Canonical IDs не текут | процесс не держит canonical ids; presentation row с `authoring`/не-v1 схемой отвергается при загрузке; HTML не печатает даже opaque id | `PacketNotStimulus`; `bodyNotContains id`; real package: `pc-*`/`pn-*` отсутствуют на страницах |
+| 7 | Quote = exact substring | `checkEvidenceText`: без trim/normalize; хранится как введено | «stores a quote exactly as typed and rejects one that is not a span»; Domain: trailing space → not a span |
+| 8 | Instructions binding | `/instructions` отдаёт байты документа из record'а (hash проверен при старте), hash на intro-странице; `manifest.instructions` не читается | «serves the instruction document byte for byte»; loader: изменённый документ → refusal |
+| 9 | Catalog v7 отдельно | `Catalog.hs` = dogfood-v7 (dg-10, dg-11, revisions dg-05/dg-06), EN presentations помечены `llm_translation_2026-09-08` (target) / `prototype_mt_v1` (context); pilot validity не зависит | `research/python/tests/test_catalog_dogfood.py`: тексты Catalog == v7 yaml |
+| 10 | pc-08 glossary | пример B.AVOIDANCE_TOPIC_SHIFT в `Domain.hs` заменён (счёт за электричество / соседи завели собаку); онтология не тронута | проверка n-gram против v0.1 items: совпадений нет |
+| 11 | End-to-end | token → intro (hash инструкции) → item 0/39 (точные тексты) → assigned с точной цитатой, abstained, none_observed → 20 items → **рестарт** (второй процесс на той же БД, свежий клиент) → resume на `/item/20` → 40/40 → canonical export → hash'и packet/instruction/package равны sealed | `PilotSpec.realPackageSpec` на реальном `data/pilot/v0.1` |
+| 12 | Issuance не автоматическая | web ничего не выдаёт; записи создаёт `metrics.issuance new` только при заполненном eligibility; каталог `issuance/` не существует | — |
+
+Не сделано намеренно: issuance record для реальных людей (J), eligibility, деплой релиза (flake.nix теперь кладёт registry, seal, presentation packets, инструкцию и онтологию в `$out/share/relationship-fix`; nix-сборка здесь не запускалась). Dogfood surface выключен по умолчанию (`RF_DOGFOOD_ENABLED=0`).
+
+Статус: **v0.1 artifact ACCEPTED / SEALED · A–I CLOSED · issuance-prep ACCEPTED · web cutover EXECUTED (ждёт приёмки) · issuance J BLOCKED · human evidence NONE.**

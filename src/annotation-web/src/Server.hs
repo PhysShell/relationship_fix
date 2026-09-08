@@ -21,6 +21,7 @@ import Control.Exception (throwIO)
 import Control.Monad (forM, forM_, unless, when)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Int (Int64)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -30,6 +31,9 @@ import Database.Persist.Sql (ConnectionPool, SqlBackend, fromSqlKey, runSqlPool,
 import Database.Persist.Sqlite (createSqlitePool, withSqlitePool)
 import Domain
 import qualified Feedback as F
+import qualified Ontology as O
+import Packet (PresentedItem (..), PresentedMessage (..), presentedTarget)
+import Registry (Binding (..), IssuanceRecord (..), tokenSha)
 import qualified Schema
 import Yesod
 
@@ -89,17 +93,45 @@ AuditEvent
     value Text Maybe
     occurredAt UTCTime
     deriving Show
+-- | A pilot session is a survey session bound to one issuance record. What is
+-- stored is what the person was issued -- package, annotator pseudonym and the
+-- hashes of the presentation file, the instruction document and the ontology
+-- -- so that the record on disk changing later is detectable and refused,
+-- rather than silently re-binding a running session to different bytes. The
+-- token is never stored; its sha256 is.
+PilotBinding
+    surveySessionId SurveySessionId
+    tokenSha256 Text
+    packageId Text
+    annotatorId Text
+    itemsSha256 Text
+    checksumsSha256 Text
+    presentationSha256 Text
+    instructionsSha256 Text
+    ontologySha256 Text
+    recordFile Text
+    UniquePilotBindingSession surveySessionId
+    UniquePilotBindingToken tokenSha256
+    deriving Show
 |]
 
 data App = App
   { appPool :: ConnectionPool
   , appSessionKeyPath :: FilePath
   , appSecureCookies :: Bool
+  , appBindings :: Map.Map Text Binding
+    -- ^ Proven issuance bindings, keyed by token sha256. Loaded once at start;
+    -- a token that is not here does not exist.
+  , appDogfoodEnabled :: Bool
+    -- ^ The Catalog-backed debug surface at @/@. Off in production: a pilot
+    -- annotator who lands on @/@ must not be able to start a dogfood session.
   }
 
 mkYesod "App" [parseRoutes|
 / HomeR GET
 /language LanguageR POST
+/t/#Text TokenR GET
+/instructions InstructionsR GET
 /intro IntroR GET
 /item/#Int ItemR GET
 /item/#Int/decision DecisionR POST
@@ -215,12 +247,15 @@ instance RenderMessage App FormMessage where
 -- server is redeployed underneath them. Reading it off the running binary
 -- instead would rewrite the provenance of an already-completed run, which is
 -- the one thing a research instrument must never do to its own record.
-data InstrumentVersion = InstrumentV1 | InstrumentV2
+data InstrumentVersion = InstrumentV1 | InstrumentV2 | InstrumentPilot
   deriving stock (Eq, Show)
 
 instrumentVersionCode :: InstrumentVersion -> Text
 instrumentVersionCode InstrumentV1 = "annotation-web-dogfood-hs-v1"
 instrumentVersionCode InstrumentV2 = "annotation-web-dogfood-hs-v2"
+-- | The token-bound pilot instrument: sealed presentation packet, exact texts,
+-- canonical export. Its contract is the issuance record, not this binary.
+instrumentVersionCode InstrumentPilot = "annotation-web-pilot-v1"
 
 -- | The version new sessions are started under.
 currentInstrument :: InstrumentVersion
@@ -234,7 +269,95 @@ instrumentFor sid = do
   stored <- runDB $ getBy (UniqueSessionInstrument sid)
   pure $ case sessionInstrumentVersion . entityVal <$> stored of
     Just recorded | recorded == instrumentVersionCode InstrumentV2 -> InstrumentV2
+                  | recorded == instrumentVersionCode InstrumentPilot -> InstrumentPilot
     _ -> InstrumentV1
+
+-- | What a session shows: the Catalog-backed dogfood surface, or one sealed
+-- pilot packet. Decided by the session's own binding row, never by the URL.
+data Mode = Dogfood | Pilot Binding
+
+sessionMode :: SurveySessionId -> Handler Mode
+sessionMode sid = do
+  stored <- runDB $ getBy (UniquePilotBindingSession sid)
+  case stored of
+    Nothing -> pure Dogfood
+    Just (Entity _ pb) -> do
+      app <- getYesod
+      case Map.lookup (pilotBindingTokenSha256 pb) (appBindings app) of
+        -- The record this session was bound to is not among the ones this
+        -- server proved at start. Serving the session anyway would mean
+        -- showing bytes nobody has vouched for; refusing is the only honest
+        -- answer, and the message says what to fix.
+        Nothing -> permissionDenied "this session's issuance record is not loaded on this server"
+        Just binding
+          | bindingUnchanged pb (bindRecord binding) -> pure (Pilot binding)
+          | otherwise -> permissionDenied "this session's issuance record changed after the session started"
+
+-- | The hashes the session was started under must still be the hashes the
+-- loaded record carries. Anything else is a different packet, instruction or
+-- ontology than the person was issued.
+bindingUnchanged :: PilotBinding -> IssuanceRecord -> Bool
+bindingUnchanged pb rec =
+  pilotBindingPackageId pb == irPackageId rec
+    && pilotBindingAnnotatorId pb == irAnnotatorId rec
+    && pilotBindingItemsSha256 pb == irItemsSha rec
+    && pilotBindingChecksumsSha256 pb == irChecksumsSha rec
+    && pilotBindingPresentationSha256 pb == irPresentationSha rec
+    && pilotBindingInstructionsSha256 pb == irInstructionsSha rec
+    && pilotBindingOntologySha256 pb == irOntologySha rec
+
+-- | One episode as shown, whichever surface it came from. The renderer only
+-- ever sees this: exact texts in exact order with exactly one target.
+data ShownMessage = ShownMessage
+  { smAuthor :: Text
+  , smText :: Text
+  , smIsTarget :: Bool
+  }
+
+data Stimulus = Stimulus
+  { stId :: Text
+  , stShown :: [ShownMessage]
+  , stTarget :: Text
+  , stSourceLanguage :: Maybe Text
+    -- ^ Dogfood only: the item's source language, shown as a note.
+  , stOriginal :: Maybe [Message]
+    -- ^ Dogfood only: the untranslated source, offered behind a reveal when the
+    -- presentation is a translation. A pilot packet is never translated and
+    -- never has one.
+  }
+
+stimuli :: Mode -> Language -> [Stimulus]
+stimuli Dogfood lang = map (dogfoodStimulus lang) items
+stimuli (Pilot binding) _ = map pilotStimulus (bindItems binding)
+
+dogfoodStimulus :: Language -> Item -> Stimulus
+dogfoodStimulus lang item =
+  let presentation = presentationFor lang item
+   in Stimulus
+        { stId = itemId item
+        , stShown =
+            [ ShownMessage "A" (presentationContext presentation) False
+            , ShownMessage "B" (presentationTarget presentation) True
+            ]
+        , stTarget = presentationTarget presentation
+        , stSourceLanguage = Just (languageCode (itemSourceLanguage item))
+        , stOriginal = if shouldOfferOriginal lang item then Just (itemSource item) else Nothing
+        }
+
+-- | Dumb on purpose: the packet row's messages, in the packet row's order,
+-- with the packet row's target. No lookup anywhere else, no translation, no
+-- reordering.
+pilotStimulus :: PresentedItem -> Stimulus
+pilotStimulus presented = Stimulus
+  { stId = piId presented
+  , stShown =
+      [ ShownMessage (T.toUpper (pmAuthor m)) (pmText m) (pmId m == piTargetId presented)
+      | m <- piMessages presented
+      ]
+  , stTarget = fromMaybe "" (presentedTarget presented)
+  , stSourceLanguage = Nothing
+  , stOriginal = Nothing
+  }
 
 type AppForm a = Html -> MForm Handler (FormResult a, Widget)
 
@@ -382,8 +505,12 @@ labelsForm lang = renderFields $ areqMsg
   (tr lang "Выберите хотя бы одну категорию." "Select at least one category.")
   Nothing
 
-evidenceForm :: Language -> Item -> [BehaviorLabel] -> AppForm [(BehaviorLabel, Text)]
-evidenceForm lang item labels = renderFields $ traverse quoteField labels
+-- | Quotes are checked against the target text exactly as it was shown, and
+-- stored exactly as typed: no trimming, no re-quoting, no normalisation
+-- (checkEvidenceText). A quote that is not a verbatim span is a rejected
+-- submission, not a corrected one.
+evidenceForm :: Language -> Text -> [BehaviorLabel] -> AppForm [(BehaviorLabel, Text)]
+evidenceForm lang target labels = renderFields $ traverse quoteField labels
   where
     quoteField label = (label,) <$> areq
       (check exactSpan textField)
@@ -391,9 +518,9 @@ evidenceForm lang item labels = renderFields $ traverse quoteField labels
         (labelCode label <> " — " <> tr lang "самая короткая точная цитата" "shortest exact quote")
         ("evidence_" <> labelCode label))
       Nothing
-    exactSpan raw
-      | validEvidence lang item raw = Right (T.strip raw)
-      | otherwise = Left $ tr lang
+    exactSpan raw = case checkEvidenceText target raw of
+      Right quote -> Right quote
+      Left _ -> Left $ tr lang
           "Цитата должна быть точным непрерывным фрагментом размечаемого сообщения."
           "The quote must be an exact continuous span from the target message."
 
@@ -466,7 +593,21 @@ csrfForm :: AppForm ()
 csrfForm = renderFields $ pure ()
 
 getHomeR :: Handler Html
-getHomeR = generateFormPost languageForm >>= uncurry renderHome
+getHomeR = do
+  app <- getYesod
+  if appDogfoodEnabled app
+    then generateFormPost languageForm >>= uncurry renderHome
+    else renderClosed
+
+-- | What @/@ shows when the dogfood surface is off: nothing to start. Pilot
+-- annotators arrive through their personal link and never need this page.
+renderClosed :: Handler Html
+renderClosed = defaultLayout [whamlet|
+    <section .card>
+      <p .eyebrow>Relationship Fix
+      <h1>Здесь нет открытого исследования / No open study here
+      <p>Если вы участвуете в разметке, откройте личную ссылку, которую вам прислал фасилитатор. / If you are taking part in the annotation study, open the personal link the facilitator sent you.
+  |]
 
 renderHome :: Widget -> Enctype -> Handler Html
 renderHome widget enctype = defaultLayout [whamlet|
@@ -481,6 +622,8 @@ renderHome widget enctype = defaultLayout [whamlet|
 
 postLanguageR :: Handler Html
 postLanguageR = do
+  app <- getYesod
+  unless (appDogfoodEnabled app) notFound
   ((result, widget), enctype) <- runFormPost languageForm
   case result of
     FormSuccess lang -> do
@@ -494,11 +637,57 @@ postLanguageR = do
       redirect IntroR
     _ -> renderHome widget enctype
 
+-- | The personal link. The token is hashed and looked up among the bindings
+-- this server proved at start; an unknown token is a 404 with nothing else
+-- said. A known token resumes the session it already has, or starts one and
+-- records exactly which bytes it was started against.
+getTokenR :: Text -> Handler Html
+getTokenR token = do
+  app <- getYesod
+  let key = tokenSha token
+  case Map.lookup key (appBindings app) of
+    Nothing -> notFound
+    Just binding -> do
+      let rec = bindRecord binding
+      existing <- runDB $ getBy (UniquePilotBindingToken key)
+      sid <- case existing of
+        Just (Entity _ pb)
+          | bindingUnchanged pb rec -> pure (pilotBindingSurveySessionId pb)
+          | otherwise -> permissionDenied "this session's issuance record changed after the session started"
+        Nothing -> do
+          now <- liftIO getCurrentTime
+          created <- runDB $ do
+            created <- insert $ SurveySession (languageCode (bindUiLanguage binding)) now Nothing
+            insert_ $ SessionInstrument created (instrumentVersionCode InstrumentPilot)
+            insert_ $ PilotBinding created key (irPackageId rec) (irAnnotatorId rec)
+              (irItemsSha rec) (irChecksumsSha rec) (irPresentationSha rec)
+              (irInstructionsSha rec) (irOntologySha rec) (T.pack (irRecordFile rec))
+            pure created
+          logEvent created Nothing "pilot_session_bound" (Just (irPackageId rec <> "/" <> irAnnotatorId rec))
+          pure created
+      setSession "annotation_session_id" (T.pack $ show $ fromSqlKey sid)
+      redirect IntroR
+
+-- | The instruction document the session is bound to, byte for byte, as the
+-- record's hash proved it at start. Not rendered, not paraphrased.
+getInstructionsR :: Handler TypedContent
+getInstructionsR = do
+  (sid, _) <- requireSurveySession
+  mode <- sessionMode sid
+  case mode of
+    Dogfood -> notFound
+    Pilot binding -> do
+      addHeader "Content-Disposition" "inline; filename=pilot-instructions.md"
+      pure $ TypedContent "text/plain; charset=utf-8" (toContent (bindInstructions binding))
+
 getIntroR :: Handler Html
 getIntroR = do
-  (_, session) <- requireSurveySession
+  (sid, session) <- requireSurveySession
   lang <- sessionLanguage session
-  defaultLayout [whamlet|
+  mode <- sessionMode sid
+  case mode of
+    Pilot binding -> renderPilotIntro lang binding
+    Dogfood -> defaultLayout [whamlet|
     <section .card>
       <p .eyebrow>Relationship Fix · no-JS annotation dogfood
       <h1>#{tr lang "Исследование разметки диалогов" "Dialogue annotation study"}
@@ -522,6 +711,59 @@ getIntroR = do
         <a href=@{ItemR 0} .primary>#{tr lang "Начать" "Start"}
   |]
 
+-- | The pilot intro: the bound instruction document (linked byte-exact, with
+-- its hash on the page so the person can match it against what the
+-- facilitator said they would get) and the active labels of the pinned
+-- ontology artifact, rendered from that artifact. Nothing from the dogfood
+-- glossary appears here.
+renderPilotIntro :: Language -> Binding -> Handler Html
+renderPilotIntro lang binding = do
+  let rec = bindRecord binding
+      episodeCount = length (bindItems binding)
+      ontologyLabels = bindOntology binding
+      nameOf label = tr lang (O.olNameRu label) (O.olNameEn label)
+  defaultLayout [whamlet|
+    <section .card>
+      <p .eyebrow>Relationship Fix · #{irPackageId rec}
+      <h1>#{tr lang "Разметка диалогов" "Dialogue annotation"}
+      <p>#{tr lang "Вы участвуете под анонимным id" "You are taking part under the anonymous id"} <strong>#{irAnnotatorId rec}</strong>. #{tr lang "Эпизодов:" "Episodes:"} #{episodeCount}.
+      <h2>#{tr lang "Инструкция" "Instructions"}
+      <p>#{tr lang "Прочитайте инструкцию целиком до первого эпизода. Это ровно тот документ, который вам выдан; его отпечаток:" "Read the instructions in full before the first episode. This is exactly the document you were issued; its fingerprint:"}
+      <p><code>sha256 #{irInstructionsSha rec}</code>
+      <p>
+        <a href=@{InstructionsR} .secondary>#{tr lang "Открыть инструкцию" "Open the instructions"}
+      <h2>#{tr lang "Категории" "Categories"} · #{irOntologyVersion rec}
+      <p>#{tr lang "Определения ниже взяты из закреплённой версии онтологии" "The definitions below are taken from the pinned ontology version"} (<code>sha256 #{T.take 12 (irOntologySha rec)}…</code>).
+      $forall label <- ontologyLabels
+        <section .category>
+          <h3>#{O.olId label} — #{nameOf label}
+          <p>#{O.olDefinition label}
+          $if not (null (O.olInclusion label))
+            <p><strong>#{tr lang "Включает:" "Includes:"}</strong>
+            <ul>
+              $forall criterion <- O.olInclusion label
+                <li>#{criterion}
+          $if not (null (O.olExclusion label))
+            <p><strong>#{tr lang "Не включает:" "Excludes:"}</strong>
+            <ul>
+              $forall criterion <- O.olExclusion label
+                <li>#{criterion}
+          $if not (null (O.olExamples label))
+            <ul>
+              $forall example <- O.olExamples label
+                <li>
+                  <span .example-tag>#{O.oeVerdict example} (#{O.oeLanguage example}):
+                  \ #{O.oeText example}
+                  $if not (T.null (O.oeRationale example))
+                    \ — #{O.oeRationale example}
+      <h2>none_observed vs abstained
+      <p><strong>none_observed</strong> — #{tr lang "фрагмента достаточно, и ни одна активная категория не наблюдается." "the excerpt provides enough context, and none of the active categories is observed."}
+      <p><strong>abstained</strong> — #{tr lang "недостающий контекст реально мешает решить. Причина обязательна." "missing context genuinely prevents deciding. A reason is required."}
+      <p><strong>Evidence quote:</strong> #{tr lang "точный непрерывный фрагмент размечаемого сообщения, скопированный как есть." "an exact continuous span of the target message, copied as is."}
+      <p>
+        <a href=@{ItemR 0} .primary>#{tr lang "Начать" "Start"}
+  |]
+
 -- | Everything a step needs about the item being annotated, read once per
 -- request so that a re-render after a rejected POST shows the same state the
 -- respondent was looking at when they submitted.
@@ -529,7 +771,8 @@ data ItemContext = ItemContext
   { ctxSessionId :: SurveySessionId
   , ctxLanguage :: Language
   , ctxIndex :: Int
-  , ctxItem :: Item
+  , ctxStimulus :: Stimulus
+  , ctxCount :: Int
   , ctxAnnotationId :: AnnotationId
   , ctxAnnotation :: Annotation
   , ctxLabels :: [BehaviorLabel]
@@ -542,8 +785,10 @@ itemContext :: Int -> Handler ItemContext
 itemContext index = do
   (sid, session) <- requireSurveySession
   lang <- sessionLanguage session
-  item <- itemAt index
-  Entity aid annotation <- ensureAnnotation sid (itemId item)
+  mode <- sessionMode sid
+  let episodes = stimuli mode lang
+  stimulus <- stimulusAt episodes index
+  Entity aid annotation <- ensureAnnotation sid (stId stimulus)
   labels <- loadLabels aid
   evidence <- loadEvidence aid
   feedback <- loadFeedback aid
@@ -552,7 +797,8 @@ itemContext index = do
     { ctxSessionId = sid
     , ctxLanguage = lang
     , ctxIndex = index
-    , ctxItem = item
+    , ctxStimulus = stimulus
+    , ctxCount = length episodes
     , ctxAnnotationId = aid
     , ctxAnnotation = annotation
     , ctxLabels = labels
@@ -572,13 +818,13 @@ getItemR :: Int -> Handler Html
 getItemR index = do
   ctx <- itemContext index
   if annotationComplete (ctxAnnotation ctx) (ctxLabels ctx) (ctxEvidence ctx)
-    then advanceFrom index
+    then advanceFrom (ctxCount ctx) index
     else do
       let lang = ctxLanguage ctx
       case currentStep ctx of
         StepDecision -> generateFormPost (decisionForm lang (storedDecision ctx)) >>= uncurry (renderStep ctx StepDecision)
         StepLabels -> generateFormPost (labelsForm lang) >>= uncurry (renderStep ctx StepLabels)
-        StepEvidence -> generateFormPost (evidenceForm lang (ctxItem ctx) (ctxLabels ctx)) >>= uncurry (renderStep ctx StepEvidence)
+        StepEvidence -> generateFormPost (evidenceForm lang (stTarget (ctxStimulus ctx)) (ctxLabels ctx)) >>= uncurry (renderStep ctx StepEvidence)
         StepAbstain -> generateFormPost (abstainForm lang) >>= uncurry (renderStep ctx StepAbstain)
 
 -- | Lets a respondent reconsider the decision of the item they are on without
@@ -614,28 +860,32 @@ renderStep ctx step widget enctype = do
   -- it retroactively underneath an already-running session.
   (feedbackWidget, feedbackEnctype) <- generateFormPost (feedbackForm (ctxLanguage ctx) (ctxFeedback ctx))
   let lang = ctxLanguage ctx
-      item = ctxItem ctx
+      stimulus = ctxStimulus ctx
       index = ctxIndex ctx
       annotation = ctxAnnotation ctx
-      presentation = presentationFor lang item
       action = stepRoute step index
       -- Hamlet's interpolation grammar has no infix operators, so the test
       -- has to be a plain name by the time the template sees it.
       canEditDecision = step `elem` [StepLabels, StepEvidence, StepAbstain]
-      showFeedback = ctxInstrument ctx == InstrumentV2
+      showFeedback = ctxInstrument ctx /= InstrumentV1
+      targetHeading = tr lang "Размечаемое сообщение" "Target message"
   defaultLayout [whamlet|
     <section .card>
-      <p .eyebrow>#{index + 1} / #{length items}
+      <p .eyebrow>#{index + 1} / #{ctxCount ctx}
       <h1>#{tr lang "Пример" "Example"} #{index + 1}
       <div .episode>
-        <p .source-note>#{tr lang "Источник" "Source"}: <strong>#{languageCode $ itemSourceLanguage item}</strong>
-        <div .bubble .context><strong>A</strong><br>#{presentationContext presentation}
-        <div .bubble .target><strong>#{tr lang "Размечаемое сообщение" "Target message"} · B</strong><br>#{presentationTarget presentation}
-        $if shouldOfferOriginal lang item
+        $maybe source <- stSourceLanguage stimulus
+          <p .source-note>#{tr lang "Источник" "Source"}: <strong>#{source}</strong>
+        $forall shown <- stShown stimulus
+          $if smIsTarget shown
+            <div .bubble .target><strong>#{targetHeading} · #{smAuthor shown}</strong><br>#{smText shown}
+          $else
+            <div .bubble .context><strong>#{smAuthor shown}</strong><br>#{smText shown}
+        $maybe original <- stOriginal stimulus
           $if annotationOriginalRevealed annotation
             <details open .original>
               <summary>#{tr lang "Оригинал" "Original"}
-              $forall sourceMessage <- itemSource item
+              $forall sourceMessage <- original
                 <p><strong>#{messageAuthor sourceMessage}</strong>: #{messageText sourceMessage}
           $else
             <form #reveal-form method=post action=@{OriginalR index} enctype=#{originalEnctype}>
@@ -670,7 +920,7 @@ postDecisionR index = do
     -- categories and quotes the respondent has already entered.
     FormSuccess decision
       | storedDecision ctx == Just decision -> do
-          logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "decision_confirmed" (Just $ decisionCode decision)
+          logEvent (ctxSessionId ctx) (Just $ stId (ctxStimulus ctx)) "decision_confirmed" (Just $ decisionCode decision)
           redirect (ItemR index)
       | otherwise -> do
           let aid = ctxAnnotationId ctx
@@ -682,7 +932,7 @@ postDecisionR index = do
               ]
             deleteWhere [AnnotationLabelAnnotationId ==. aid]
             deleteWhere [EvidenceAnnotationId ==. aid]
-          logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "decision_submitted" (Just $ decisionCode decision)
+          logEvent (ctxSessionId ctx) (Just $ stId (ctxStimulus ctx)) "decision_submitted" (Just $ decisionCode decision)
           redirect (ItemR index)
     _ -> renderStep ctx StepDecision widget enctype
 
@@ -698,7 +948,7 @@ postLabelsR index = do
         deleteWhere [AnnotationLabelAnnotationId ==. aid]
         deleteWhere [EvidenceAnnotationId ==. aid]
         forM_ labels $ \label -> insert_ $ AnnotationLabel aid (labelCode label)
-      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "labels_submitted" (Just $ T.intercalate "," $ map labelCode labels)
+      logEvent (ctxSessionId ctx) (Just $ stId (ctxStimulus ctx)) "labels_submitted" (Just $ T.intercalate "," $ map labelCode labels)
       redirect (ItemR index)
     _ -> renderStep ctx StepLabels widget enctype
 
@@ -708,14 +958,14 @@ postEvidenceR index = do
   requireDecision Assigned ctx
   let labels = ctxLabels ctx
   when (null labels) $ redirect (ItemR index)
-  ((result, widget), enctype) <- runFormPost (evidenceForm (ctxLanguage ctx) (ctxItem ctx) labels)
+  ((result, widget), enctype) <- runFormPost (evidenceForm (ctxLanguage ctx) (stTarget (ctxStimulus ctx)) labels)
   case result of
     FormSuccess pairs -> do
       let aid = ctxAnnotationId ctx
       runDB $ do
         deleteWhere [EvidenceAnnotationId ==. aid]
         forM_ pairs $ \(label, quote) -> insert_ $ Evidence aid (labelCode label) quote
-      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "evidence_submitted" (Just $ T.intercalate "," $ map (labelCode . fst) pairs)
+      logEvent (ctxSessionId ctx) (Just $ stId (ctxStimulus ctx)) "evidence_submitted" (Just $ T.intercalate "," $ map (labelCode . fst) pairs)
       redirect (ItemR index)
     _ -> renderStep ctx StepEvidence widget enctype
 
@@ -730,7 +980,7 @@ postAbstainR index = do
         [ AnnotationAbstentionReason =. Just (abstentionCode reason)
         , AnnotationAbstentionNote =. note
         ]
-      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "abstention_submitted" (Just $ abstentionCode reason)
+      logEvent (ctxSessionId ctx) (Just $ stId (ctxStimulus ctx)) "abstention_submitted" (Just $ abstentionCode reason)
       redirect (ItemR index)
     _ -> renderStep ctx StepAbstain widget enctype
 
@@ -756,7 +1006,7 @@ postFeedbackR index = do
           (F.WordingOrTranslation `elem` flags)
           (F.OtherFeedback `elem` flags)
           (rawNote >>= nonBlank)
-      logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "feedback_submitted"
+      logEvent (ctxSessionId ctx) (Just $ stId (ctxStimulus ctx)) "feedback_submitted"
         (Just $ T.intercalate "," (map F.feedbackFlagCode flags))
       redirect (ItemR index)
     -- aopt fields on every part of this form make FormFailure practically
@@ -771,9 +1021,9 @@ postOriginalR index = do
   ((result, _), _) <- runFormPost csrfForm
   case result of
     FormSuccess ()
-      | shouldOfferOriginal (ctxLanguage ctx) (ctxItem ctx) -> do
+      | isJust (stOriginal (ctxStimulus ctx)) -> do
           runDB $ update (ctxAnnotationId ctx) [AnnotationOriginalRevealed =. True]
-          logEvent (ctxSessionId ctx) (Just $ itemId (ctxItem ctx)) "original_revealed" Nothing
+          logEvent (ctxSessionId ctx) (Just $ stId (ctxStimulus ctx)) "original_revealed" Nothing
           redirect (ItemR index)
     _ -> invalidArgs ["invalid original reveal request"]
 
@@ -781,7 +1031,8 @@ getDoneR :: Handler Html
 getDoneR = do
   (sid, session) <- requireSurveySession
   lang <- sessionLanguage session
-  incomplete <- firstIncomplete sid
+  mode <- sessionMode sid
+  incomplete <- firstIncomplete sid (stimuli mode lang)
   case incomplete of
     Just index -> redirect (ItemR index)
     Nothing -> do
@@ -789,20 +1040,38 @@ getDoneR = do
       unless (isJust $ surveySessionCompletedAt session) $ do
         runDB $ update sid [SurveySessionCompletedAt =. Just now]
         logEvent sid Nothing "session_completed" Nothing
-      defaultLayout [whamlet|
-        <section .card>
-          <p .eyebrow>Relationship Fix · Haskell/Yesod dogfood
-          <h1>#{tr lang "Готово" "Done"}
-          <p>#{tr lang "Ответы сохранены в SQLite на сервере. Финальный JSON содержит source/presentation provenance и факт раскрытия оригинала." "Answers are stored in SQLite on the server. The final JSON includes source/presentation provenance and whether the original was revealed."}
-          <p>
-            <a href=@{SubmissionR} .primary>#{tr lang "Скачать submission.json" "Download submission.json"}
-      |]
+      case mode of
+        -- The collector keeps the answers; the facilitator exports them with
+        -- annotation-web-export. There is nothing for the annotator to
+        -- download and nothing more to do.
+        Pilot _ -> defaultLayout [whamlet|
+          <section .card>
+            <p .eyebrow>Relationship Fix
+            <h1>#{tr lang "Готово" "Done"}
+            <p>#{tr lang "Спасибо. Все ответы сохранены под вашим анонимным id. Больше ничего делать не нужно; после сдачи ответы не редактируются." "Thank you. All answers are stored under your anonymous id. There is nothing more to do; answers are not edited after submission."}
+        |]
+        Dogfood -> defaultLayout [whamlet|
+          <section .card>
+            <p .eyebrow>Relationship Fix · Haskell/Yesod dogfood
+            <h1>#{tr lang "Готово" "Done"}
+            <p>#{tr lang "Ответы сохранены в SQLite на сервере. Финальный JSON содержит source/presentation provenance и факт раскрытия оригинала." "Answers are stored in SQLite on the server. The final JSON includes source/presentation provenance and whether the original was revealed."}
+            <p>
+              <a href=@{SubmissionR} .primary>#{tr lang "Скачать submission.json" "Download submission.json"}
+        |]
 
 getSubmissionR :: Handler Value
 getSubmissionR = do
   (sid, session0) <- requireSurveySession
+  mode <- sessionMode sid
+  case mode of
+    -- A pilot session has no browser download: canonical export is the
+    -- facilitator's, offline, against the DB and the issuance record.
+    Pilot _ -> notFound
+    Dogfood -> pure ()
   instrument <- instrumentFor sid
-  incomplete <- firstIncomplete sid
+  session1 <- runDB $ getJust sid
+  lang1 <- sessionLanguage session1
+  incomplete <- firstIncomplete sid (stimuli Dogfood lang1)
   when (isJust incomplete) $ permissionDenied "submission is incomplete"
   now <- liftIO getCurrentTime
   unless (isJust $ surveySessionCompletedAt session0) $ runDB $ update sid [SurveySessionCompletedAt =. Just now]
@@ -832,6 +1101,9 @@ getSubmissionR = do
         <> case instrument of
              InstrumentV1 -> []
              InstrumentV2 -> ["feedback" .= feedbackValue feedback]
+             -- unreachable: pilot sessions are refused above; listed so the
+             -- match stays total when the next version is added
+             InstrumentPilot -> ["feedback" .= feedbackValue feedback]
   addHeader "Content-Disposition" "attachment; filename=relationship-fix-submission.json"
   returnJson $ object
     [ "instrument_version" .= instrumentVersionCode instrument
@@ -869,11 +1141,11 @@ parseSessionKey raw = case TR.decimal raw of
 sessionLanguage :: SurveySession -> Handler Language
 sessionLanguage session = maybe (permissionDenied "invalid session language") pure $ parseLanguage $ surveySessionPresentationLanguage session
 
-itemAt :: Int -> Handler Item
-itemAt index
+stimulusAt :: [Stimulus] -> Int -> Handler Stimulus
+stimulusAt episodes index
   | index < 0 = notFound
-  | index >= length items = redirect DoneR
-  | otherwise = pure $ items !! index
+  | index >= length episodes = redirect DoneR
+  | otherwise = pure $ episodes !! index
 
 ensureAnnotation :: SurveySessionId -> Text -> Handler (Entity Annotation)
 ensureAnnotation sid itemID = runDB $ do
@@ -916,12 +1188,12 @@ annotationComplete annotation labels evidence = case annotationDecision annotati
   Just Abstained -> isJust (annotationAbstentionReason annotation >>= parseAbstentionReason)
   Just Assigned -> not (null labels) && all (`elem` map fst evidence) labels
 
-firstIncomplete :: SurveySessionId -> Handler (Maybe Int)
-firstIncomplete sid = go 0 items
+firstIncomplete :: SurveySessionId -> [Stimulus] -> Handler (Maybe Int)
+firstIncomplete sid = go 0
   where
     go _ [] = pure Nothing
-    go index (item : rest) = do
-      Entity aid annotation <- ensureAnnotation sid (itemId item)
+    go index (stimulus : rest) = do
+      Entity aid annotation <- ensureAnnotation sid (stId stimulus)
       labels <- loadLabels aid
       evidence <- loadEvidence aid
       if annotationComplete annotation labels evidence then go (index + 1) rest else pure $ Just index
@@ -933,9 +1205,9 @@ requireDecision expected ctx =
   unless ((annotationDecision (ctxAnnotation ctx) >>= parseDecision) == Just expected) $
     redirect (ItemR (ctxIndex ctx))
 
-advanceFrom :: Int -> Handler a
-advanceFrom index
-  | index + 1 < length items = redirect (ItemR $ index + 1)
+advanceFrom :: Int -> Int -> Handler a
+advanceFrom total index
+  | index + 1 < total = redirect (ItemR $ index + 1)
   | otherwise = redirect DoneR
 
 logEvent :: SurveySessionId -> Maybe Text -> Text -> Maybe Text -> Handler ()
@@ -953,7 +1225,26 @@ logEvent sid itemID kind value = do
 -- job now; the server only checks, and a database it does not recognise is a
 -- refusal to start rather than a repair attempt.
 makeFoundation :: FilePath -> FilePath -> Bool -> IO App
-makeFoundation dbPath sessionKeyPath secureCookies = do
+makeFoundation dbPath sessionKeyPath secureCookies =
+  makeFoundationWith FoundationConfig
+    { fcDbPath = dbPath
+    , fcSessionKeyPath = sessionKeyPath
+    , fcSecureCookies = secureCookies
+    , fcBindings = Map.empty
+    , fcDogfoodEnabled = True
+    }
+
+data FoundationConfig = FoundationConfig
+  { fcDbPath :: FilePath
+  , fcSessionKeyPath :: FilePath
+  , fcSecureCookies :: Bool
+  , fcBindings :: Map.Map Text Binding
+  , fcDogfoodEnabled :: Bool
+  }
+
+makeFoundationWith :: FoundationConfig -> IO App
+makeFoundationWith cfg = do
+  let dbPath = fcDbPath cfg
   Schema.assertCurrent dbPath
   pool <- runNoLoggingT $ createSqlitePool (T.pack dbPath) 4
   -- Migrant says the history is complete and the structure matches what that
@@ -964,8 +1255,10 @@ makeFoundation dbPath sessionKeyPath secureCookies = do
   unless (null pending) $ throwIO (Schema.SchemaPersistentDisagrees pending)
   pure App
     { appPool = pool
-    , appSessionKeyPath = sessionKeyPath
-    , appSecureCookies = secureCookies
+    , appSessionKeyPath = fcSessionKeyPath cfg
+    , appSecureCookies = fcSecureCookies cfg
+    , appBindings = fcBindings cfg
+    , appDogfoodEnabled = fcDogfoodEnabled cfg
     }
 
 -- | The statements persistent would run to bring this database in line with the

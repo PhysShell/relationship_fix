@@ -380,3 +380,48 @@ like one.
 Backups are written and verified but never pruned, and nothing ships them off
 the host. A verified copy on the same disk as the original protects against a
 bad migration; it does not protect against losing the disk.
+
+## Pilot surface: what a release must carry and what stays on the host
+
+From the web cutover on, the server proves every issuance binding at start and
+refuses to start otherwise. That needs files next to the binaries and files
+that are host state:
+
+- **In the release** (`$RELEASE/share/relationship-fix`, installed by the
+  flake's `postInstall`): `data/pilot/package-registry.json`,
+  `data/pilot/v0.1/CHECKSUMS.sha256`, `data/pilot/v0.1/presentation/*.jsonl`,
+  `docs/pilot-v0.1-instructions.md`, `data/ontology/behavior-v0.1.json`.
+  Never `items.jsonl` or `presentation-map/`: the server must not hold
+  canonical ids.
+- **On the host**, like the database: `RF_ISSUANCE_DIR`
+  (`/var/lib/relationship-fix/issuance`), one `annotator-N.json` per issued
+  person, written by `metrics.issuance new` and copied there by the
+  facilitator. Back it up with the database; a lost record is a session the
+  server can no longer prove.
+
+Unit environment, in addition to `RF_DB_PATH`:
+
+```text
+RF_REPO_ROOT=/nix/var/nix/profiles/relationship-fix/share/relationship-fix
+RF_ISSUANCE_DIR=/var/lib/relationship-fix/issuance
+RF_DOGFOOD_ENABLED=0
+RF_SECURE_COOKIES=1
+```
+
+The health check hits `/`, which with the dogfood surface off renders the
+"no open study" page: a 200, so activation health is unchanged. A release
+whose bindings do not prove exits before it listens, which the health check
+reports as a failed activation (state B) and rolls back.
+
+Collecting a completed session is offline and read-only:
+
+```bash
+RF_DB_PATH=/var/lib/relationship-fix/annotation.db \
+RF_REPO_ROOT=/nix/var/nix/profiles/relationship-fix/share/relationship-fix \
+RF_ISSUANCE_DIR=/var/lib/relationship-fix/issuance \
+  $RELEASE/bin/annotation-web-export annotation-pilot-v0.1 annotator-1 /var/lib/relationship-fix/exports
+```
+
+The export refuses an incomplete session and names the items; the
+`annotator-N.export.json` next to the layer repeats the binding and the layer's
+sha256 for the issuance ledger.
