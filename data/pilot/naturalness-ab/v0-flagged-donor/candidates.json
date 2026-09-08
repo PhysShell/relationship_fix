@@ -785,9 +785,19 @@
           "v1_v10": "V1 ✓ insistent demand for a behaviour change («next time text me when plans change» + «every time. I mean it»), no evaluation; V2 ✓; V3 ✓ nothing added — «ok» is a discourse marker of receipt, not consent (present in d1/d2 without objection); V4 ✓ the original's demanded behaviour restored verbatim in meaning; V5 ✓ same level («Every time. I'm serious.» ≈ «every time. I mean it»); V6 ✓ genders unspecified; V7 ✓ reply to the announcement; the latent point that B did text this time is inherited from the original and kept on the facilitator's verdict; V8 ✓ ontology EN example («I need you to actually start calling…») not reused; «every time» shared with it as in the original; V9 n/a; V10 ✓ span «next time text me when plans change»",
           "checker": "Revision, third pass. Honest note: lexically this is a minimal edit of the original; the donor's contribution is the shape only (ok + next-time mechanism + insistence tail), so provenance carries method_note. Facilitator's own line was «text me when the plan changes»; «plans change» chosen because the demand is a standing rule, as in the original — if the facilitator prefers the singular, that is a lexical veto, not a construct issue.",
           "facilitator_review": {
-            "date": null,
-            "outcome": "not_reviewed",
-            "note": "третий/второй заход после вето; ждёт verdict фасилитатора по V1–V10"
+            "date": "2026-09-08",
+            "outcome": "accepted",
+            "by": "facilitator",
+            "reason": "Восстановлен именно исходный behavioural contract: сообщать, когда планы меняются, без выдуманного «за день». Настойчивость сохранена, новых фактов нет, direction тот же. Лёгкая парадоксальность исходной сцены (B прямо сейчас написал об изменении планов) — свойство frozen original, не новый дефект d3.",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pc-12",
+                "content_sha256": "e9cea4561639800514f3fcfa1d4be2822d8c12ae34324c57084817f3ac2a0f95"
+              }
+            }
           },
           "provenance": {
             "origin": "llm_assisted",
@@ -1202,9 +1212,20 @@
           "v1_v10": "V1–V5 ✓ target «Понимаю.» не тронут; контекст: фактов сверх original нет (отменил встречу, не позвонил — оба из original); V6 ✓ A без рода (в реплике нет глаголов прошедшего времени от лица A), B м. («отменил», «позвонил»); V7 ⚠ мягко: «Понимаю.» после риторического вопроса читается как уклончивый ответ — пустота реплики и есть смысл item'а, но adjacency чуть слабее, чем после утверждения original; V8 ✓; V9 n/a; V10 ✓",
           "checker": "Revision, второй заход после вето d1 (V3). Структура — предложенная фасилитатором, пропущена через edit_constraint: «A предъявляет обиду» — да, без emotion-report, без нового факта, без рода A; «встречу» сохранено. Два мягких замечания для verdict: (1) V7 — риторический вопрос чуть ослабляет adjacency неизменного «Понимаю.»; (2) «нормально вообще?» сдвигает обиду к возмущению (оценка поступка, не личности — не BLAME_CRITICISM). Запасной вариант без обоих: «Ты отменил встречу и даже не позвонил. Даже не позвонил.» (повтор как маркер обиды, d31 f_120 «Ну какой контроль? Ну какой контроль…»).",
           "facilitator_review": {
-            "date": null,
-            "outcome": "not_reviewed",
-            "note": "третий/второй заход после вето; ждёт verdict фасилитатора по V1–V10"
+            "date": "2026-09-08",
+            "outcome": "accepted",
+            "by": "facilitator",
+            "reason": "Факты ровно исходные: отменил встречу, не позвонил; emotion-report исчез; род A не введён.",
+            "caveat": "V7/V5, зафиксировано при принятии: «Ну нормально вообще?» слегка переводит обиду в возмущение и делает «Понимаю.» менее идеальным ответом — но adjacency не сломана и интенсивность не ушла больше чем на одну ступень. Это скорее будущий unnatural_example на pilot, чем veto.",
+            "at_build": {
+              "accepted_via": "facilitator",
+              "revision_reason": "naturalness",
+              "parent_item_version": {
+                "package_id": "annotation-pilot-v0",
+                "item_id": "pc-17",
+                "content_sha256": "3f53cd9a07d9271f0cd2009f7765cb36f00f560c0c753170ce8c320eaa553f6f"
+              }
+            }
           },
           "provenance": {
             "origin": "llm_assisted",
@@ -1376,7 +1397,8 @@
                 "item_id": "pn-10",
                 "content_sha256": "4f7e610eb549790356c19eaaf28ef0cc89d233c750472e61e5aac327307fc2b6"
               }
-            }
+            },
+            "rule_basis": "узкий carve-out правила 6 authoring guide: при явно выбранном пути без pre-pilot human naturalness evidence facilitator MAY принять заранее flagged natural-stratum item только при kind=revision, только при V9 lexical-only change и с явной записью accepted_via=facilitator; это не human evidence и не расширяет правило на semantic/content revisions"
           }
         }
       ],
@@ -1870,9 +1892,31 @@
         "pc-17-d2"
       ],
       "note": "11/13 accepted. Принятие живёт здесь и в facilitator_review каждого кандидата (at_build — что писать в authoring при сборке v0.1). Корпус не изменён, v0.1 не собран: сборка после 13/13 verdicts и отдельного «го». Пять переводов из no_veto сделаны при согласии checker'а (checker_concurrence)."
+    },
+    {
+      "date": "2026-09-08",
+      "reviewer": "facilitator",
+      "pass": 3,
+      "scope": "pc-12-d3, pc-17-d2",
+      "accepted": [
+        "pc-12-d3",
+        "pc-17-d2"
+      ],
+      "caveats": {
+        "pc-17-d2": "V7/V5 — записано, не veto"
+      },
+      "pending_verdict": [],
+      "note": "13/13 donor candidates accepted. Правило 6 authoring guide сужено до формулировки фасилитатора (см. pn-10-d1.rule_basis). v0.1 не собран."
     }
   ],
   "replacement_gate_note": "kind=replacement НЕ идёт через preregistered A/B acceptance gate (ab-manifest.acceptance_rule): тот gate сравнивает варианты одного и того же item; сравнение нового сюжета со старым измеряло бы предпочтение сюжета, а не правку. Путь replacement: donor → facilitator acceptance по V1–V10 против design intent (с записанной причиной) → новый original item в v0.1, старый retired → сигнал естественности только из pilot (`unnatural_example` × способ авторинга, exploratory). На этой генерации пакеты не собираются вовсе (см. ab_status).",
   "ab_status": "not_for_ab: слепой A/B на этой генерации не запускается (решение 2026-09-08: без людей на этом этапе). ab-manifest.json существует, чтобы `metrics.naturalness_ab check` работал без изменений кода; `build` на этом каталоге не запускать (процедурно): build не различает kind и собрал бы пары и для replacement. Если A/B на donor-ревизиях когда-нибудь понадобится — build должен пропускать kind=replacement (cutover work, код сейчас не меняется).",
-  "pilot_signal_note": "Provenance-поля (method, source_*) записаны, чтобы на pilot построить кросс-таб `unnatural_example` × способ авторинга (handcrafted v0 / minimal edit gen 1 / external_dialogue_seeded). Это exploratory diagnostic на двух разметчиках, не тест причинного превосходства метода: items не рандомизированы по способу авторинга, а выбраны по флагам."
+  "pilot_signal_note": "Provenance-поля (method, source_*) записаны, чтобы на pilot построить кросс-таб `unnatural_example` × способ авторинга (handcrafted v0 / minimal edit gen 1 / external_dialogue_seeded). Это exploratory diagnostic на двух разметчиках, не тест причинного превосходства метода: items не рандомизированы по способу авторинга, а выбраны по флагам.",
+  "acceptance_status": {
+    "accepted": 13,
+    "pending_facilitator_verdicts": 0,
+    "v0_1_built": false,
+    "human_naturalness_evidence": "none",
+    "next_gate": "explicit v0.1 build/cutover — отдельная работа с отдельным «го»: четыре replacement, retirement, новые ids, lineage, dogfood/Catalog cutover; не «собрать как очевидно»"
+  }
 }
