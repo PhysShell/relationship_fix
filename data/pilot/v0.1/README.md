@@ -1,6 +1,6 @@
 # annotation-pilot-v0.1 — BUILT 2026-09-08 · sealed · NOT issued
 
-Статус: research artifact собран по [cutover contract A–I](../../../docs/pilot-v0.1-cutover-contract.md) и запечатан. **Не выдан** (issuance J — отдельное «го»), **web cutover не сделан** (annotation-web и `Catalog.hs` по-прежнему показывают старое; отдельная приёмка), **human naturalness evidence: none**.
+Статус: research artifact собран по [cutover contract A–I](../../../docs/pilot-v0.1-cutover-contract.md), запечатан и **принят фасилитатором 2026-09-08** (A–I closed). **Не выдан** (issuance J — отдельное «го»), **web cutover не сделан** (annotation-web и `Catalog.hs` по-прежнему показывают старое; отдельная приёмка), **human naturalness evidence: none**.
 
 Идентичность пакета: `sha256(items.jsonl) = c100db894cef93cdc7b9dd69860dc805e1acdeabf7b8a58fd6dd9a651d8271d9`; полный список — `CHECKSUMS.sha256` (после seal любое изменение = новая версия пакета; `metrics.materialize verify` это обнаруживает).
 
@@ -31,15 +31,23 @@ Presentation-слои: `presentation/annotator-1.jsonl` (sha `3847d6572b8e…`),
 ## До issuance (J) — не сделано, не начинать без «го»
 
 1. `eligibility.json` заполняется фасилитатором до выдачи (`has_not_seen_items` — реальный критерий; contamination ledger).
-2. Инструкция разметчика привязывается hash'ем при выдаче. **Открыто:** `docs/pilot-v0-instructions.md` пока не содержит необязательного поля `feedback` (`unnatural_example`), без которого кросс-таб `unnatural_example` × disagreement не построить — нужна новая версия инструкции до issuance, не правка v0.
+2. Инструкция разметчика: [`docs/pilot-v0.1-instructions.md`](../../../docs/pilot-v0.1-instructions.md) (написана 2026-09-08; описывает необязательный канал `feedback` с флагами `unnatural_example | insufficient_context | wording_or_translation | other` и правило meaningful_feedback = хотя бы один флаг ИЛИ непустая заметка). Hash на момент написания: `9b53f79d91d951885a66d923056392a005665ab0865962a50bad8f822f0f4f57` — привязывающим считается hash, записанный в issuance record в момент выдачи. **Erratum к sealed manifest:** поле `pilot-manifest.json → instructions` указывает на `docs/pilot-v0-instructions.md` (документ пакета v0, без `feedback`); manifest запечатан и не правится, поэтому при issuance инструкцией пакета является v0.1-документ, и это фиксируется в issuance record, а не в manifest.
 3. Issuance record: sha256 именно того файла, который уходит каждому псевдониму (протокол 2026-09-08); после выдачи `--force` запрещён процедурой.
 4. Web cutover — отдельная приёмка: реестр статусов пакетов, `v0` не выдаётся runtime'ом, token-bound renderer/collector именно этого пакета, pc-08 в glossary `Domain.hs`, `Catalog.hs` на v7.
 
 ## Проверить самому
 
+Из `research/python`:
+
 ```
-cd research/python
 uv run python -m metrics.materialize verify --pilot-dir ../../data/pilot/v0.1
 uv run python -m metrics.validate_items --pilot-dir ../../data/pilot/v0.1 --ontology ../../data/ontology/behavior-v0.1.json
-sha256sum -c ../../data/pilot/v0.1/CHECKSUMS.sha256   # из каталога пакета
 ```
+
+Из каталога пакета (записи в `CHECKSUMS.sha256` относительны к нему):
+
+```
+cd data/pilot/v0.1 && sha256sum -c CHECKSUMS.sha256
+```
+
+Этот README не входит в `CHECKSUMS.sha256` (seal покрывает build-spec, items, strata, manifest, eligibility, presentation/, presentation-map/, form/), поэтому правки здесь seal не ломают; всё, что в списке, — не редактируется.

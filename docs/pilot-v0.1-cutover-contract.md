@@ -56,4 +56,16 @@
 
 ## Статус выполнения 2026-09-08
 
-A ✓ · B ✓ · C ✓ · D ✓ · E ✓ · F ✓ · G ✓ · H ✓ (docs; runtime-отказ выдавать v0 — web cutover) · I ✓ (`CHECKSUMS.sha256`) · **J — не начато, нет GO**. Build ≠ web cutover соблюдено: annotation-web не тронут. Открытый пункт до issuance: инструкция разметчика без поля `feedback` — новая версия инструкции, не правка v0 (см. README пакета).
+A ✓ · B ✓ · C ✓ · D ✓ · E ✓ · F ✓ · G ✓ · H ✓ (docs; runtime-отказ выдавать v0 — web cutover) · I ✓ (`CHECKSUMS.sha256`) · **J — BLOCKED, нет GO**. Приёмка фасилитатора 2026-09-08: v0.1 artifact ACCEPTED / SEALED, A–I CLOSED, web cutover NOT STARTED. Build ≠ web cutover соблюдено: annotation-web не тронут.
+
+## Issuance prep (J) — 2026-09-08, sealed package не тронут
+
+J блокируют три конкретные вещи, не исследования naturalness:
+
+1. **Инструкция v0.1** — [pilot-v0.1-instructions.md](pilot-v0.1-instructions.md) написана; v0-инструкция не менялась. Hash на момент написания `9b53f79d91d951885a66d923056392a005665ab0865962a50bad8f822f0f4f57`; привязывающий hash — тот, что записан в issuance record при выдаче (до выдачи документ ещё может правиться, после — только новая версия).
+2. **Канал `feedback`** описан в инструкции как независимый от решения: `{"flags": [...], "note": "..."}`, допустимые флаги ровно `unnatural_example`, `insufficient_context`, `wording_or_translation`, `other` (= `metrics.agreement.FEEDBACK_FLAGS` = `annotation-web Feedback.hs`). Правило **meaningful_feedback = хотя бы один флаг ИЛИ непустая заметка**; пустое раскрытие блока — не сигнал. Разметчик не пишет JSON руками: renderer/collector материализует canonical response; если канал предлагался, `feedback` пишется для каждого item (пустой = «канал был, отзыва нет»), чтобы отчёт различал «не собирали» и «собирали, ноль».
+3. **Hash-pinned issuance record**: sha256 инструкции + sha256 выданного presentation-файла + псевдоним + дата, до отправки; после — `--force` запрещён процедурно.
+
+Erratum к sealed manifest: `pilot-manifest.json → instructions` называет v0-документ; manifest не правится, инструкция пакета при issuance — v0.1-документ по issuance record (README пакета). README пакета не входит в seal; команда проверки checksum там исправлена (относительные пути от каталога пакета).
+
+Следующий большой gate — **web cutover** (отдельная приёмка): token-bound exact-packet renderer/collector, runtime-отказ выдавать v0, `Catalog.hs` на v7 с EN-переводами новых текстов, pc-08 в glossary. Только затем issuance J и pilot.
