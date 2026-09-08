@@ -226,7 +226,7 @@ Checker: оба действия на месте («понимаю… стрём
 | 2 | Provenance/authoring representation | сделано: `rf.pilot-item.v2`, `metrics/items.py`, lineage-проверки в `validate_items` (родитель — явная тройка package_id + item_id + content_sha256; дубликат pilot_id среди пакетов — fail-closed, lineage через него не резолвится), v1-проекция в `presentation` |
 | 3 | Remove v0.2-candidate target leakage | сделано: три примера B.AVOIDANCE_TOPIC_SHIFT заменены; частичная утечка контекста pc-08 в glossary annotation-web записана (§3) |
 | 4 | Minimal-edit candidates for 13 flagged items | сделано: `candidates.json`, 26 кандидатов + 4 отклонённых (negative controls); veto-review фасилитатора — только по чек-листу V1–V10, след `vetoed` с причиной, `metrics.naturalness_ab check` гейтит `build`; **ждёт veto-review** |
-| 4b | Donor-grounded generation для тех же 13 items | подготовлено: `data/pilot/naturalness-ab/v0-flagged-donor/` — donor report с лицензиями по первичным артефактам (RESD MIT tier A, Dialogs OpenRAIL tier B, Toloka NC reference-only, DRAL CC0 без транскриптов), 13 кандидатов на скелетах импровизированных диалогов RESD (4 замены сюжета, 9 ревизий), provenance `method: external_dialogue_seeded`, n-gram проверка некопирования; **ждёт veto-review**; при принятии — сравнение на pilot: `unnatural_example` × способ авторинга |
+| 4b | Donor-grounded generation для тех же 13 items | подготовлено: `data/pilot/naturalness-ab/v0-flagged-donor/` — donor report с лицензиями по первичным артефактам (RESD MIT tier A, Dialogs OpenRAIL tier B, Toloka NC reference-only, DRAL CC0 без транскриптов), 13 кандидатов на скелетах импровизированных диалогов RESD (4 замены сюжета, 9 ревизий), provenance `method: external_dialogue_seeded`, n-gram проверка некопирования; review фасилитатора 2026-09-08: 4 вето (pc-02, pc-05, pc-09, pc-12) → переписаны как d2, 5 без вето, 4 без вердикта, ничего не принято; replacements не идут через A/B gate; **ждёт facilitator acceptance по V1–V10**; на pilot — exploratory кросс-таб `unnatural_example` × способ авторинга |
 | 4a | Independent blind audit of all 46 items | подготовлено: `data/pilot/naturalness-audit/v0-all/` — стерильный Pass A (opaque ids, свой порядок, только реплики, три вопроса), Pass B после заморозки ответов (`metrics.naturalness_audit report` пишет sha256 ответов и counts против critic-1 по стратам); contamination ledger `data/pilot/contamination-ledger.json`; **ждёт аудитора, который не автор, не A/B rater и никогда не pilot annotator** |
 | 5 | Human blinded A/B | подготовлено: 5 пакетов, инструкции, scoring; **ждёт людей** |
 | 6 | Accept/reject edits manually | ждёт результатов A/B |
@@ -276,6 +276,18 @@ Evidence bundle окончания human phase: veto (sha candidates.json, vetoe
 Issuance: до отправки каждому человеку записывается sha256 именно того экземпляра файла, который уходит этому псевдониму, а не «пакет когда-то собран».
 
 **Статус: protocol decisions recorded · code phase CLOSED · human phase READY. Next: 1 auditor, 3 A/B raters, pilot annotators untouched. Никакие ревизии корпуса не admissible до полного закрытия и lock veto-review, blind audit и A/B.**
+
+### Решения 2026-09-08: donor generation без людей
+
+Контекст: на этом этапе людей нет (см. 4b). Human phase выше остаётся определённой и готовой, но не является предусловием v0.1 на этом пути; статусная строка выше для no-people пути **superseded** пунктами ниже.
+
+1. **Replacement не идёт через preregistered A/B acceptance gate.** Gate сравнивает варианты одного item; сравнение нового сюжета со старым измеряло бы предпочтение сюжета, а не правку. Путь replacement: donor → facilitator acceptance (V1–V10 против design intent, причина записывается) → новый original item в v0.1 (`origin: llm_assisted`, `accepted_via: facilitator`, `parent_item_version: null`), старый item retired → сигнал естественности только с pilot.
+2. **Для `kind: replacement` V3/V4 применяются к observable actions, которых требует design intent, а не к конкретным фактам и сюжету retired original.** Для revision — по-прежнему против оригинала.
+3. **Acceptance donor-ревизий без A/B** — решение фасилитатора с записанной причиной, `accepted_via: facilitator`; к трём A/B-оценщикам не возвращаемся. Review 2026-09-08: 4 вето (pc-02-d1 V1/V2, pc-12-d1 V7/V3/V5, pc-09-d1 V4, pc-05-d1 V3/V5) → d2 в `candidates.json`, след в `vetoed` и `review_log`; 5 без вето; 4 без вердикта. Ничего не принято.
+4. **Кросс-таб `unnatural_example` × способ авторинга на pilot — exploratory diagnostic**, не тест причинного превосходства метода: items выбраны по флагам, не рандомизированы по способу авторинга.
+5. Cutover work, код не сейчас: `metrics.naturalness_ab build` должен пропускать `kind=replacement` (сейчас build не различает kind — на donor-каталоге он процедурно не запускается); представление retired status и связи «новый original ← retired item» (в `rf.pilot-item.v2` поля нет); ручная сверка принятых donor-кандидатов с `candidates.json` при сборке v0.1.
+
+**Статус donor path: reviewed 2026-09-08 · d2 pending facilitator acceptance · corpus untouched.**
 
 ## Источники
 

@@ -2,7 +2,7 @@
   "schema_version": "rf.naturalness-ab-manifest.v1",
   "ab_id": "naturalness-ab-v0-flagged-donor",
   "created": "2026-09-08",
-  "purpose": "Donor-grounded generation для тех же 13 flagged items: кандидаты построены на скелетах живых импровизированных диалогов RESD (MIT), текст не копируется. Пакеты не собраны: этап человеческого A/B здесь не запущен; файл существует, чтобы `metrics.naturalness_ab check` и, при появлении людей, `build` работали без изменений кода.",
+  "purpose": "Donor-grounded generation для тех же 13 flagged items: кандидаты построены на скелетах живых импровизированных диалогов RESD (MIT), текст не копируется. Файл существует, чтобы `metrics.naturalness_ab check` работал без изменений кода. Пакеты не собираются: слепой A/B на этой генерации не запускается (решение 2026-09-08, без людей на этом этапе); `build` на этом каталоге не запускать — он не различает kind и собрал бы пары и для replacement.",
   "sources": [
     {
       "package_id": "annotation-pilot-v0",
@@ -80,7 +80,9 @@
     "record": "снятый кандидат переносится в vetoed[] с candidate_id, checklist (пункты), reason и vetoed_by; rejected[] — negative controls, не переписываются",
     "gate": "metrics.naturalness_ab check — обязателен перед build; build отказывает при любой проблеме admissibility"
   },
-  "acceptance_rule": "PREREGISTERED 2026-09-07, до первого выданного пакета: reject_meaning_shift при любом 'substantial'; eligible если кандидата предпочли строго больше оценщиков, чем оригинал (no_difference нейтрален, slight не блокирует); итоговый accept/reject — вручную (gate §4, шаг 6), принятая версия получает authoring.accepted_via = blinded_ab.",
+  "acceptance_rule": "PREREGISTERED 2026-09-07, до первого выданного пакета: reject_meaning_shift при любом 'substantial'; eligible если кандидата предпочли строго больше оценщиков, чем оригинал (no_difference нейтрален, slight не блокирует); итоговый accept/reject — вручную (gate §4, шаг 6), принятая версия получает authoring.accepted_via = blinded_ab. На этой генерации не применяется (ab_status=not_for_ab): acceptance — решение фасилитатора с записанной причиной, accepted_via=facilitator.",
   "adjudication_principle": "ineligible-кандидат не может быть принят; eligible-кандидат может быть отклонён только с записанной причиной, независимой от личного предпочтения естественности; числовой extra-threshold не вводится",
-  "issuance": "после veto-review записываются sha256 candidates.json, vetoed/admissible counts, issued_at, псевдоним ревьюера; после этого --force запрещён процедурой, расхождение с packets/checksums.json инвалидирует выдачу"
+  "issuance": "после veto-review записываются sha256 candidates.json, vetoed/admissible counts, issued_at, псевдоним ревьюера; после этого --force запрещён процедурой, расхождение с packets/checksums.json инвалидирует выдачу",
+  "ab_status": "not_for_ab",
+  "replacement_rule": "kind=replacement не проходит через acceptance_rule ниже (тот сравнивает варианты одного item). Путь: donor → facilitator acceptance по V1–V10 против design intent → новый original item в v0.1 (accepted_via=facilitator, parent_item_version=null), старый retired → сигнал естественности с pilot. Для kind=replacement V3/V4 применяются к observable actions, которых требует design intent, а не к фактам и сюжету retired original. Решение 2026-09-08."
 }

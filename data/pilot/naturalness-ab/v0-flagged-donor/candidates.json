@@ -6,8 +6,8 @@
   "triage_source": "docs/research/dialogue-naturalness-gate.md §7",
   "donor_report": "donor-report.md",
   "candidate_origin_note": "Все кандидаты — llm_assisted, method external_dialogue_seeded: из донорских реплик RESD (MIT) взята только структура взаимодействия, текст не копируется (source_text_copied=false, проверено n-gram сверкой в donor-report.md). Порядок: donor → skeleton → construct → candidate → V1–V10, восстановим из provenance каждого кандидата.",
-  "kind_note": "kind=revision — факты и сюжет сохранены, при принятии это revision с parent lineage. kind=replacement — сюжет/факты новые: при сборке v0.1 это новый original item с унаследованным design intent, старый item retired; притворяться revision запрещено.",
-  "admissibility_note": "Кандидат находится ровно в одном из трёх списков: candidates (допущен в veto-review), vetoed (снят фасилитатором до выдачи по пункту veto_checklist, с причиной) или rejected. Ничего не принято автоматически; корпус и пакеты не изменены.",
+  "kind_note": "kind=revision — факты и сюжет сохранены; при принятии это revision с parent lineage (accepted_via по тому, как принято: blinded_ab, если был A/B; facilitator — если принят фасилитатором без A/B, с записанной причиной). kind=replacement — сюжет/факты новые: при сборке v0.1 это новый original item с унаследованным design intent (authoring.origin=llm_assisted, accepted_via=facilitator, parent_item_version=null), старый item retired; притворяться revision запрещено. Для kind=replacement V3/V4 применяются к observable actions, которых требует design intent, а не к фактам и сюжету retired original (решение 2026-09-08).",
+  "admissibility_note": "Кандидат находится ровно в одном из трёх списков: candidates (допущен в veto-review), vetoed (снят фасилитатором до выдачи по пункту veto_checklist, с причиной) или rejected. Ничего не принято автоматически; корпус и пакеты не изменены. Запись `facilitator_review` у кандидата — след review, не acceptance.",
   "veto_checklist": [
     {
       "id": "V1",
@@ -114,10 +114,77 @@
           "text": "Будьте повнимательнее, пожалуйста!",
           "why": "короткое требование после ошибки — слишком общее, отвергнут",
           "chosen": false
+        },
+        {
+          "source_ref": "45_happiness_sadness_s_170",
+          "text": "Нет, больше не ставь.",
+          "why": "короткий запрет во втором лице, адресованный собеседнику — форма требования, не предложения",
+          "chosen": true
+        },
+        {
+          "source_ref": "17_neutral_disgust_d_092",
+          "text": "все ваши рекламные акции, пожалуйста, больше не парьте мне мозги и слезьте с моих ушей, хорошо?",
+          "why": "«больше не …» + императив, но хвост «хорошо?» смягчает, а регистр — клиент/оператор; форма рассмотрена, не взята",
+          "chosen": false
         }
       ],
-      "skeleton": "[претензия, привязанная к конкретному последствию для говорящего] → [короткая отмазка/минимизация] → [требование как конкретная договорённость на следующий раз; нажим через сужение «не X, а Y»]; оценки личности нет",
+      "skeleton": "[претензия, привязанная к конкретному последствию для говорящего] → [короткая отмазка/минимизация] → [требование во втором лице как конкретный механизм на следующий раз (d31 f_140, d45 s_170); нажим сужением «не X, а Y» (d02 a_054)]; оценки личности нет; совместное «давай сделаем» — не требование (вето d1)",
       "candidates": [
+        {
+          "candidate_id": "pc-02-d2",
+          "origin": "llm_assisted",
+          "kind": "replacement",
+          "scope": "new item, same shape (4 messages, B-A-B-A)",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Я ещё на работе, часа на полтора."
+            },
+            {
+              "author": "a",
+              "text": "Ты ключи опять с собой унёс? Я у подъезда с пакетами стою, замёрзла уже."
+            },
+            {
+              "author": "b",
+              "text": "Блин. Унёс. Через десять минут буду."
+            },
+            {
+              "author": "a",
+              "text": "Сделай второй комплект и оставь мне. Завтра, не «на неделе». Чтобы это было в последний раз."
+            }
+          ],
+          "inherited": "трёхходовая механика претензия → минимизация → требование-механизм (d31 f_140); требование во втором лице (d45 s_170, d31 f_140 «назови и дай»); нажим сужением срока «не на неделе, а завтра» (d02 a_054); «блин» как признание",
+          "changed": "относительно d1: target переписан — императив к B («Сделай… и оставь мне») вместо «давай сделаем»; добавлен маркер нажима «чтобы это было в последний раз» (поведение впредь). Контекстные реплики те же, что в d1. Относительно оригинала: сюжет, факты, лексика новые; нет «мне нужно, чтобы» и «каждый раз, без исключений»",
+          "v1_v10": "V1 ✓ настойчивое требование изменить поведение впредь: императив к B, нажим сужением срока, «чтобы это было в последний раз»; оценки личности нет; V2 ✓ A требует от B во втором лице — не совместное предложение; V3 ✓ (replacement: против design intent, не против сюжета retired original) — нет извинения, обвинения, обобщения, объяснения; V4 ✓ span требования «Сделай второй комплект и оставь мне»; V5 ✓ уровень нажима сопоставим с «Каждый раз, без исключений»; V6 ✓ A ж. («замёрзла» в контексте), B м. («унёс»); V7 ✓ 4 сообщения B-A-B-A, B отвечает на A; V8 ✓ примеры онтологии не использованы («сколько можно», «я серьёзно»); V9 n/a; V10 ✓ span цитируем",
+          "checker": "Replacement, второй заход после вето d1 (V1/V2): требование адресовано B во втором лице; сюжет ключей сохранён — вето касалось направления, не сюжета. Для review: «чтобы это было в последний раз» — маркер нажима на поведение впредь, не оценка личности; если читается как ультиматум, это всё ещё inclusion criterion B.PRESSURE_FOR_CHANGE. Путь при принятии: новый original в v0.1, старый pc-02 retired.",
+          "facilitator_review": {
+            "date": null,
+            "outcome": "not_reviewed",
+            "note": "второй заход после вето d1; ждёт review фасилитатора по V1–V10"
+          },
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "31_fear_enthusiasm_f_140",
+              "02_anger_sadness a_054",
+              "45_happiness_sadness_s_170"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered"
+          }
+        }
+      ],
+      "vetoed": [
         {
           "candidate_id": "pc-02-d1",
           "origin": "llm_assisted",
@@ -163,10 +230,21 @@
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          },
+          "checklist": [
+            "V1",
+            "V2"
+          ],
+          "reason": "target стал совместным предложением («Давай второй комплект сделаем») — это не требование A к B: потеряны направление (V2) и construct «давление с требованием измениться» (V1). Сюжет ключей вето не касается.",
+          "vetoed_by": "facilitator",
+          "vetoed_at": "2026-09-08",
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "vetoed",
+            "note": "переписан как pc-02-d2"
           }
         }
-      ],
-      "vetoed": []
+      ]
     },
     {
       "item_id": "pc-05",
@@ -203,8 +281,8 @@
         {
           "source_ref": "07_fear_neutral f_110",
           "text": "Так вот задумался, вообще нехорошо вышло.",
-          "why": "самоуничижительное признание без формулы",
-          "chosen": true
+          "why": "контрпример после вето d1: «задумался» — объяснение причины проступка; именно это V3 запрещает, не наследовать",
+          "chosen": false
         },
         {
           "source_ref": "07_fear_neutral f_120",
@@ -223,10 +301,61 @@
           "text": "Я работал именно над этими бумагами. Да, я понимаю, что я немного задержал сроки. Но поймите, даже другой любой сотрудник сделает это намного дольше, чем я. Поэтому дайте еще два дня.",
           "why": "контрпример: признание + «но» как контратака; не наследовать",
           "chosen": false
+        },
+        {
+          "source_ref": "35_neutral_fear_f_064",
+          "text": "Ну, я, ну, понимаю, может быть, уставшая была на работе, тоже с детьми бывает тяжело.",
+          "why": "контрпример: «понимаю» + домысливание состояния другого («может быть, уставшая была») — приписанное, а не сообщённое состояние; не наследовать",
+          "chosen": false
         }
       ],
-      "skeleton": "[претензия за сказанное при посторонних] → [признание состояния другого своими словами («тебе и так…») + самоуничижительное признание («ляпнул не подумав») + короткое извинение]; ни «слышу тебя», ни «но»",
+      "skeleton": "[претензия за сказанное при посторонних; состояние названо самим говорящим] → [перефраз названного состояния + признание вины без объяснения причины + короткое извинение (d07 f_040)]; ни «слышу тебя», ни «но» (d02 s_040), ни приписанного состояния (d35 f_064), ни объяснения «задумался / не подумал» (d07 f_110)",
       "candidates": [
+        {
+          "candidate_id": "pc-05-d2",
+          "origin": "llm_assisted",
+          "kind": "replacement",
+          "scope": "new item, same shape (A, B)",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ну и зачем при твоих про моё собеседование? Мне и так от этой темы тошно, а тут ещё и при них."
+            },
+            {
+              "author": "b",
+              "text": "Понимаю, тема и так больная. Зря сказал, не моё было рассказывать. Извини."
+            }
+          ],
+          "inherited": "связка признание состояния другого + признание вины + извинение в одном выдохе (d07 f_040); состояние другого не домысливается — только то, что сказано",
+          "changed": "относительно d1: A теперь сам(а) называет состояние («от этой темы тошно») — B его перефразирует («тема и так больная»), а не приписывает; объяснение «ляпнул не подумав» убрано, вместо него голая ответственность «не моё было рассказывать». Относительно оригинала: сюжет и факты новые; «Слышу тебя» нет",
+          "v1_v10": "V1 ✓ признание переживания («Понимаю, тема и так больная» — перефраз того, что сообщает A) + ответственность и извинение («Зря сказал, не моё было рассказывать. Извини.»); V2 ✓ B → A; V3 ✓ (replacement: против design intent) — нет объяснения причины, нет «но», нет состояния, которого A не сообщает; V4 ✓ оба span'а на месте, цитируемы по отдельности; V5 ✓; V6 ✓ A без рода («тошно», «при них» — маркеров нет), B м. («сказал»); V7 ✓ 2 сообщения, B отвечает на A; V8 ✓ «Слышу тебя» нет; «понимаю» — обычное слово, не формула отражения; V9 n/a; V10 ✓",
+          "checker": "Replacement, второй заход после вето d1 (V3/V5): признаваемое состояние теперь сообщено самим A, B его только перефразирует; объяснения причины нет. Граница validation/repair: обе половины наблюдаемы по отдельности. Замечание для review: «Мне и так от этой темы тошно» — разговорное называние состояния, не отчёт в регистре «мне было неприятно» (флаг EXPLICIT_EMOTION_REPORT оригинала); если фасилитатор считает и это отчётом — альтернатива без называния состояния лишает B того, что можно признать.",
+          "facilitator_review": {
+            "date": null,
+            "outcome": "not_reviewed",
+            "note": "второй заход после вето d1; ждёт review фасилитатора по V1–V10"
+          },
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "07_fear_neutral f_040"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered"
+          }
+        }
+      ],
+      "vetoed": [
         {
           "candidate_id": "pc-05-d1",
           "origin": "llm_assisted",
@@ -264,10 +393,21 @@
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          },
+          "checklist": [
+            "V3",
+            "V5"
+          ],
+          "reason": "«тебе и так от всего этого тошно» приписывает A состояние, которое A не сообщает — новый факт (V3); «ляпнул не подумав» добавляет объяснение причины — новое действие (V3), и вместе они сдвигают накал (V5). Переработать: B перефразирует только то, что A сказал(а) сам(а), без объяснения.",
+          "vetoed_by": "facilitator",
+          "vetoed_at": "2026-09-08",
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "vetoed",
+            "note": "переписан как pc-05-d2"
           }
         }
-      ],
-      "vetoed": []
+      ]
     },
     {
       "item_id": "pc-06",
@@ -350,6 +490,11 @@
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "no_veto",
+            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
           }
         }
       ],
@@ -402,10 +547,69 @@
           "text": "Ваш заказ будет готов через 15-20 минут. А кофе я принесу вам прямо сейчас!",
           "why": "конкретное время как успокоение",
           "chosen": false
+        },
+        {
+          "source_ref": "22_fear_anger_a_040",
+          "text": "Всё нормально, всё хорошо. Ничего мы не забыли, мы всё взяли.",
+          "why": "короткое заверение «ничего не забыли» как хвост успокоения — форма для «я помню» без мета-объяснения",
+          "chosen": true
+        },
+        {
+          "source_ref": "27_neutral_fear_n_040",
+          "text": "Да, я знаю. И вот когда человек работает долго и хорошо, ему, как вы думаете, что нужно?",
+          "why": "«Да, я знаю» как короткое подтверждение перед продолжением — рассмотрено, не взято: в доноре это переход к другой теме",
+          "chosen": false
         }
       ],
-      "skeleton": "[маркер цейтнота сейчас] + [конкретный слот возврата], без мета-заверения о важности",
+      "skeleton": "[маркер цейтнота сейчас (d12 d_080)] + [конкретный слот возврата (d12 d_090)] + [короткое заверение «помню» без мета-хвоста (d22 a_040)]",
       "candidates": [
+        {
+          "candidate_id": "pc-09-d2",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Нам надо обсудить, что было в субботу."
+            },
+            {
+              "author": "b",
+              "text": "Не сейчас, у меня созвон через минуту. В восемь освобожусь, сядем и обсудим. Я помню."
+            }
+          ],
+          "inherited": "цейтнот «через минуту» (d12 d_080) + конкретный слот (d12 d_090) + короткое заверение хвостом (d22 a_040)",
+          "changed": "относительно d1: возвращено заверение в короткой форме «Я помню.» (без «что это важно»); тире заменено запятой. Относительно оригинала: порядок «не сейчас» → слот → заверение; нет «спокойно», нет мета-хвоста",
+          "v1_v10": "V1 ✓ отсрочка с конкретным возвратом («В восемь освобожусь, сядем и обсудим»); V2 ✓; V3 ✓; V4 ✓ заверение сохранено в короткой форме («Я помню.») — по вето d1; V5 ✓; V6 ✓ род B не введён («освобожусь», «помню»; «не забыл» отвергнут — маркер рода); V7 ✓; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Revision, второй заход после вето d1 (V4): «Я помню.» возвращает действие заверения без мета-хвоста. «Не забыл» не использован — ввёл бы род B.",
+          "facilitator_review": {
+            "date": null,
+            "outcome": "not_reviewed",
+            "note": "второй заход после вето d1; ждёт review фасилитатора по V1–V10"
+          },
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "12_sadness_disgust_d_090",
+              "12_sadness_disgust_d_080",
+              "22_fear_anger_a_040"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered"
+          }
+        }
+      ],
+      "vetoed": [
         {
           "candidate_id": "pc-09-d1",
           "origin": "llm_assisted",
@@ -442,10 +646,20 @@
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          },
+          "checklist": [
+            "V4"
+          ],
+          "reason": "убран хвост «Я помню, что это важно» — потеря действия (заверение), а не только мета-лексики. Нужен вариант с коротким «я помню» / «не забыл» (без введения рода B).",
+          "vetoed_by": "facilitator",
+          "vetoed_at": "2026-09-08",
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "vetoed",
+            "note": "переписан как pc-09-d2"
           }
         }
-      ],
-      "vetoed": []
+      ]
     },
     {
       "item_id": "pc-12",
@@ -482,17 +696,77 @@
           "source_ref": "31_fear_enthusiasm_f_140",
           "text": "Назови и дай мне их номера, чтобы в следующий раз мне не пришлось вызывать скорую и все остальное делать.",
           "why": "требование как механизм на следующий раз",
-          "chosen": false
+          "chosen": true
         },
         {
           "source_ref": "44_neutral_anger_a_160",
           "text": "Я не собираюсь успокаиваться! Принимай купюру! Давай быстрее заканчиваем этот разговор! Сама говоришь, очередь задержит!",
           "why": "императивный повтор — слишком агрессивно, отвергнут",
           "chosen": false
+        },
+        {
+          "source_ref": "10_happiness_anger a_081",
+          "text": "Мне это повышение обещают уже третий год, и каждый раз не до меня, и всякий раз я что-то должна еще выполнить, перевыполнить, перевыполнить, все, хватит. Или он сейчас?",
+          "why": "настойчивость через «каждый раз… всё, хватит» у живого говорящего — форма для «every time», не текст",
+          "chosen": true
+        },
+        {
+          "source_ref": "17_neutral_disgust_d_092",
+          "text": "все ваши рекламные акции, пожалуйста, больше не парьте мне мозги и слезьте с моих ушей, хорошо?",
+          "why": "«больше не …, хорошо?» — рассмотрено, не взято: хвост-вопрос смягчает, регистр клиент/оператор",
+          "chosen": false
         }
       ],
-      "skeleton": "[реакция на одностороннее изменение] → [требование как механизм, нажим контрастом «before, not after»]; донор русский, переносится только структура",
+      "skeleton": "[реакция на одностороннее изменение] → [требование как механизм на следующий раз (d31 f_140), нажим контрастом «не X, а Y» (d02 a_054), настойчивость «каждый раз… хватит» (d10 a_081)]; донор русский, переносится только структура; контекст: B предупредил(а) до ухода — ничего про «уже там»",
       "candidates": [
+        {
+          "candidate_id": "pc-12-d2",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Change of plans, I'm going to Max's after work."
+            },
+            {
+              "author": "a",
+              "text": "ok. but next time you tell me the day before, not the day of. every time, I mean it"
+            }
+          ],
+          "inherited": "contrast «не X, а Y» (d02 a_054); mechanism for next time (d31 f_140); insistence «every time … enough» (d10 a_081)",
+          "changed": "relative to d1: no invented context («already there» removed) — the contrast is now «the day before, not the day of», which B's own message entails (plans for after work today); insistence restored to the original's level («every time, I mean it»). Relative to the original: no «I need you to», no «start texting me» (B did text), lowercase as in EN natural items",
+          "v1_v10": "V1 ✓ demand for a behaviour change («next time you tell me the day before, not the day of») + insistence («every time, I mean it»), no evaluation; V2 ✓; V3 ✓ nothing invented: «the day of» is entailed by B's message; V4 ✓ demand span and insistence span both present; V5 ✓ kept at the original's level on purpose after the d1 veto («Every time. I'm serious.» ≈ «every time, I mean it»); V6 ✓ genders unspecified; V7 ✓ A replies to B's announcement; B has not left — nothing about arrival; V8 ✓ ontology EN example («I need you to actually start calling…») not reused; V9 n/a; V10 ✓",
+          "checker": "Revision, second pass after the d1 veto (V7/V3/V5): consistent with the context (B announced before going), insistence kept. Trade-off named for review: the tail «every time, I mean it» keeps the original's intensity and is the part closest to the SCRIPTED_DEMAND pattern; the donor-grounded part is the contrast «the day before, not the day of». Latent point inherited from the original: B did text this time, so the demanded change is «earlier», not «at all».",
+          "facilitator_review": {
+            "date": null,
+            "outcome": "not_reviewed",
+            "note": "второй заход после вето d1; ждёт review фасилитатора по V1–V10"
+          },
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "02_anger_sadness a_054",
+              "31_fear_enthusiasm_f_140",
+              "10_happiness_anger a_081"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "note": "donor language ru, item language en: interaction structure only",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered"
+          }
+        }
+      ],
+      "vetoed": [
         {
           "candidate_id": "pc-12-d1",
           "origin": "llm_assisted",
@@ -530,10 +804,22 @@
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
             "note": "donor language ru, item language en: interaction structure only"
+          },
+          "checklist": [
+            "V7",
+            "V3",
+            "V5"
+          ],
+          "reason": "«not after you're already there» противоречит контексту: B ещё не у Макса, B предупредил(а) до ухода — выдуманный контекст (V3), ответ перестаёт читаться как ответ на сообщение B (V7); настойчивость ниже оригинала — «Every time. I'm serious.» не сохранена (V5).",
+          "vetoed_by": "facilitator",
+          "vetoed_at": "2026-09-08",
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "vetoed",
+            "note": "переписан как pc-12-d2"
           }
         }
-      ],
-      "vetoed": []
+      ]
     },
     {
       "item_id": "pc-13",
@@ -606,8 +892,7 @@
             "source_corpus": "Aniemore/resd_annotated",
             "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
             "source_ref": [
-              "24_sadness_enthusiasm_e_100",
-              "07_fear_neutral n_120"
+              "24_sadness_enthusiasm_e_100"
             ],
             "source_license": "MIT",
             "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
@@ -616,7 +901,13 @@
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
-            "note": "donor language ru, item language en: interaction structure only"
+            "note": "donor language ru, item language en: interaction structure only",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered (приведено к этому правилу 2026-09-08, текст кандидата не менялся)"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "not_reviewed",
+            "note": "в review 2026-09-08 явного вердикта нет; проверить по V1–V10 и принять/отклонить фасилитатором с записанной причиной."
           }
         }
       ],
@@ -693,8 +984,7 @@
             "source_corpus": "Aniemore/resd_annotated",
             "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
             "source_ref": [
-              "05_neutral_fear f_052",
-              "35_neutral_fear_f_043"
+              "05_neutral_fear f_052"
             ],
             "source_license": "MIT",
             "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
@@ -702,7 +992,13 @@
             "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
-            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered (приведено к этому правилу 2026-09-08, текст кандидата не менялся)"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "no_veto",
+            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
           }
         }
       ],
@@ -779,8 +1075,7 @@
             "source_corpus": "Aniemore/resd_annotated",
             "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
             "source_ref": [
-              "31_fear_enthusiasm_f_050",
-              "42_anger_fear_a_040"
+              "31_fear_enthusiasm_f_050"
             ],
             "source_license": "MIT",
             "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
@@ -788,7 +1083,13 @@
             "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
-            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered (приведено к этому правилу 2026-09-08, текст кандидата не менялся)"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "not_reviewed",
+            "note": "в review 2026-09-08 явного вердикта нет; проверить по V1–V10 и принять/отклонить фасилитатором с записанной причиной."
           }
         }
       ],
@@ -875,6 +1176,11 @@
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "no_veto",
+            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
           }
         }
       ],
@@ -952,8 +1258,7 @@
             "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
             "source_ref": [
               "34_anger_fear_f_010",
-              "07_fear_neutral n_110",
-              "46_sadness_disgust_d_010"
+              "07_fear_neutral n_110"
             ],
             "source_license": "MIT",
             "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
@@ -961,7 +1266,13 @@
             "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
-            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered (приведено к этому правилу 2026-09-08, текст кандидата не менялся)"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "no_veto",
+            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
           }
         }
       ],
@@ -1052,8 +1363,7 @@
             "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
             "source_ref": [
               "07_fear_neutral n_100",
-              "07_fear_neutral n_120",
-              "24_sadness_enthusiasm_e_100"
+              "07_fear_neutral n_120"
             ],
             "source_license": "MIT",
             "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
@@ -1061,7 +1371,13 @@
             "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
-            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered (приведено к этому правилу 2026-09-08, текст кандидата не менялся)"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "not_reviewed",
+            "note": "в review 2026-09-08 явного вердикта нет; проверить по V1–V10 и принять/отклонить фасилитатором с записанной причиной."
           }
         }
       ],
@@ -1140,8 +1456,7 @@
             "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
             "source_ref": [
               "22_fear_anger_a_110",
-              "22_fear_anger_a_160",
-              "34_anger_fear_f_130"
+              "22_fear_anger_a_160"
             ],
             "source_license": "MIT",
             "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
@@ -1149,7 +1464,13 @@
             "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
-            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "source_ref_note": "только доноры с chosen=true; рассмотренные контрпримеры — в donors_considered (приведено к этому правилу 2026-09-08, текст кандидата не менялся)"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "not_reviewed",
+            "note": "в review 2026-09-08 явного вердикта нет; проверить по V1–V10 и принять/отклонить фасилитатором с записанной причиной."
           }
         }
       ],
@@ -1246,11 +1567,32 @@
             "source_text_copied": false,
             "transformation": "interaction_structure_only",
             "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          },
+          "facilitator_review": {
+            "date": "2026-09-08",
+            "outcome": "no_veto",
+            "note": "review 2026-09-08: замечаний по V1–V10 нет. Это не acceptance: accept/reject записывается отдельно при сборке v0.1 (revision → parent lineage; replacement → новый original, accepted_via=facilitator)."
           }
         }
       ],
       "vetoed": []
     }
   ],
-  "donor_id_note": "source_ref = точное значение поля `name` в Aniemore/resd_annotated; у диалогов 01–11 имя содержит пробел перед буквой спикера (например «07_fear_neutral f_040»), у 12–50 — подчёркивание."
+  "donor_id_note": "source_ref = точное значение поля `name` в Aniemore/resd_annotated; у диалогов 01–11 имя содержит пробел перед буквой спикера (например «07_fear_neutral f_040»), у 12–50 — подчёркивание.",
+  "review_log": [
+    {
+      "date": "2026-09-08",
+      "reviewer": "facilitator",
+      "scope": "все 13 кандидатов d1",
+      "outcome": "4 вето → переписаны как d2 (pc-02, pc-05, pc-09, pc-12); 5 без вето (pc-06, pc-16, pn-10, dg-04, dg-09); 4 без явного вердикта (pc-13, pc-17, dg-05, dg-06). Ничего не принято; корпус и пакеты не изменены.",
+      "architecture": [
+        "kind=replacement не проходит через preregistered A/B acceptance gate: путь donor → facilitator acceptance (V1–V10 против design intent) → новый original item в v0.1 → сигнал естественности только с pilot (unnatural_example).",
+        "Для kind=replacement V3/V4 применяются к observable actions, которых требует design intent, а не к конкретным фактам и сюжету retired original."
+      ],
+      "provenance_hygiene": "provenance.source_ref у admissible кандидатов приведён к правилу «только chosen=true» (donors_considered хранит и контрпримеры); тексты кандидатов не менялись: pc-13-d1, pc-16-d1, pc-17-d1, dg-04-d1, dg-05-d1, dg-06-d1"
+    }
+  ],
+  "replacement_gate_note": "kind=replacement НЕ идёт через preregistered A/B acceptance gate (ab-manifest.acceptance_rule): тот gate сравнивает варианты одного и того же item; сравнение нового сюжета со старым измеряло бы предпочтение сюжета, а не правку. Путь replacement: donor → facilitator acceptance по V1–V10 против design intent (с записанной причиной) → новый original item в v0.1, старый retired → сигнал естественности только из pilot (`unnatural_example` × способ авторинга, exploratory). На этой генерации пакеты не собираются вовсе (см. ab_status).",
+  "ab_status": "not_for_ab: слепой A/B на этой генерации не запускается (решение 2026-09-08: без людей на этом этапе). ab-manifest.json существует, чтобы `metrics.naturalness_ab check` работал без изменений кода; `build` на этом каталоге не запускать (процедурно): build не различает kind и собрал бы пары и для replacement. Если A/B на donor-ревизиях когда-нибудь понадобится — build должен пропускать kind=replacement (cutover work, код сейчас не меняется).",
+  "pilot_signal_note": "Provenance-поля (method, source_*) записаны, чтобы на pilot построить кросс-таб `unnatural_example` × способ авторинга (handcrafted v0 / minimal edit gen 1 / external_dialogue_seeded). Это exploratory diagnostic на двух разметчиках, не тест причинного превосходства метода: items не рандомизированы по способу авторинга, а выбраны по флагам."
 }
