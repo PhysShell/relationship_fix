@@ -1,0 +1,1256 @@
+{
+  "schema_version": "rf.naturalness-ab-candidates.v1",
+  "ab_id": "naturalness-ab-v0-flagged-donor",
+  "status": "facilitator_only_not_shown_to_raters",
+  "generation": "donor-grounded authoring для тех же 13 flagged items, что и generation 1 (v0-flagged); generation 1 не меняется. Не generation 2 порядка работ: та зарезервирована для auditor-only находок.",
+  "triage_source": "docs/research/dialogue-naturalness-gate.md §7",
+  "donor_report": "donor-report.md",
+  "candidate_origin_note": "Все кандидаты — llm_assisted, method external_dialogue_seeded: из донорских реплик RESD (MIT) взята только структура взаимодействия, текст не копируется (source_text_copied=false, проверено n-gram сверкой в donor-report.md). Порядок: donor → skeleton → construct → candidate → V1–V10, восстановим из provenance каждого кандидата.",
+  "kind_note": "kind=revision — факты и сюжет сохранены, при принятии это revision с parent lineage. kind=replacement — сюжет/факты новые: при сборке v0.1 это новый original item с унаследованным design intent, старый item retired; притворяться revision запрещено.",
+  "admissibility_note": "Кандидат находится ровно в одном из трёх списков: candidates (допущен в veto-review), vetoed (снят фасилитатором до выдачи по пункту veto_checklist, с причиной) или rejected. Ничего не принято автоматически; корпус и пакеты не изменены.",
+  "veto_checklist": [
+    {
+      "id": "V1",
+      "check": "construct: target по-прежнему делает всё, что делал оригинал (извинение / требование / признание / уход / отсрочка с возвратом), и ничего сверх"
+    },
+    {
+      "id": "V2",
+      "check": "direction: кто кого обвиняет, о чём просит, перед кем извиняется — не изменилось"
+    },
+    {
+      "id": "V3",
+      "check": "no_new_action: не появилось новое наблюдаемое действие — извинение, объяснение, обобщение, новый факт"
+    },
+    {
+      "id": "V4",
+      "check": "no_lost_action: не исчезло старое — span, несущий действие, или его непрерывный семантический эквивалент на месте"
+    },
+    {
+      "id": "V5",
+      "check": "intensity: не мягче и не жёстче оригинала больше чем на ступень"
+    },
+    {
+      "id": "V6",
+      "check": "speaker: род и роль говорящих не изменились; неустановленный род не введён"
+    },
+    {
+      "id": "V7",
+      "check": "adjacency: не ухудшилась — B по-прежнему читается как ответ на A, число сообщений и авторы те же"
+    },
+    {
+      "id": "V8",
+      "check": "no_template: нет текстов примеров онтологии и психологической лексики, которой не было в источнике"
+    },
+    {
+      "id": "V9",
+      "check": "natural_stratum: для pn-* правка чисто лексическая"
+    },
+    {
+      "id": "V10",
+      "check": "evidence: цитируемый span target остаётся точной подстрокой (нет парафраза, который нельзя процитировать в annotation-web)"
+    }
+  ],
+  "items": [
+    {
+      "item_id": "pc-02",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "SCRIPTED_DEMAND",
+        "THERAPIST_VOICE",
+        "ctx:NON_ADJACENT_REPLY"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target: настойчивое требование изменить поведение впредь, без оценки личности. Род: A женский, B мужской.",
+      "original": {
+        "messages": [
+          {
+            "author": "b",
+            "text": "Я задержусь сегодня, часа на два."
+          },
+          {
+            "author": "a",
+            "text": "Ты мне даже не написал, я ужин приготовила."
+          },
+          {
+            "author": "b",
+            "text": "Забыл, извини."
+          },
+          {
+            "author": "a",
+            "text": "Мне нужно, чтобы ты предупреждал заранее. Каждый раз, без исключений."
+          }
+        ],
+        "target_index": 3
+      },
+      "donors_considered": [
+        {
+          "source_ref": "31_fear_enthusiasm_f_140",
+          "text": "Назови и дай мне их номера, чтобы в следующий раз мне не пришлось вызывать скорую и все остальное делать.",
+          "why": "требование как конкретный механизм «на следующий раз», обоснованный инцидентом; мать после ночи без связи с дочерью",
+          "chosen": true
+        },
+        {
+          "source_ref": "02_anger_sadness a_054",
+          "text": "Два дня я тебе не дам. Я тебе дам время до завтра. Сделаешь сегодня, если надо, сверхурочно. Иначе тебе не видать работы.",
+          "why": "нажим через сужение срока: «не X, а Y», повтор",
+          "chosen": true
+        },
+        {
+          "source_ref": "31_fear_enthusiasm_f_050",
+          "text": "Я не знаю, с кем ты была, но я знаю, что со мной было. Я твой телефон оборвала. Что с твоим телефоном?",
+          "why": "претензия через то, что делал сам говорящий, а не через эмоцию",
+          "chosen": false
+        },
+        {
+          "source_ref": "42_anger_fear_a_080",
+          "text": "Ну вот так решайте эту проблему!",
+          "why": "голый повторяющийся императив без механизма — слишком тупо, отвергнут",
+          "chosen": false
+        },
+        {
+          "source_ref": "21_happiness_anger_a_130",
+          "text": "Будьте повнимательнее, пожалуйста!",
+          "why": "короткое требование после ошибки — слишком общее, отвергнут",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[претензия, привязанная к конкретному последствию для говорящего] → [короткая отмазка/минимизация] → [требование как конкретная договорённость на следующий раз; нажим через сужение «не X, а Y»]; оценки личности нет",
+      "candidates": [
+        {
+          "candidate_id": "pc-02-d1",
+          "origin": "llm_assisted",
+          "kind": "replacement",
+          "scope": "new item, same shape (4 messages, B-A-B-A)",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Я ещё на работе, часа на полтора."
+            },
+            {
+              "author": "a",
+              "text": "Ты ключи опять с собой унёс? Я у подъезда с пакетами стою, замёрзла уже."
+            },
+            {
+              "author": "b",
+              "text": "Блин. Унёс. Через десять минут буду."
+            },
+            {
+              "author": "a",
+              "text": "Давай второй комплект сделаем. Завтра. Не «на неделе», а завтра."
+            }
+          ],
+          "inherited": "трёхходовая механика претензия → минимизация → требование-механизм (d31); нажим сужением срока «не на неделе, а завтра» (d02 a_054); короткие реплики, «блин» как признание",
+          "changed": "сюжет (ключи вместо опоздания и ужина), все факты, лексика; нет «мне нужно, чтобы» и регламента «каждый раз, без исключений»",
+          "v1_v10": "V1 ✓ требование изменения поведения с нажимом (сужение срока), без оценки личности; V2 ✓ A требует от B; V3 ✓ новых действий в target нет (обоснование не добавлено намеренно); V4 ✓ span «Давай второй комплект сделаем. Завтра.»; V5 ✓ интенсивность сопоставима; V6 ✓ A ж. («замёрзла»), B м. («унёс»); V7 ✓ 4 сообщения, авторы B-A-B-A, B отвечает на A; V8 ✓ примеров онтологии и психолексики нет; V9 n/a; V10 ✓ span цитируем. Замечание: «опять» в реплике A — маркер повтора в контексте, не в target",
+          "checker": "Пресс есть, обвинения нет. Это replacement: сюжет и факты новые, lineage — новый original с унаследованным design intent, старый pc-02 retired при сборке v0.1.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "31_fear_enthusiasm_f_140",
+              "02_anger_sadness a_054",
+              "31_fear_enthusiasm_f_050"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-05",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "THERAPIST_VOICE",
+        "ctx:EXPLICIT_EMOTION_REPORT",
+        "ctx:FORMAL_REGISTER"
+      ],
+      "severity": "high",
+      "edit_constraint": "Target: признание переживания партнёра И извинение/ответственность в одном сообщении (граница validation/repair). Род A не установлен — не вводить; B мужской.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Мне было неприятно при всех это слушать."
+          },
+          {
+            "author": "b",
+            "text": "Слышу тебя. Я правда перегнул при ребятах, извини."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "07_fear_neutral f_040",
+          "text": "Не могу не переживать, сбил человека, не прав, извините, надеюсь с вами все будет хорошо",
+          "why": "признание вины + извинение + забота о состоянии другого в одном выдохе",
+          "chosen": true
+        },
+        {
+          "source_ref": "07_fear_neutral f_110",
+          "text": "Так вот задумался, вообще нехорошо вышло.",
+          "why": "самоуничижительное признание без формулы",
+          "chosen": true
+        },
+        {
+          "source_ref": "07_fear_neutral f_120",
+          "text": "Только смотрел, не на то, видимо.",
+          "why": "то же: признание через деталь",
+          "chosen": false
+        },
+        {
+          "source_ref": "21_happiness_anger_h_120",
+          "text": "Ой, извините, извините, я ошиблась. Вам кофе без сахара.",
+          "why": "быстрое извинение + исправление, но без признания состояния другого — только repair",
+          "chosen": false
+        },
+        {
+          "source_ref": "02_anger_sadness s_040",
+          "text": "Я работал именно над этими бумагами. Да, я понимаю, что я немного задержал сроки. Но поймите, даже другой любой сотрудник сделает это намного дольше, чем я. Поэтому дайте еще два дня.",
+          "why": "контрпример: признание + «но» как контратака; не наследовать",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[претензия за сказанное при посторонних] → [признание состояния другого своими словами («тебе и так…») + самоуничижительное признание («ляпнул не подумав») + короткое извинение]; ни «слышу тебя», ни «но»",
+      "candidates": [
+        {
+          "candidate_id": "pc-05-d1",
+          "origin": "llm_assisted",
+          "kind": "replacement",
+          "scope": "new item, same shape (A, B)",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ну и зачем при твоих про моё собеседование? Это вообще не для них было."
+            },
+            {
+              "author": "b",
+              "text": "Да, лишнее было, тебе и так от всего этого тошно. Ляпнул не подумав, извини."
+            }
+          ],
+          "inherited": "связка признание состояния другого + признание вины + извинение в одном выдохе (d07 f_040); самоуничижительная деталь вместо формулы (d07 f_110)",
+          "changed": "сюжет (собеседование и родители B вместо шутки при друзьях), факты, лексика; «Слышу тебя» исчезло, состояние партнёра названо по-человечески",
+          "v1_v10": "V1 ✓ признание переживания («тебе и так от всего этого тошно») + извинение/ответственность («Ляпнул не подумав, извини»); V2 ✓ B → A; V3 ✓ ни объяснения, ни контратаки; V4 ✓ оба span'а на месте; V5 ✓; V6 ✓ A без рода (как в источнике), B м. («ляпнул»); V7 ✓ 2 сообщения, B отвечает на A; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Граница validation/repair сохранена: обе половины наблюдаемы и цитируемы по отдельности. Replacement.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "07_fear_neutral f_040",
+              "07_fear_neutral f_110",
+              "07_fear_neutral f_120"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-06",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "ctx:FORMAL_REGISTER",
+        "ctx:EXPOSITION_FOR_READER"
+      ],
+      "severity": "medium",
+      "edit_constraint": "Target не меняется: извинение по форме + немедленная контратака. Род B мужской, A женский (первая начала ты).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Ты повысил на меня голос при моей маме."
+          },
+          {
+            "author": "b",
+            "text": "Ну прости! Хотя вообще-то первая начала ты."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "33_sadness_disgust_d_040",
+          "text": "Какая тебе разница, что я хочу? Я вообще замужем. Ты мне платье испортил на выпускной, помнишь?",
+          "why": "обвинение с конкретным обстоятельством + хвост «помнишь?», который сам провоцирует ответный ход",
+          "chosen": true
+        },
+        {
+          "source_ref": "01_happiness_anger a_040",
+          "text": "Слушай, ты заставил меня притащиться с западного на северный, чтобы прийти и посидеть в этом ужасном... в этой ужасной забегаловке?",
+          "why": "«Слушай» + обвинение с обстоятельством; длинновато",
+          "chosen": false
+        },
+        {
+          "source_ref": "42_anger_fear_a_030",
+          "text": "Каждый день меня будит по ночам!",
+          "why": "восклицательная претензия, но с генерализацией «каждый день» — не наследовать",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[обвинение с конкретным обстоятельством] + [tag «помнишь?»]; экспозиция «при моей маме» становится «при маме»",
+      "candidates": [
+        {
+          "candidate_id": "pc-06-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ты при маме на меня голос повысил, помнишь?"
+            },
+            {
+              "author": "b",
+              "text": "Ну прости! Хотя вообще-то первая начала ты."
+            }
+          ],
+          "inherited": "обвинение + memory tag «помнишь?» (d33 d_040)",
+          "changed": "только реплика A: без «моей», без книжного порядка слов; target дословно тот же",
+          "v1_v10": "V1–V5 ✓ target нетронут; V6 ✓ B м. («повысил»), A ж. в target; V7 ✓ «помнишь?» → «Ну прости!» читается как ответ; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Revision с parent lineage: факты те же, изменена только контекстная реплика.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "33_sadness_disgust_d_040"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-09",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "OVER_SPECIFIED_COMMITMENT"
+      ],
+      "severity": "medium",
+      "edit_constraint": "Target: отсрочка с конкретным временем возврата (не avoidance). Род B не установлен — не вводить.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Нам надо обсудить, что было в субботу."
+          },
+          {
+            "author": "b",
+            "text": "Давай сегодня в восемь спокойно сядем и обсудим, сейчас я на созвоне. Я помню, что это важно."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "12_sadness_disgust_d_090",
+          "text": "Ну ладно, у меня есть окошко завтра в 4 часа. Приходите!",
+          "why": "занятый говорящий предлагает конкретный слот",
+          "chosen": true
+        },
+        {
+          "source_ref": "12_sadness_disgust_d_080",
+          "text": "Вот знаете, поговорку... Доверяй, но проверяй! Вот и проверяйте каждый день! У меня обед через минуту. Я пошла, наверное, уже, а?",
+          "why": "маркер цейтнота «через минуту»",
+          "chosen": true
+        },
+        {
+          "source_ref": "13_neutral_enthusiasm_n_080",
+          "text": "Хорошо, как только надумаете, перезвоните. До свидания.",
+          "why": "контрпример: неопределённая отсрочка = avoidance; не наследовать",
+          "chosen": false
+        },
+        {
+          "source_ref": "21_happiness_anger_h_140",
+          "text": "Ваш заказ будет готов через 15-20 минут. А кофе я принесу вам прямо сейчас!",
+          "why": "конкретное время как успокоение",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[маркер цейтнота сейчас] + [конкретный слот возврата], без мета-заверения о важности",
+      "candidates": [
+        {
+          "candidate_id": "pc-09-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Нам надо обсудить, что было в субботу."
+            },
+            {
+              "author": "b",
+              "text": "Не сейчас, у меня созвон через минуту. В восемь освобожусь — сядем и обсудим."
+            }
+          ],
+          "inherited": "цейтнот «через минуту» (d12 d_080) + конкретный слот (d12 d_090)",
+          "changed": "убран хвост «Я помню, что это важно»; порядок: сначала «не сейчас», потом слот",
+          "v1_v10": "V1 ✓ отсрочка с конкретным возвратом («В восемь освобожусь — сядем и обсудим»); V2 ✓; V3 ✓; V4 ⚠ хвост-заверение убран: признание важности темы не входит в пять constructs, но фасилитатор решает, не сдвигает ли это item к границе сильнее, чем хотелось; V5 ✓; V6 ✓ род B не введён («освобожусь»); V7 ✓; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Revision. Единственный спорный пункт V4 отмечен явно.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "12_sadness_disgust_d_090",
+              "12_sadness_disgust_d_080"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-12",
+      "source_package": "annotation-pilot-v0",
+      "language": "en",
+      "stratum": "challenge",
+      "flags": [
+        "THERAPIST_VOICE",
+        "SCRIPTED_DEMAND"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target: insistent demand for a behaviour change, no personal evaluation. Genders unspecified — keep unspecified.",
+      "original": {
+        "messages": [
+          {
+            "author": "b",
+            "text": "Change of plans, I'm going to Max's after work."
+          },
+          {
+            "author": "a",
+            "text": "I need you to start texting me when plans change. Every time. I'm serious."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "02_anger_sadness a_054",
+          "text": "Два дня я тебе не дам. Я тебе дам время до завтра. Сделаешь сегодня, если надо, сверхурочно. Иначе тебе не видать работы.",
+          "why": "нажим через контраст «не X, а Y»; структура переносится на EN, текст нет",
+          "chosen": true
+        },
+        {
+          "source_ref": "31_fear_enthusiasm_f_140",
+          "text": "Назови и дай мне их номера, чтобы в следующий раз мне не пришлось вызывать скорую и все остальное делать.",
+          "why": "требование как механизм на следующий раз",
+          "chosen": false
+        },
+        {
+          "source_ref": "44_neutral_anger_a_160",
+          "text": "Я не собираюсь успокаиваться! Принимай купюру! Давай быстрее заканчиваем этот разговор! Сама говоришь, очередь задержит!",
+          "why": "императивный повтор — слишком агрессивно, отвергнут",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[реакция на одностороннее изменение] → [требование как механизм, нажим контрастом «before, not after»]; донор русский, переносится только структура",
+      "candidates": [
+        {
+          "candidate_id": "pc-12-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Change of plans, I'm going to Max's after work."
+            },
+            {
+              "author": "a",
+              "text": "ok but next time text me before, not after you're already there"
+            }
+          ],
+          "inherited": "нажим через контраст «не X, а Y» (d02 a_054); механизм «на следующий раз» (d31 f_140)",
+          "changed": "без «I need you to», «Every time», «I'm serious»; lowercase как в EN natural-items",
+          "v1_v10": "V1 ✓ demand + insistence («before, not after»), no evaluation; V2 ✓; V3 ✓; V4 ✓ span «next time text me before, not after…»; V5 ✓; V6 ✓ genders unspecified; V7 ✓; V8 ✓ (ontology EN example not reused); V9 n/a; V10 ✓",
+          "checker": "Revision, facts kept.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "02_anger_sadness a_054",
+              "31_fear_enthusiasm_f_140"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "note": "donor language ru, item language en: interaction structure only"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-13",
+      "source_package": "annotation-pilot-v0",
+      "language": "en",
+      "stratum": "challenge",
+      "flags": [
+        "THERAPIST_VOICE"
+      ],
+      "severity": "high",
+      "edit_constraint": "Target: acknowledges that the partner's reaction is understandable, WITHOUT an apology. Genders unspecified.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "I sat there for an hour before you even replied."
+          },
+          {
+            "author": "b",
+            "text": "That actually makes sense — I'd be upset too if I'd waited an hour."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "24_sadness_enthusiasm_e_100",
+          "text": "Сложно тебе! Я вот не женился и хорошо. Так может быть после бани куда-нибудь?",
+          "why": "восклицательное признание + собственная ремарка, без извинения",
+          "chosen": true
+        },
+        {
+          "source_ref": "07_fear_neutral n_120",
+          "text": "Может вы посмотрели в другую сторону, но ничего страшного бывает с кем не бывает.",
+          "why": "нормализация как признание (со стороны пострадавшего)",
+          "chosen": false
+        },
+        {
+          "source_ref": "48_fear_disgust_d_060",
+          "text": "Чё ты там испугалась? Ну кружочек мелом нарисовали. Боже мой, ну нашла чего бояться.",
+          "why": "контрпример: обесценивание; не наследовать",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[короткое восклицание, повторяющее конкретику] + [гипотетика про себя, показывающая, что реакция понятна]; без извинения и объяснения",
+      "candidates": [
+        {
+          "candidate_id": "pc-13-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "I sat there for an hour before you even replied."
+            },
+            {
+              "author": "b",
+              "text": "an hour?? yeah no, that's rough. I'd have been fuming"
+            }
+          ],
+          "inherited": "восклицание-эхо конкретики + ремарка про себя (d24 e_100)",
+          "changed": "без reflective-listening формулы «that actually makes sense»; lowercase",
+          "v1_v10": "V1 ✓ acknowledgement present («that's rough», «I'd have been fuming»), no apology; V2 ✓; V3 ✓ no apology/explanation added; V4 ✓; V5 ✓; V6 ✓; V7 ✓; V8 ✓; V9 n/a; V10 ✓ contiguous spans",
+          "checker": "Revision, facts kept.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "24_sadness_enthusiasm_e_100",
+              "07_fear_neutral n_120"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10",
+            "note": "donor language ru, item language en: interaction structure only"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-16",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium",
+      "edit_constraint": "Target «Ясно.» не меняется. A содержательно раскрывает переживание. Род A женский (пустая).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Мне правда тяжело даются эти созвоны с твоими родителями. Я каждый раз потом пустая."
+          },
+          {
+            "author": "b",
+            "text": "Ясно."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "05_neutral_fear f_052",
+          "text": "И чё-то так темно и холодно, и прям совсем мне как-то некомфортно.",
+          "why": "низкий регистр самораскрытия: «как-то», «прям совсем» вместо ярлыка эмоции",
+          "chosen": true
+        },
+        {
+          "source_ref": "35_neutral_fear_f_043",
+          "text": "Вы, главное, не смейтесь только... Как будто бы стены вокруг меня начинают сжиматься. То есть... Ей!",
+          "why": "запинающееся раскрытие с «как будто бы» и конкретной деталью",
+          "chosen": false
+        },
+        {
+          "source_ref": "22_fear_anger_f_120",
+          "text": "Да ты знаешь что-то и темнеет уже. Сумерки наступят, а для меня это самое сложное время. Я вообще ничего не вижу в сумерках.",
+          "why": "раскрытие через конкретную деталь",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[конкретный триггер] + [хеджированное самосостояние «как-то», «прям совсем»] + [бытовая деталь вместо ярлыка эмоции]",
+      "candidates": [
+        {
+          "candidate_id": "pc-16-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "После созвонов с твоими я потом полдня как-то никакая хожу. Прям совсем."
+            },
+            {
+              "author": "b",
+              "text": "Ясно."
+            }
+          ],
+          "inherited": "хеджи «как-то», «прям совсем» (d05 f_052); деталь «полдня хожу» вместо «тяжело даются»",
+          "changed": "только реплика A; target дословно тот же",
+          "v1_v10": "V1–V5 ✓ target нетронут, раскрытие A по-прежнему содержательно; V6 ✓ A ж. («никакая»); V7 ✓; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Revision.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "05_neutral_fear f_052",
+              "35_neutral_fear_f_043"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-17",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target «Понимаю.» не меняется. A предъявляет обиду. Род A не установлен — не вводить; B мужской (отменил).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Меня задело, что ты отменил встречу и даже не позвонил."
+          },
+          {
+            "author": "b",
+            "text": "Понимаю."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "31_fear_enthusiasm_f_050",
+          "text": "Я не знаю, с кем ты была, но я знаю, что со мной было. Я твой телефон оборвала. Что с твоим телефоном?",
+          "why": "претензия через то, что делал говорящий, эмоция не названа",
+          "chosen": true
+        },
+        {
+          "source_ref": "42_anger_fear_a_040",
+          "text": "Ну что это такое? Мне в пять утра вставать на работу!",
+          "why": "претензия через собственную конкретную цену",
+          "chosen": false
+        },
+        {
+          "source_ref": "33_sadness_disgust_d_040",
+          "text": "Какая тебе разница, что я хочу? Я вообще замужем. Ты мне платье испортил на выпускной, помнишь?",
+          "why": "уже использован для pc-06 — один скелет дважды не берём",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[что ты сделал, конкретно] + [что я в это время делаю, настоящее время, конкретно]; эмоция подразумевается",
+      "candidates": [
+        {
+          "candidate_id": "pc-17-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ты отменил и даже не позвонил. А я там час торчу, между прочим."
+            },
+            {
+              "author": "b",
+              "text": "Понимаю."
+            }
+          ],
+          "inherited": "претензия через собственное действие (d31 f_050): «я твой телефон оборвала» → «а я там час торчу»",
+          "changed": "только реплика A; без «меня задело, что»; настоящее время, чтобы не вводить род A",
+          "v1_v10": "V1–V5 ✓ target нетронут; V6 ✓ A без рода («торчу»), B м. («отменил», «позвонил»); V7 ✓; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Revision.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "31_fear_enthusiasm_f_050",
+              "42_anger_fear_a_040"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pn-10",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "natural",
+      "flags": [
+        "THERAPIST_VOICE"
+      ],
+      "severity": "medium",
+      "edit_constraint": "Natural-страта: действие target не меняется вообще, только лексика хвоста (V9). Replacement не предлагается по правилу. Род A женский.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Устала так, что руки трясутся. Три отчёта за день."
+          },
+          {
+            "author": "b",
+            "text": "Понимаю, день был жесть. Ты правда вымоталась."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "24_sadness_enthusiasm_e_100",
+          "text": "Сложно тебе! Я вот не женился и хорошо. Так может быть после бани куда-нибудь?",
+          "why": "двухтактное признание: восклицание + ремарка",
+          "chosen": true
+        },
+        {
+          "source_ref": "18_happiness_neutral_n_120",
+          "text": "Тоже верно, придется тебе успевать всё делать.",
+          "why": "согласие + признание, без отражения слов собеседника",
+          "chosen": true
+        },
+        {
+          "source_ref": "50_enthusiasm_sadness_e_120",
+          "text": "Да, успокойся, сейчас сходишь как рукой с ними.",
+          "why": "контрпример: отмахивание; не наследовать",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[такт согласия] + [такт признания], без отражающего «ты правда…»",
+      "candidates": [
+        {
+          "candidate_id": "pn-10-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only (lexical)",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Устала так, что руки трясутся. Три отчёта за день."
+            },
+            {
+              "author": "b",
+              "text": "Понимаю, день жесть. Вымоталась, конечно."
+            }
+          ],
+          "inherited": "двухтактный ритм признания (d24 e_100, d18 n_120); донор здесь подтверждает ритм, содержание по правилу V9 не меняется",
+          "changed": "только лексика хвоста: «Ты правда вымоталась» → «Вымоталась, конечно»; «был жесть» → «жесть»",
+          "v1_v10": "V1 ✓ те же два действия; V2–V5 ✓; V6 ✓ ж. («вымоталась»); V7 ✓; V8 ✓; V9 ✓ чисто лексическая; V10 ✓",
+          "checker": "Совпадает с gen-1 pc… pn-10-c1 по тексту; донор добавляет только обоснование ритма. Если фасилитатор считает это не «чисто лексическим» — остаётся оригинал.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "24_sadness_enthusiasm_e_100",
+              "18_happiness_neutral_n_120"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "dg-04",
+      "source_package": "annotation-ux-v6",
+      "language": "ru",
+      "stratum": "dogfood",
+      "flags": [
+        "EXPOSITION_FOR_READER"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target: конкретное причинное описание одного эпизода, без генерализации и без оценки личности. Род A женский.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Я проснулась от холода."
+          },
+          {
+            "author": "b",
+            "text": "Ты вчера оставила окно открытым, и утром в комнате было холодно."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "34_anger_fear_f_010",
+          "text": "Ну, вы ехали назад, я вас из-за угла не могла увидеть. Я ехала вперед, всё нормально было.",
+          "why": "причинный отчёт об инциденте без перехода на личность",
+          "chosen": true
+        },
+        {
+          "source_ref": "07_fear_neutral n_110",
+          "text": "Нужно, когда едешь на велосипеде, смотреть на дорогу. Только и всё.",
+          "why": "мягкая причинная констатация «только и всё»",
+          "chosen": true
+        },
+        {
+          "source_ref": "46_sadness_disgust_d_010",
+          "text": "Да как же они следят? Ну, вы сами посудите. Ну, посмотрите, вы чуть не наступили на бумажку.",
+          "why": "указание на конкретную причину «ну посмотрите»",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[реакция/наблюдение] → [«ну так» + конкретная причина + следствие], без квантора и без оценки человека",
+      "candidates": [
+        {
+          "candidate_id": "dg-04-d1",
+          "origin": "llm_assisted",
+          "kind": "replacement",
+          "scope": "new item, same shape (A, B)",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Я ночью так замёрзла, кошмар."
+            },
+            {
+              "author": "b",
+              "text": "Ну так вентилятор всю ночь работал, ты его не выключила."
+            }
+          ],
+          "inherited": "причинный отчёт без оценки личности (d34 f_010); «ну так» как причинная связка (d07 n_110, d46 d_010)",
+          "changed": "сюжет (вентилятор вместо окна), факты; B больше не пересказывает A её же сообщение",
+          "v1_v10": "V1 ✓ причинная атрибуция конкретного действия A, без «вечно/опять/всегда» и без характеристики личности; V2 ✓ B → A; V3 ✓; V4 ✓ span «ты его не выключила»; V5 ✓ та же нагрузка, что «оставила окно открытым»; V6 ✓ A ж. («замёрзла», «выключила»), B без рода (как в источнике); V7 ✓; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Replacement для dogfood: probe «causal description vs blame» сохранён. Уходит в dogfood yaml + Catalog.hs, не в pilot.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "34_anger_fear_f_010",
+              "07_fear_neutral n_110",
+              "46_sadness_disgust_d_010"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "dg-05",
+      "source_package": "annotation-ux-v6",
+      "language": "ru",
+      "stratum": "dogfood",
+      "flags": [
+        "THERAPIST_VOICE",
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "high",
+      "edit_constraint": "Target: содержательное признание переживания (в отличие от голого «Понятно»). Род A женский (одной); род B в источнике НЕ установлен — не вводить.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Мне было страшно одной ждать результаты обследования."
+          },
+          {
+            "author": "b",
+            "text": "Понимаю, почему тебе было страшно. Это правда тяжёлое ожидание."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "07_fear_neutral n_100",
+          "text": "Ничего, с кем-то всегда бывает всё первый раз.",
+          "why": "нормализация как признание",
+          "chosen": true
+        },
+        {
+          "source_ref": "07_fear_neutral n_120",
+          "text": "Может вы посмотрели в другую сторону, но ничего страшного бывает с кем не бывает.",
+          "why": "то же, «с кем не бывает»",
+          "chosen": true
+        },
+        {
+          "source_ref": "24_sadness_enthusiasm_e_100",
+          "text": "Сложно тебе! Я вот не женился и хорошо. Так может быть после бани куда-нибудь?",
+          "why": "восклицательное признание",
+          "chosen": false
+        },
+        {
+          "source_ref": "29_happiness_fear_h_030",
+          "text": "Да, вы не бойтесь, вы скажите, что бы вам хотелось, и мы рады будем доставить вам любую еду. И очень быстро.",
+          "why": "контрпример: успокоение мимо чувства; не наследовать",
+          "chosen": false
+        },
+        {
+          "source_ref": "48_fear_disgust_d_060",
+          "text": "Чё ты там испугалась? Ну кружочек мелом нарисовали. Боже мой, ну нашла чего бояться.",
+          "why": "контрпример: обесценивание; не наследовать",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[эхо трудной конкретики «одной такое ждать»] + [нормализация «любой бы…»]; без «понимаю, почему»",
+      "candidates": [
+        {
+          "candidate_id": "dg-05-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мне было страшно одной ждать результаты обследования."
+            },
+            {
+              "author": "b",
+              "text": "Одной такое ждать — ещё бы не страшно. Там любой бы дёргался."
+            }
+          ],
+          "inherited": "нормализация как форма признания (d07 n_100/n_120): «с кем не бывает» → «любой бы дёргался»",
+          "changed": "без «Понимаю, почему тебе было страшно»; безличная форма, чтобы не вводить род B",
+          "v1_v10": "V1 ✓ содержательное признание переживания («ещё бы не страшно», «любой бы дёргался»), не голое «понятно»; V2 ✓; V3 ✓; V4 ✓; V5 ✓; V6 ✓ A ж. («одной») сохранён, род B не введён; V7 ✓; V8 ✓; V9 n/a; V10 ✓",
+          "checker": "Revision. Отличается от gen-1 dg-05-c2 вторым тактом (нормализация), скелет донорский.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "07_fear_neutral n_100",
+              "07_fear_neutral n_120",
+              "24_sadness_enthusiasm_e_100"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "dg-06",
+      "source_package": "annotation-ux-v6",
+      "language": "ru",
+      "stratum": "dogfood",
+      "flags": [
+        "OVER_SPECIFIED_COMMITMENT",
+        "EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target: явная пауза С конкретным возвратом (граница repair/avoidance). Род B мужской (злой) сохраняется.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Мы опять кричим друг на друга, это уже никуда не ведёт."
+          },
+          {
+            "author": "b",
+            "text": "Стоп. Я сейчас злой и говорю лишнее. Давай на час разойдёмся и вернёмся к этому в девять."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "22_fear_anger_a_110",
+          "text": "Хорошо, давай отдохнём. Давай, тогда на обочину. Ну давай, на обочину отдохнём.",
+          "why": "предложение паузы через повтор «давай… давай»",
+          "chosen": true
+        },
+        {
+          "source_ref": "22_fear_anger_a_160",
+          "text": "Вставить камеру хранения! Давай остановимся, ты успокоишься, сядешь за руль и с большим усердием поедешь вперед. Все будет нормально!",
+          "why": "пауза с явным возвратом к делу",
+          "chosen": true
+        },
+        {
+          "source_ref": "34_anger_fear_f_130",
+          "text": "Давайте успокоимся и сделаем это как-то, ну, не знаю, по...",
+          "why": "запинающаяся попытка деэскалации",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[стоп-маркер] + [краткое самосостояние] + [пауза через повтор «давай»] + [конкретный возврат]",
+      "candidates": [
+        {
+          "candidate_id": "dg-06-d1",
+          "origin": "llm_assisted",
+          "kind": "revision",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мы опять кричим друг на друга, это уже никуда не ведёт."
+            },
+            {
+              "author": "b",
+              "text": "Стоп. Я злой сейчас, наговорю. Давай час, ну давай — я пройдусь, в девять вернусь, и нормально поговорим."
+            }
+          ],
+          "inherited": "повтор «давай… ну давай» (d22 a_110); пауза + явный возврат (d22 a_160)",
+          "changed": "мета-самоотчёт «говорю лишнее» → «наговорю»; «разойдёмся и вернёмся к этому в девять» → «я пройдусь, в девять вернусь»",
+          "v1_v10": "V1 ✓ пауза с конкретным возвратом («в девять вернусь, и нормально поговорим»); V2 ✓; V3 ✓; V4 ✓; V5 ✓; V6 ✓ B м. («злой»); V7 ✓; V8 ✓ (пример онтологии «Давай поедим и вернёмся к этому через час» не переиспользован); V9 n/a; V10 ✓",
+          "checker": "Revision.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "22_fear_anger_a_110",
+              "22_fear_anger_a_160",
+              "34_anger_fear_f_130"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "dg-09",
+      "source_package": "annotation-ux-v6",
+      "language": "ru",
+      "stratum": "dogfood",
+      "flags": [
+        "THERAPIST_VOICE",
+        "SYMMETRIC_APOLOGY",
+        "SCRIPTED_DEMAND",
+        "ctx:EXPOSITION_FOR_READER",
+        "ctx:NON_ADJACENT_REPLY"
+      ],
+      "severity": "high",
+      "edit_constraint": "Target: извинение/ответственность И требование изменения в одном сообщении; «но» не должно читаться как контратака. Род A мужской, B женский.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Я опять забыл предупредить, что задержусь."
+          },
+          {
+            "author": "b",
+            "text": "Я не должна была на тебя орать, прости. Но мне правда нужно, чтобы ты начал писать, когда задерживаешься. Каждый раз."
+          }
+        ],
+        "target_index": 1
+      },
+      "donors_considered": [
+        {
+          "source_ref": "31_fear_enthusiasm_f_140",
+          "text": "Назови и дай мне их номера, чтобы в следующий раз мне не пришлось вызывать скорую и все остальное делать.",
+          "why": "требование как конкретный механизм + обоснование «чтобы мне не…»",
+          "chosen": true
+        },
+        {
+          "source_ref": "07_fear_neutral f_040",
+          "text": "Не могу не переживать, сбил человека, не прав, извините, надеюсь с вами все будет хорошо",
+          "why": "признание вины коротко, в одном выдохе",
+          "chosen": true
+        },
+        {
+          "source_ref": "22_fear_anger_f_180",
+          "text": "Ой, не знаю, что делать. Ну поехали, поехали. Только не кричи так на меня!",
+          "why": "про крик, со стороны того, на кого кричат — не тот ракурс, отвергнут",
+          "chosen": false
+        },
+        {
+          "source_ref": "02_anger_sadness s_040",
+          "text": "Я работал именно над этими бумагами. Да, я понимаю, что я немного задержал сроки. Но поймите, даже другой любой сотрудник сделает это намного дольше, чем я. Поэтому дайте еще два дня.",
+          "why": "контрпример: «но» как контратака; не наследовать",
+          "chosen": false
+        }
+      ],
+      "skeleton": "[A: короткое признание внутри треда] → [B: признание собственного перегиба, коротко] + [«но» вводит требование-механизм с обоснованием «чтобы мне не…»]",
+      "candidates": [
+        {
+          "candidate_id": "dg-09-d1",
+          "origin": "llm_assisted",
+          "kind": "replacement",
+          "scope": "new item, same shape (A, B)",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ну да, перевод забыл. Знаю."
+            },
+            {
+              "author": "b",
+              "text": "Ладно, орать я зря начала. Но поставь ты уже напоминалку на первое число, чтобы мне каждый месяц не писать."
+            }
+          ],
+          "inherited": "требование-механизм с обоснованием «чтобы мне не…» (d31 f_140); признание вины одним выдохом (d07 f_040); A отвечает внутри треда, а не открывает переписку признанием",
+          "changed": "сюжет (ежемесячный перевод вместо опоздания), факты; нет «мне правда нужно, чтобы» и «каждый раз»",
+          "v1_v10": "V1 ✓ ответственность («орать я зря начала») + требование («поставь напоминалку»); V2 ✓ B → A; V3 ✓ «чтобы мне каждый месяц не писать» — обоснование механизма, привязано к требованию, о её сообщениях, не о его личности; V4 ✓ оба span'а; V5 ✓; V6 ✓ A м. («забыл»), B ж. («начала»); V7 ✓ A читается как реплика в треде; V8 ✓; V9 n/a; V10 ✓. Замечание: буквального «прости» нет — принятие ответственности входит в критерий repair; фасилитатор решает, нужно ли явное извинение",
+          "checker": "Replacement для dogfood: probe «repair + pressure, «но» не отменяет repair» сохранён.",
+          "provenance": {
+            "origin": "llm_assisted",
+            "method": "external_dialogue_seeded",
+            "source_kind": "human_improvised_dialogue",
+            "source_corpus": "Aniemore/resd_annotated",
+            "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_ref": [
+              "31_fear_enthusiasm_f_140",
+              "07_fear_neutral f_040"
+            ],
+            "source_license": "MIT",
+            "source_license_verified_at": "https://huggingface.co/datasets/Aniemore/resd_annotated — cardData.license=mit; README §License: «MIT.»; revision 54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+            "source_language": "ru",
+            "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`",
+            "source_text_copied": false,
+            "transformation": "interaction_structure_only",
+            "order": "donor fragments → extracted skeleton → target construct mapped onto skeleton → candidate → V1–V10"
+          }
+        }
+      ],
+      "vetoed": []
+    }
+  ],
+  "donor_id_note": "source_ref = точное значение поля `name` в Aniemore/resd_annotated; у диалогов 01–11 имя содержит пробел перед буквой спикера (например «07_fear_neutral f_040»), у 12–50 — подчёркивание."
+}
