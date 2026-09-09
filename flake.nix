@@ -38,6 +38,25 @@
               mkdir -p $out/bin
               ln -s ../libexec/annotation-web/activate.sh \
                 $out/bin/annotation-web-activate
+
+              # What the pilot surface proves at start, shipped inside the same
+              # release as the server that proves it: the package registry, the
+              # sealed package's seal and presentation packets (never items.jsonl
+              # or presentation-map/ -- the server must not hold canonical ids),
+              # the instruction document and the pinned ontology. RF_REPO_ROOT
+              # points here; issuance records stay host state (RF_ISSUANCE_DIR).
+              share=$out/share/relationship-fix
+              install -Dm644 ${./data/pilot/package-registry.json} \
+                $share/data/pilot/package-registry.json
+              install -Dm644 ${./data/pilot/v0.1/CHECKSUMS.sha256} \
+                $share/data/pilot/v0.1/CHECKSUMS.sha256
+              mkdir -p $share/data/pilot/v0.1/presentation
+              cp ${./data/pilot/v0.1/presentation}/*.jsonl \
+                $share/data/pilot/v0.1/presentation/
+              install -Dm644 ${./docs/pilot-v0.1-instructions.md} \
+                $share/docs/pilot-v0.1-instructions.md
+              install -Dm644 ${./data/ontology/behavior-v0.1.json} \
+                $share/data/ontology/behavior-v0.1.json
             '';
           });
 

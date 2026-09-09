@@ -1,0 +1,99 @@
+{
+  "schema_version": "rf.dogfood-items-snapshot.v1",
+  "package_id": "annotation-ux-v6",
+  "source_file": "../../../v0/form/dogfood-v6-items.yaml",
+  "source_sha256": "4b2cd0bfc2ba4dab87d5ca0d2e79465ed0e3eab01b9411917ae7a5a110daf8a8",
+  "note": "Derived, hash-pinned projection of the canonical YAML for stdlib-only tooling. Regenerate when the YAML changes; tools refuse to run on a stale snapshot.",
+  "items": [
+    {
+      "item_id": "dg-04",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "a",
+          "text": "Я проснулась от холода."
+        },
+        {
+          "author": "b",
+          "text": "Ты вчера оставила окно открытым, и утром в комнате было холодно."
+        }
+      ],
+      "target_index": 1
+    },
+    {
+      "item_id": "dg-05",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "a",
+          "text": "Мне было страшно одной ждать результаты обследования."
+        },
+        {
+          "author": "b",
+          "text": "Понимаю, почему тебе было страшно. Это правда тяжёлое ожидание."
+        }
+      ],
+      "target_index": 1
+    },
+    {
+      "item_id": "dg-06",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "a",
+          "text": "Мы опять кричим друг на друга, это уже никуда не ведёт."
+        },
+        {
+          "author": "b",
+          "text": "Стоп. Я сейчас злой и говорю лишнее. Давай на час разойдёмся и вернёмся к этому в девять."
+        }
+      ],
+      "target_index": 1
+    },
+    {
+      "item_id": "dg-07",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "a",
+          "text": "Я случайно купил билеты не на тот день 🤦"
+        },
+        {
+          "author": "b",
+          "text": "гений планирования 😂❤️ люблю тебя, катастрофа"
+        }
+      ],
+      "target_index": 1
+    },
+    {
+      "item_id": "dg-08",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "a",
+          "text": "Я опять всё испортил."
+        },
+        {
+          "author": "b",
+          "text": "Ну ты гений."
+        }
+      ],
+      "target_index": 1
+    },
+    {
+      "item_id": "dg-09",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "a",
+          "text": "Я опять забыл предупредить, что задержусь."
+        },
+        {
+          "author": "b",
+          "text": "Я не должна была на тебя орать, прости. Но мне правда нужно, чтобы ты начал писать, когда задерживаешься. Каждый раз."
+        }
+      ],
+      "target_index": 1
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+Pass B: свободный текст auditor-N.md с датой, только после того, как `report` заморозил Pass A (sha256 в audit-result.json). Вопрос Pass B: почему именно эти items сломались; согласуется ли это с гипотезой boundary construction pressure. Выводы Pass B не правят ответы Pass A и не становятся gold.

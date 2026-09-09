@@ -1,0 +1,10 @@
+{
+  "schema_version": "rf.naturalness-ab-checksums.v1",
+  "sha256": {
+    "packets/rater-1.json": "ec157b111f6bf2ab91ef66a9b40e56563a8dc4ad3b3cc7bae0f0543598b689ce",
+    "packets/rater-2.json": "c2489ccbb62bf486bb61cb59739c33b65ca7e086110e1de3a512e513af0454f6",
+    "packets/rater-3.json": "6df67e960268809544176f6325844a2a096f29bb323f75a588d670af86b56ff1",
+    "packets/rater-4.json": "5e5faa08cf622fd353357ba21518206b7fdf2a1ff7ebdd9641314c728a404447",
+    "packets/rater-5.json": "537ed018378d2369fd81e74b5efa5badab43312137b1215d4f2ba61d9f64992c"
+  }
+}

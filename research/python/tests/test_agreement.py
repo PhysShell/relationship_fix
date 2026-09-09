@@ -3,9 +3,12 @@
 import unittest
 
 from metrics.agreement import (
+    build_unit_rows,
     confusion_analysis,
+    feedback_crosstab,
     krippendorff_alpha_binary,
     label_stats,
+    validate_responses,
 )
 
 
@@ -103,6 +106,67 @@ class ConfusionTests(unittest.TestCase):
                          {"B.VALIDATION", "B.REPAIR_ATTEMPT"}, {"B.VALIDATION"})]
         result = confusion_analysis(rows)
         self.assertEqual(result["label_vs_label_disagreements"], {})
+
+
+class FeedbackCrosstabTests(unittest.TestCase):
+    """unnatural_example × disagreement / abstention / stratum: плохой stimulus и плохое
+    definition — разные диагнозы, отчёт обязан их разводить."""
+
+    ITEMS = [
+        {"item_id": f"i{k}", "messages": [{"message_id": f"i{k}-m1", "author": "a", "text": "т"}],
+         "target_message_id": f"i{k}-m1"} for k in range(1, 5)
+    ]
+    STRATA = {"i1": "challenge", "i2": "challenge", "i3": "natural", "i4": "natural"}
+
+    @staticmethod
+    def response(item_id, decision, labels=(), flags=None, reason=None):
+        r = {"schema_version": "rf.pilot-response.v1", "item_id": item_id, "annotator_id": "x", "decision": decision}
+        if labels:
+            r["labels"] = list(labels)
+            r["quotes"] = [{"label": l, "quote": "т"} for l in labels]
+        if reason:
+            r["abstention_reason"] = reason
+        if flags is not None:
+            r["feedback"] = {"flags": list(flags)}
+        return r
+
+    def test_not_collected_when_no_response_carries_feedback(self):
+        a = [self.response(i["item_id"], "none_observed") for i in self.ITEMS]
+        rows = build_unit_rows(self.ITEMS, a, a)
+        self.assertFalse(feedback_crosstab(rows, self.STRATA)["collected"])
+
+    def test_crosstabs(self):
+        a = [self.response("i1", "assigned", ["B.X"], flags=["unnatural_example"]),
+             self.response("i2", "assigned", ["B.X"], flags=[]),
+             self.response("i3", "abstained", flags=["unnatural_example", "other"], reason="insufficient_context"),
+             self.response("i4", "none_observed", flags=[])]
+        b = [self.response("i1", "none_observed", flags=["unnatural_example"]),
+             self.response("i2", "assigned", ["B.Y"], flags=[]),
+             self.response("i3", "none_observed", flags=[]),
+             self.response("i4", "none_observed", flags=[])]
+        table = feedback_crosstab(build_unit_rows(self.ITEMS, a, b), self.STRATA)
+        self.assertTrue(table["collected"])
+        per = {p["item_id"]: p for p in table["per_item"]}
+        self.assertEqual(per["i1"]["unnatural_flags"], 2)
+        self.assertTrue(per["i1"]["decision_disagreement"])
+        self.assertTrue(per["i2"]["label_disagreement"])
+        self.assertFalse(per["i2"]["decision_disagreement"])
+        self.assertEqual(per["i3"]["abstentions"], 1)
+        self.assertEqual(per["i3"]["other_flags"], ["other"])
+        # i1, i3 flagged (both disagree); i2 disagrees without flag; i4 clean & agrees
+        self.assertEqual(table["unnatural_x_disagreement"], {"flagged_any": {"yes": 2, "no": 0},
+                                                             "not_flagged": {"yes": 1, "no": 1}})
+        self.assertEqual(table["unnatural_x_abstention"]["flagged_any"], {"yes": 1, "no": 1})
+        self.assertEqual(table["unnatural_by_stratum"],
+                         {"challenge": {"n_items": 2, "flagged_any": 1, "flagged_both": 1},
+                          "natural": {"n_items": 2, "flagged_any": 1, "flagged_both": 0}})
+        self.assertEqual(table["flag_totals"]["unnatural_example"], {"a": 2, "b": 1, "items_any": 2, "items_both": 1})
+
+    def test_unknown_feedback_flag_is_rejected(self):
+        bad = [self.response(i["item_id"], "none_observed", flags=["looks_fake"]) for i in self.ITEMS]
+        issues = validate_responses(self.ITEMS, bad, "x", {"B.X"})
+        self.assertTrue(all("unknown feedback flag" in i for i in issues))
+        self.assertEqual(len(issues), 4)
 
 
 if __name__ == "__main__":

@@ -67,6 +67,7 @@ model update
 | [docs/research/evaluation-contract.md](docs/research/evaluation-contract.md) | Finding contract, faithfulness, calibrated confidence, E0/E1/E2, IPR-оси, baseline A/B/C |
 | [docs/research/research-hypotheses.md](docs/research/research-hypotheses.md) | Что пока только проверяется и может быть опровергнуто |
 | [docs/research/roadmap-microscope.md](docs/research/roadmap-microscope.md) | Этапы MVP, real-data gates, Living Couple Sanity Set, data governance и WTP |
+| [docs/research/dialogue-naturalness-gate.md](docs/research/dialogue-naturalness-gate.md) | Naturalness/adjacency gate для stimulus-корпуса: диагноз «пластмассы», проверенный prior art (готового нет), rubric критика, инварианты minimal edit, ручной проход по 46 items |
 
 ## Ключевые развилки, уже решённые
 
@@ -102,10 +103,24 @@ data/
 docs/adr/                         ADR-0001 (пакеты/границы), ADR-0002 (data contract), ADR-0003 (run provenance)
 docs/annotation-protocol-v0.md    протокол разметки: α per label, challenge/natural страты, abstention
 docs/pilot-v0-instructions.md     инструкция разметчика micro-pilot
+docs/item-authoring-v0.1.md       правила авторинга stimulus-items: construct, не формулировка; adjacency; род;
+                                  provenance; naturalness-triage до freeze
 data/pilot/v0/                    annotation-pilot-v0: 40 items (20 challenge + 20 natural, слепые страты),
-                                  manifest (5 active labels + B.WITHDRAWAL deferred/not_applicable), responses/
+                                  manifest (5 active labels + B.WITHDRAWAL deferred/not_applicable) —
+                                  FROZEN historical, не выдавался (см. README там); преемник — v0.1
+data/pilot/naturalness-ab/        blinded human A/B по 13 flagged items: candidates + veto-след (facilitator-only),
+                                  per-rater пакеты, scoring
+data/pilot/naturalness-audit/     слепой аудит всех 46 items: стерильный Pass A, Pass B после заморозки,
+                                  critic-1 triage (facilitator-only); contamination-ledger.json рядом
 research/python/                  uv-проект (stdlib-only): agreement (α, CI, positive agreement, confusion pairs,
-                                  estimability), validate_items; гейтящие числа — только отсюда
+                                  estimability, unnatural_example × disagreement), validate_items (+ lineage
+                                  rf.pilot-item.v2), presentation, naturalness_ab, naturalness_audit, materialize (build/verify/
+                                  seal пакета из accepted candidates: exact accepted→built equality как gate,
+                                  package-level replaces, dogfood v7 + provenance sidecar), issuance (hash-pinned
+                                  issuance records for annotation-web: proves the sealed package, refuses without
+                                  eligibility, prints the token once, never stores it);
+                                  xlsx_interface — дверь для испытуемого (packet → .xlsx → JSONL), единственное
+                                  место с openpyxl (dependency group human-interface); гейтящие числа — только отсюда
 ```
 
 Запуск (нужен .NET 10 SDK):

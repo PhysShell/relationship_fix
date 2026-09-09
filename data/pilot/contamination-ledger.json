@@ -1,0 +1,68 @@
+{
+  "schema_version": "rf.contamination-ledger.v1",
+  "note": "Facilitator-only. Псевдонимные ключи людей (p1, p2, …), без персональных данных. Кто открыл audit- или A/B-пакет, тот больше не naive annotator: has_not_seen_items для него ложно по построению. Заполняется ДО выдачи пакета человеку.",
+  "rule": "auditor ≠ A/B rater ≠ pilot annotator — hard separation, без исключений при нехватке людей; авторы кандидатов и veto-reviewer тоже не оценщики A/B. Если людей физически не хватает, уменьшается число оценщиков или откладывается этап; роли не смешиваются молча. Вынужденное отклонение записывается здесь ДО выдачи, не объясняется постфактум",
+  "fallback": "единственный разрешённый при нехватке людей (2026-09-08): сначала A/B gen 1 на трёх оценщиках, затем один из них аудирует только 33 items вне A/B; записывается здесь ДО выдачи аудит-пакета; клетка 'critic flagged → human says fine' для 13 gen-1 items не независима и не читается как blind-audit evidence; auditor_only на 33 unseen остаётся чистым",
+  "item_level_contamination": "exposure заражает для увиденных item ids, не глобально: seen via dogfood → contaminated only for those item_ids; записывается в exposures с причиной и датой; годится для любого частичного exposure",
+  "persons": {},
+  "example": {
+    "p1": {
+      "roles": {
+        "naturalness-audit-v0-all": "auditor-1"
+      },
+      "exposures": [
+        {
+          "item_ids": [
+            "dg-04",
+            "dg-05",
+            "dg-06",
+            "dg-07",
+            "dg-08",
+            "dg-09"
+          ],
+          "reason": "dogfood annotation-web",
+          "date": "2026-09-03"
+        }
+      ],
+      "issued": [
+        {
+          "artifact": "naturalness-audit/v0-all/xlsx/auditor-1.xlsx",
+          "sha256": "<sha256 именно отправленного экземпляра, записан до отправки>",
+          "sent_at": "2026-09-10"
+        }
+      ],
+      "pilot_annotator_eligible": false,
+      "since": "2026-09-08"
+    },
+    "p2": {
+      "roles": {
+        "naturalness-ab-v0-flagged": "rater-2",
+        "naturalness-audit-v0-all": "auditor-2 (fallback: complement only)"
+      },
+      "exposures": [
+        {
+          "item_ids": [
+            "pc-02",
+            "pc-05",
+            "pc-06",
+            "pc-09",
+            "pc-12",
+            "pc-13",
+            "pc-16",
+            "pc-17",
+            "pn-10",
+            "dg-04",
+            "dg-05",
+            "dg-06",
+            "dg-09"
+          ],
+          "reason": "A/B gen 1 rater",
+          "date": "2026-09-12"
+        }
+      ],
+      "fallback_applied": "аудирует только 33 items вне A/B; 'critic flagged → human says fine' на 13 не evidence",
+      "pilot_annotator_eligible": false,
+      "since": "2026-09-12"
+    }
+  }
+}

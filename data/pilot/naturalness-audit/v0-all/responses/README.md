@@ -1,0 +1,1 @@
+Ответы Pass A: auditor-N.jsonl (rf.naturalness-audit-response.v1), одна строка на фрагмент из своего packets/auditor-N.json. Сдаются фасилитатору; после сдачи не редактируются — `report` фиксирует sha256. Аудиторы не видят critic-1-triage.json, packet-map/, strata и файлы друг друга до Pass B.

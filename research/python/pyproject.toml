@@ -7,3 +7,10 @@ dependencies = []
 
 [tool.uv]
 package = false
+
+# Единственное исключение из stdlib-only (ADR-0001 §Python): human-interface слой
+# metrics/xlsx_interface.py (packet JSON → .xlsx для человека → returned .xlsx → response JSONL).
+# Не default-группа: core research tooling openpyxl не видит.
+#   uv run --group human-interface python -m metrics.xlsx_interface ...
+[dependency-groups]
+human-interface = ["openpyxl>=3.1,<4"]

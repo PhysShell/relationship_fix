@@ -28,6 +28,7 @@ module Domain
   , shouldOfferOriginal
   , EvidenceProblem (..)
   , checkEvidence
+  , checkEvidenceText
   , validEvidence
   ) where
 
@@ -138,8 +139,11 @@ labelExamples lang label = case label of
     , (yes, tr lang "«Стоп, мы сейчас только сильнее ругаемся. Давай поедим и вернёмся к этому через час.»" "“Stop, we're only making this worse. Let's eat and come back to it in an hour.”")
     , (no, tr lang "«Извини конечно, но это ты всё начала.»" "“Sorry, sure, but you started all of this.”")
     ]
+  -- The former "yes" example here shared its first five words with a pilot
+  -- item's context line: an answer key in the glossary, not a definition.
+  -- Replaced on the web surface only; the ontology artifact is untouched.
   AvoidanceTopicShift ->
-    [ (yes, tr lang "A: «Нам надо поговорить про кредит». B: «Кстати, видела новый сериал?»" "A: “We need to talk about the loan.” B: “By the way, did you see the new series?”")
+    [ (yes, tr lang "A: «Ты видел счёт за электричество?» B: «Кстати, соседи собаку завели.»" "A: “Did you see the electricity bill?” B: “By the way, the neighbours got a dog.”")
     , (no, tr lang "«Давай вечером, сейчас встреча» — есть конкретный возврат к теме." "“Let's talk tonight, I'm in a meeting now.” There is a concrete return to the topic.")
     , (boundary, tr lang "Согласованная деэскалация или пауза с конкретным возвратом может быть repair, а не avoidance." "An agreed de-escalation or a pause with a concrete return can be repair rather than avoidance.")
     ]
@@ -234,20 +238,24 @@ data EvidenceProblem
   | EvidenceNotASpan
   deriving stock (Eq, Ord, Show)
 
--- | Check a submitted quote against the message as it was displayed, returning
--- the normalised quote when it is usable.
+-- | Check a submitted quote against the message as it was displayed.
 --
 -- Note that this is a question about the presentation and not about the
 -- source: the same quote is a valid span of a Russian presentation of a
 -- Russian item and is not a span of its English translation.
 checkEvidence :: Language -> Item -> Text -> Either EvidenceProblem Text
-checkEvidence lang item raw
-  | T.null quote = Left EvidenceBlank
-  | quote `T.isInfixOf` target = Right quote
+checkEvidence lang item = checkEvidenceText (presentationTarget (presentationFor lang item))
+
+-- | The rule itself, against any target text: the quote is accepted exactly as
+-- typed, and only if those exact characters occur in the target. Nothing is
+-- trimmed, re-quoted or Unicode-normalised on the way in -- a collector that
+-- "fixes" a quote has stopped recording what the annotator wrote. A quote
+-- that is nothing but whitespace is reported as blank rather than as wrong.
+checkEvidenceText :: Text -> Text -> Either EvidenceProblem Text
+checkEvidenceText target raw
+  | T.null (T.strip raw) = Left EvidenceBlank
+  | raw `T.isInfixOf` target = Right raw
   | otherwise = Left EvidenceNotASpan
-  where
-    quote = T.strip raw
-    target = presentationTarget (presentationFor lang item)
 
 validEvidence :: Language -> Item -> Text -> Bool
 validEvidence lang item raw = case checkEvidence lang item raw of

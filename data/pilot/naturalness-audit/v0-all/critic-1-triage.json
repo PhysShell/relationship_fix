@@ -1,0 +1,385 @@
+{
+  "schema_version": "rf.naturalness-triage.v1",
+  "critic": "critic-1 = LLM-критик (сессия 2026-09-07), один проход, rubric gate §5; см. docs/research/dialogue-naturalness-gate.md §7",
+  "status": "facilitator_only_pass_b_material_not_gold",
+  "severity_order": [
+    "none",
+    "low",
+    "medium",
+    "medium-high",
+    "high"
+  ],
+  "flagged_threshold": "medium",
+  "items": [
+    {
+      "item_id": "pc-01",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-02",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "SCRIPTED_DEMAND",
+        "THERAPIST_VOICE",
+        "ctx:NON_ADJACENT_REPLY"
+      ],
+      "severity": "medium-high",
+      "axis": "both"
+    },
+    {
+      "item_id": "pc-03",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-04",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-05",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "THERAPIST_VOICE",
+        "ctx:EXPLICIT_EMOTION_REPORT",
+        "ctx:FORMAL_REGISTER"
+      ],
+      "severity": "high",
+      "axis": "naturalness"
+    },
+    {
+      "item_id": "pc-06",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "ctx:FORMAL_REGISTER",
+        "ctx:EXPOSITION_FOR_READER"
+      ],
+      "severity": "medium",
+      "axis": "both",
+      "note": "target в порядке; проблема в A-реплике"
+    },
+    {
+      "item_id": "pc-07",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-08",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-09",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "OVER_SPECIFIED_COMMITMENT"
+      ],
+      "severity": "medium",
+      "axis": "naturalness"
+    },
+    {
+      "item_id": "pc-10",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "THERAPIST_VOICE"
+      ],
+      "severity": "low",
+      "axis": "naturalness",
+      "note": "«Мы же не враги» чуть сценарно; эмодзи вытягивает"
+    },
+    {
+      "item_id": "pc-11",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-12",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "THERAPIST_VOICE",
+        "SCRIPTED_DEMAND"
+      ],
+      "severity": "medium-high",
+      "axis": "naturalness"
+    },
+    {
+      "item_id": "pc-13",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "THERAPIST_VOICE"
+      ],
+      "severity": "high",
+      "axis": "naturalness"
+    },
+    {
+      "item_id": "pc-14",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "THERAPIST_VOICE"
+      ],
+      "severity": "low",
+      "axis": "naturalness",
+      "note": "«Can we rewind?» чуть coached"
+    },
+    {
+      "item_id": "pc-15",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-16",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium",
+      "axis": "naturalness",
+      "note": "target в порядке; проблема в A-реплике"
+    },
+    {
+      "item_id": "pc-17",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium-high",
+      "axis": "naturalness",
+      "note": "target в порядке; проблема в A-реплике"
+    },
+    {
+      "item_id": "pc-18",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-19",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pc-20",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-01",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-02",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-03",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-04",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-05",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-06",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-07",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-08",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-09",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-10",
+      "package_id": "annotation-pilot-v0",
+      "flags": [
+        "THERAPIST_VOICE"
+      ],
+      "severity": "medium",
+      "axis": "naturalness",
+      "note": "natural-страта; пластмассовый только хвост"
+    },
+    {
+      "item_id": "pn-11",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-12",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-13",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-14",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-15",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-16",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-17",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-18",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-19",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "pn-20",
+      "package_id": "annotation-pilot-v0",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "dg-04",
+      "package_id": "annotation-ux-v6",
+      "flags": [
+        "EXPOSITION_FOR_READER"
+      ],
+      "severity": "medium-high",
+      "axis": "adjacency"
+    },
+    {
+      "item_id": "dg-05",
+      "package_id": "annotation-ux-v6",
+      "flags": [
+        "THERAPIST_VOICE",
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "high",
+      "axis": "naturalness"
+    },
+    {
+      "item_id": "dg-06",
+      "package_id": "annotation-ux-v6",
+      "flags": [
+        "OVER_SPECIFIED_COMMITMENT",
+        "EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium-high",
+      "axis": "naturalness"
+    },
+    {
+      "item_id": "dg-07",
+      "package_id": "annotation-ux-v6",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "dg-08",
+      "package_id": "annotation-ux-v6",
+      "flags": [],
+      "severity": "none",
+      "axis": "none"
+    },
+    {
+      "item_id": "dg-09",
+      "package_id": "annotation-ux-v6",
+      "flags": [
+        "THERAPIST_VOICE",
+        "SYMMETRIC_APOLOGY",
+        "SCRIPTED_DEMAND",
+        "ctx:EXPOSITION_FOR_READER",
+        "ctx:NON_ADJACENT_REPLY"
+      ],
+      "severity": "high",
+      "axis": "both"
+    }
+  ]
+}

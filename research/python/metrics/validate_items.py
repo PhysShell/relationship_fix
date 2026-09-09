@@ -1,8 +1,10 @@
 """Валидация pilot-пакета до выдачи разметчикам (read-only).
 
-Проверяет: структуру items, уникальность id, target внутри messages, покрытие
-strata, консистентность manifest с онтологией (sha256, active/deferred labels,
-allowed_units против utterance-only sampling frame).
+Проверяет: структуру items (rf.pilot-item.v1 | v2), уникальность id, target внутри
+messages, покрытие strata, консистентность manifest с онтологией (sha256,
+active/deferred labels, allowed_units против utterance-only sampling frame),
+presentation-слой (checksums, отсутствие утечки canonical id и `authoring`),
+а для v2 — lineage блока authoring против родительских пакетов в соседних каталогах.
 
     uv run python -m metrics.validate_items \
         --pilot-dir ../../data/pilot/v0 --ontology ../../data/ontology/behavior-v0.1.json
@@ -18,6 +20,79 @@ from collections import Counter
 from pathlib import Path
 
 from metrics.agreement import load_jsonl
+from metrics.items import ITEM_SCHEMAS, SCHEMA_V1, SCHEMA_V2, authoring_issues
+
+
+def structural_issues(items: list[dict]) -> list[str]:
+    issues: list[str] = []
+    ids = [i.get("item_id") for i in items]
+    for item_id, count in Counter(ids).items():
+        if count > 1:
+            issues.append(f"items: duplicate item_id '{item_id}'")
+    schemas = {i.get("schema_version") for i in items}
+    if len(schemas) > 1:
+        issues.append(f"items: mixed schema versions {sorted(map(str, schemas))} — пакет несёт одну схему")
+    for item in items:
+        item_id = item.get("item_id")
+        schema = item.get("schema_version")
+        if schema not in ITEM_SCHEMAS:
+            issues.append(f"{item_id}: bad schema_version {schema!r}")
+        if schema == SCHEMA_V1 and "authoring" in item:
+            issues.append(f"{item_id}: rf.pilot-item.v1 does not carry 'authoring' — use v2")
+        if schema == SCHEMA_V2 and "authoring" not in item:
+            issues.append(f"{item_id}: rf.pilot-item.v2 requires 'authoring'")
+        if item.get("language") not in ("ru", "en"):
+            issues.append(f"{item_id}: language must be ru|en")
+        message_ids = [m.get("message_id") for m in item.get("messages", [])]
+        if len(set(message_ids)) != len(message_ids):
+            issues.append(f"{item_id}: duplicate message ids")
+        if item.get("target_message_id") not in message_ids:
+            issues.append(f"{item_id}: target_message_id not among messages")
+        for message in item.get("messages", []):
+            if not message.get("text", "").strip():
+                issues.append(f"{item_id}/{message.get('message_id')}: empty text")
+            if message.get("author") not in ("a", "b"):
+                issues.append(f"{item_id}/{message.get('message_id')}: author must be a|b")
+    return issues
+
+
+def index_packages(packages_root: Path) -> tuple[dict[str, Path], list[str]]:
+    """pilot_id → каталог пакета среди <packages_root>/*/pilot-manifest.json.
+
+    Fail-closed: pilot_id, объявленный больше чем одним каталогом, не резолвится вообще
+    и попадает в issues. Provenance либо разрешается однозначно, либо lineage
+    unverifiable; «первый по сортировке» — не семантика для происхождения данных."""
+    declared: dict[str, list[Path]] = {}
+    for manifest_path in sorted(packages_root.glob("*/pilot-manifest.json")):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        pilot_id = manifest.get("pilot_id")
+        if pilot_id:
+            declared.setdefault(pilot_id, []).append(manifest_path.parent)
+    issues = [
+        f"packages: pilot_id '{pid}' declared by {len(dirs)} packages ({', '.join(d.name for d in dirs)}) — "
+        f"lineage через него не резолвится, пока дубликат не устранён"
+        for pid, dirs in declared.items() if len(dirs) > 1
+    ]
+    index = {pid: dirs[0] for pid, dirs in declared.items() if len(dirs) == 1}
+    return index, issues
+
+
+def package_items_lookup(packages_root: Path):
+    """parent_lookup для authoring_issues: пакет по pilot_id (однозначно, см. index_packages),
+    item по item_id. Возвращает (lookup, issues): issues — дубликаты pilot_id."""
+    index, issues = index_packages(packages_root)
+    cache: dict[str, dict[str, dict]] = {}
+
+    def lookup(package_id: str, item_id: str) -> dict | None:
+        package_dir = index.get(package_id)
+        if package_dir is None:
+            return None
+        if package_id not in cache:
+            manifest = json.loads((package_dir / "pilot-manifest.json").read_text(encoding="utf-8"))
+            cache[package_id] = {i["item_id"]: i for i in load_jsonl(package_dir / manifest["items_file"])}
+        return cache[package_id].get(item_id)
+
+    return lookup, issues
 
 
 def validate(pilot_dir: Path, ontology_path: Path) -> list[str]:
@@ -26,27 +101,17 @@ def validate(pilot_dir: Path, ontology_path: Path) -> list[str]:
     items = load_jsonl(pilot_dir / manifest["items_file"])
     strata = json.loads((pilot_dir / manifest["strata_file"]).read_text(encoding="utf-8"))["strata"]
     ontology = json.loads(ontology_path.read_text(encoding="utf-8"))
+    ids = [i["item_id"] for i in items]
 
     # --- items ---
-    ids = [i["item_id"] for i in items]
-    for item_id, count in Counter(ids).items():
-        if count > 1:
-            issues.append(f"items: duplicate item_id '{item_id}'")
+    issues += structural_issues(items)
+
+    # --- package identity + authoring lineage (v2) ---
+    lookup, package_issues = package_items_lookup(pilot_dir.resolve().parent)
+    issues += package_issues
     for item in items:
-        if item.get("schema_version") != "rf.pilot-item.v1":
-            issues.append(f"{item.get('item_id')}: bad schema_version")
-        if item.get("language") not in ("ru", "en"):
-            issues.append(f"{item['item_id']}: language must be ru|en")
-        message_ids = [m["message_id"] for m in item.get("messages", [])]
-        if len(set(message_ids)) != len(message_ids):
-            issues.append(f"{item['item_id']}: duplicate message ids")
-        if item.get("target_message_id") not in message_ids:
-            issues.append(f"{item['item_id']}: target_message_id not among messages")
-        for message in item.get("messages", []):
-            if not message.get("text", "").strip():
-                issues.append(f"{item['item_id']}/{message.get('message_id')}: empty text")
-            if message.get("author") not in ("a", "b"):
-                issues.append(f"{item['item_id']}/{message.get('message_id')}: author must be a|b")
+        if item.get("schema_version") == SCHEMA_V2:
+            issues += authoring_issues(item, lookup)
 
     # --- strata ---
     if set(strata) != set(ids):
@@ -110,6 +175,8 @@ def validate(pilot_dir: Path, ontology_path: Path) -> list[str]:
             presented = load_jsonl(file)
             orders[annotator] = [mapping.get(p["item_id"], "?") for p in presented]
             for p in presented:
+                if p.get("schema_version") != SCHEMA_V1 or "authoring" in p:
+                    issues.append(f"presentation/{annotator}/{p.get('item_id')}: presentation обязана быть v1-проекцией без authoring")
                 for canonical in ids:
                     if canonical in p["item_id"] or canonical in p["target_message_id"]:
                         issues.append(f"presentation/{annotator}: canonical id '{canonical}' протёк в '{p['item_id']}'")
@@ -128,7 +195,8 @@ def validate(pilot_dir: Path, ontology_path: Path) -> list[str]:
         issues.append("eligibility.json отсутствует")
 
     counts = Counter(strata.values())
-    print(f"items: {len(items)}; strata: {dict(counts)}; "
+    schema = next(iter({i.get("schema_version") for i in items}), "?")
+    print(f"items: {len(items)} ({schema}); strata: {dict(counts)}; "
           f"languages: {dict(Counter(i['language'] for i in items))}")
     return issues
 

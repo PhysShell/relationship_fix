@@ -1,0 +1,18 @@
+{
+  "schema_version": "rf.pilot-eligibility.v1",
+  "note": "Заполняется фасилитатором ДО выдачи пакета. Только эти булевы поля — никакой демографии и персональных данных.",
+  "annotators": {
+    "annotator-1": {
+      "did_not_author_ontology": null,
+      "fluent_ru": null,
+      "fluent_en": null,
+      "has_not_seen_items": null
+    },
+    "annotator-2": {
+      "did_not_author_ontology": null,
+      "fluent_ru": null,
+      "fluent_en": null,
+      "has_not_seen_items": null
+    }
+  }
+}

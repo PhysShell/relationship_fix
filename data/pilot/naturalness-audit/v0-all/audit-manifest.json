@@ -1,0 +1,103 @@
+{
+  "schema_version": "rf.naturalness-audit-manifest.v1",
+  "audit_id": "naturalness-audit-v0-all",
+  "created": "2026-09-07",
+  "purpose": "Независимый слепой аудит всех 46 stimulus-items (40 pilot v0 + 6 dogfood). Pass A — стерильный: только реплики и три вопроса. Pass B — диагностический, после заморозки ответов Pass A. Проверяет вывод critic-1 «дефект рождается там, где конструкция stimulus обслуживает границу онтологии» (gate §1.2), который пока стоит на одном проходе одного критика.",
+  "sources": [
+    {
+      "package_id": "annotation-pilot-v0",
+      "items_file": "../../v0/items.jsonl",
+      "sha256": "9d1a2690dc95e488a0cd204ae71f509e37d5d3b4d7237cce872ec55d17361bb2"
+    },
+    {
+      "package_id": "annotation-ux-v6",
+      "snapshot_file": "sources/dogfood-v6-items.snapshot.json",
+      "source_file": "../../v0/form/dogfood-v6-items.yaml",
+      "source_sha256": "4b2cd0bfc2ba4dab87d5ca0d2e79465ed0e3eab01b9411917ae7a5a110daf8a8"
+    }
+  ],
+  "strata_file": "../../v0/strata.json",
+  "critic_1_triage_file": "critic-1-triage.json",
+  "packets_dir": "packets/",
+  "packet_map_dir": "packet-map/",
+  "responses_dir": "responses/",
+  "pass_b_dir": "pass-b/",
+  "auditors": {
+    "auditor-1": {
+      "seed": "rf-naturalness-audit/v0-all/auditor-1/2026-09-07"
+    },
+    "auditor-2": {
+      "seed": "rf-naturalness-audit/v0-all/auditor-2/2026-09-07"
+    }
+  },
+  "pass_a": {
+    "questions": {
+      "natural": {
+        "ru": "Звучит ли это как естественная переписка двух близких людей?",
+        "options": [
+          "yes",
+          "partly",
+          "no"
+        ]
+      },
+      "invisible_context": {
+        "ru": "Требует ли ответ B существенного невидимого контекста между A и B (сцены, которой нет в переписке)? Для одиночного сообщения — not_applicable.",
+        "options": [
+          "yes",
+          "no",
+          "not_applicable"
+        ]
+      },
+      "other_problem": {
+        "ru": "Есть ли другая наблюдаемая проблема формулировки? Пустая строка, если нет; иначе коротко словами.",
+        "type": "free_text"
+      }
+    },
+    "sterile": [
+      "аудитор видит ТОЛЬКО свой packets/auditor-N.json: реплики A/B, opaque ids, свой порядок",
+      "нет strata, labels, definitions, target-маркера, флагов, gate-документа, candidates.json и объяснений про boundary pressure",
+      "аудитор не участвовал в авторинге items и не видел их раньше",
+      "ответы после сдачи не меняются; report фиксирует их checksums"
+    ]
+  },
+  "pass_b": {
+    "opens_after": "ответы Pass A сданы и их sha256 записаны в audit-result.json",
+    "materials": [
+      "strata",
+      "critic-1-triage.json",
+      "docs/research/dialogue-naturalness-gate.md",
+      "naturalness-ab/v0-flagged/candidates.json",
+      "definitions/examples онтологии"
+    ],
+    "question": "почему именно эти items сломались; согласуется ли это с гипотезой boundary construction pressure",
+    "record": "pass-b/auditor-N.md, свободный текст, с датой; выводы Pass B не правят ответы Pass A"
+  },
+  "contamination": {
+    "rule": "auditor ≠ A/B rater ≠ pilot annotator — hard separation, без исключений при нехватке людей; авторы кандидатов и veto-reviewer тоже не оценщики A/B. Если людей физически не хватает, уменьшается число оценщиков или откладывается этап; роли не смешиваются молча",
+    "roles": {
+      "auditor": [
+        "not_item_author",
+        "not_ab_rater",
+        "not_pilot_annotator",
+        "has_not_seen_items"
+      ],
+      "ab_rater": [
+        "not_item_author",
+        "not_candidate_author",
+        "not_veto_reviewer",
+        "not_auditor",
+        "not_pilot_annotator"
+      ],
+      "pilot_annotator": [
+        "has_not_seen_items",
+        "did_not_participate_in_naturalness_audit_or_ab"
+      ]
+    },
+    "generation_2": "auditor-only находки Pass A → кандидаты generation 2 в отдельном каталоге naturalness-ab/, свой veto-review, свои пакеты; generation 1 не перевыдаётся; v0.1 собирается один раз после закрытия обеих генераций",
+    "why": "аудитор видел все 46 items, оценщик A/B — 13 в двух версиях; has_not_seen_items для них ложно по построению",
+    "ledger": "../../contamination-ledger.json",
+    "cutover_consequence": "eligibility пакета v0.1 получает критерий did_not_participate_in_naturalness_audit_or_ab, проверяемый по ledger (cutover work, не сейчас)",
+    "fallback": "единственный разрешённый при нехватке людей (2026-09-08): сначала A/B gen 1 на трёх оценщиках, затем один из них аудирует только 33 items вне A/B; записывается здесь ДО выдачи аудит-пакета; клетка 'critic flagged → human says fine' для 13 gen-1 items не независима и не читается как blind-audit evidence; auditor_only на 33 unseen остаётся чистым",
+    "item_level": "exposure заражает для увиденных item ids, не глобально: seen via dogfood → contaminated only for those item_ids; записывается в exposures с причиной и датой; годится для любого частичного exposure"
+  }
+}

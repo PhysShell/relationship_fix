@@ -1,0 +1,7 @@
+{
+  "schema_version": "rf.pilot-presentation-checksums.v1",
+  "sha256": {
+    "presentation/annotator-1.jsonl": "3847d6572b8efac7fcdec73781122493d0e604906e8bd71ae754c0a8faaca615",
+    "presentation/annotator-2.jsonl": "221a8a7f4af062e2866009d57d56e0df8ef3d9e0c84d9bc4b01c2085f8aeae2d"
+  }
+}

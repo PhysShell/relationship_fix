@@ -1,0 +1,213 @@
+{
+  "schema_version": "rf.dogfood-provenance.v1",
+  "dogfood_id": "annotation-ux-v7",
+  "derived_from": {
+    "dogfood_id": "annotation-ux-v6",
+    "yaml": "../v0/form/dogfood-v6-items.yaml",
+    "sha256": "4b2cd0bfc2ba4dab87d5ca0d2e79465ed0e3eab01b9411917ae7a5a110daf8a8"
+  },
+  "result_yaml": {
+    "file": "dogfood-v7-items.yaml",
+    "sha256": "f73347e5f573c169eb31c6de0c7733f16e6cc2588eb53d6bd3912eaa906ac818"
+  },
+  "candidates": {
+    "file": "../naturalness-ab/v0-flagged-donor/candidates.json",
+    "sha256": "df3eb3eb69b4b6d3980ba131ca3922850beaf1aa93e69064a592fe07e3f8db72"
+  },
+  "build_date": "2026-09-08",
+  "contract": "docs/pilot-v0.1-cutover-contract.md",
+  "storage_contract": "dogfood yaml — не rf.pilot-item.v2; lineage только в этом sidecar (cutover contract D)",
+  "web_surface": "src/annotation-web Catalog.hs НЕ переключён этой сборкой — web cutover, отдельная приёмка",
+  "items": [
+    {
+      "old": {
+        "item_id": "dg-04",
+        "content_sha256": "a64416bb8e55681eba91a724ecf8c4cd815b298e00857c32172c877246fa17cf"
+      },
+      "kind": "replacement",
+      "accepted_candidate": "dg-04-d1",
+      "accepted": "2026-09-08",
+      "reason": "проход 1: замечаний по V1–V10 нет; проход 2: переведено в явное facilitator acceptance при согласии checker'а",
+      "caveat": null,
+      "result": {
+        "item_id": "dg-10",
+        "content_sha256": "80236e7dee3596f5c244a49c5e274435e5d7a434010d5bcb4ec8a2d39c250719"
+      },
+      "authoring": {
+        "origin": "llm_assisted",
+        "revision_reason": null,
+        "accepted_via": "facilitator",
+        "parent": null,
+        "inherits_design_intent_from": "dg-04",
+        "design_intent": "Target: конкретное причинное описание одного эпизода, без генерализации и без оценки личности. Род A женский."
+      },
+      "provenance": {
+        "method": "external_dialogue_seeded",
+        "source_kind": "human_improvised_dialogue",
+        "source_corpus": "Aniemore/resd_annotated",
+        "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+        "source_ref": [
+          "34_anger_fear_f_010",
+          "07_fear_neutral n_110"
+        ],
+        "source_license": "MIT",
+        "source_text_copied": false,
+        "transformation": "interaction_structure_only",
+        "source_language": "ru",
+        "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`"
+      }
+    },
+    {
+      "old": {
+        "item_id": "dg-05",
+        "content_sha256": "8587785c0f0a03f540bb0e95b0fc97685311e5490708ffa14edfc6d811affe1e"
+      },
+      "kind": "revision",
+      "accepted_candidate": "dg-05-d1",
+      "accepted": "2026-09-08",
+      "reason": "«Одной такое ждать — ещё бы не страшно. Там любой бы дёргался» остаётся substantive validation, а не голым «понятно»; род B не вводится.",
+      "caveat": null,
+      "result": {
+        "item_id": "dg-05",
+        "content_sha256": "f178224754ac512d472c3acd39d386ed44fe48e6df22ebddf5e2cbfb43b18088"
+      },
+      "authoring": {
+        "origin": "llm_assisted",
+        "revision_reason": "naturalness",
+        "accepted_via": "facilitator",
+        "parent": {
+          "dogfood_id": "annotation-ux-v6",
+          "item_id": "dg-05",
+          "content_sha256": "8587785c0f0a03f540bb0e95b0fc97685311e5490708ffa14edfc6d811affe1e"
+        }
+      },
+      "provenance": {
+        "method": "external_dialogue_seeded",
+        "source_kind": "human_improvised_dialogue",
+        "source_corpus": "Aniemore/resd_annotated",
+        "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+        "source_ref": [
+          "07_fear_neutral n_100",
+          "07_fear_neutral n_120"
+        ],
+        "source_license": "MIT",
+        "source_text_copied": false,
+        "transformation": "interaction_structure_only",
+        "source_language": "ru",
+        "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`"
+      }
+    },
+    {
+      "old": {
+        "item_id": "dg-06",
+        "content_sha256": "b358f1669a2fb1ef35cb5640c429104148d5b345759f162208be6e52f83aadf2"
+      },
+      "kind": "revision",
+      "accepted_candidate": "dg-06-d1",
+      "accepted": "2026-09-08",
+      "reason": "Пауза + конкретный возврат сохранены: «я пройдусь, в девять вернусь». Форма шероховатая, но это naturalness-вопрос, не veto. V1–V10 не нарушены.",
+      "caveat": null,
+      "result": {
+        "item_id": "dg-06",
+        "content_sha256": "1eadd5bdebb2ce501b6b7c99a88325a00f17c8dea32ce76a54fabd2ce0f1bc94"
+      },
+      "authoring": {
+        "origin": "llm_assisted",
+        "revision_reason": "naturalness",
+        "accepted_via": "facilitator",
+        "parent": {
+          "dogfood_id": "annotation-ux-v6",
+          "item_id": "dg-06",
+          "content_sha256": "b358f1669a2fb1ef35cb5640c429104148d5b345759f162208be6e52f83aadf2"
+        }
+      },
+      "provenance": {
+        "method": "external_dialogue_seeded",
+        "source_kind": "human_improvised_dialogue",
+        "source_corpus": "Aniemore/resd_annotated",
+        "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+        "source_ref": [
+          "22_fear_anger_a_110",
+          "22_fear_anger_a_160"
+        ],
+        "source_license": "MIT",
+        "source_text_copied": false,
+        "transformation": "interaction_structure_only",
+        "source_language": "ru",
+        "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`"
+      }
+    },
+    {
+      "old": {
+        "item_id": "dg-07",
+        "content_sha256": "ee3df3e73a21db18f986f1b54e0e0b1bccee8ad2ed1ab25f2fcc43f41cdeb8d9"
+      },
+      "kind": "carried_over",
+      "accepted_candidate": null,
+      "result": {
+        "item_id": "dg-07",
+        "content_sha256": "ee3df3e73a21db18f986f1b54e0e0b1bccee8ad2ed1ab25f2fcc43f41cdeb8d9"
+      },
+      "authoring": {
+        "origin": "unrecorded",
+        "revision_reason": null,
+        "accepted_via": "carried_over"
+      }
+    },
+    {
+      "old": {
+        "item_id": "dg-08",
+        "content_sha256": "1885c9a5387bba068a99485a6c3043c8f043b285cbcb61b0835f63b19ebfc51a"
+      },
+      "kind": "carried_over",
+      "accepted_candidate": null,
+      "result": {
+        "item_id": "dg-08",
+        "content_sha256": "1885c9a5387bba068a99485a6c3043c8f043b285cbcb61b0835f63b19ebfc51a"
+      },
+      "authoring": {
+        "origin": "unrecorded",
+        "revision_reason": null,
+        "accepted_via": "carried_over"
+      }
+    },
+    {
+      "old": {
+        "item_id": "dg-09",
+        "content_sha256": "7544ea3772ec127bb8f7f6f56bd539161b22f75f496aa6a1b73ecd089f7a2eac"
+      },
+      "kind": "replacement",
+      "accepted_candidate": "dg-09-d1",
+      "accepted": "2026-09-08",
+      "reason": "проход 1: замечаний по V1–V10 нет; проход 2: переведено в явное facilitator acceptance при согласии checker'а",
+      "caveat": null,
+      "result": {
+        "item_id": "dg-11",
+        "content_sha256": "4a79ac681015e0861f176f5e134b46ca263073594b5a9b2156d65d6b633af153"
+      },
+      "authoring": {
+        "origin": "llm_assisted",
+        "revision_reason": null,
+        "accepted_via": "facilitator",
+        "parent": null,
+        "inherits_design_intent_from": "dg-09",
+        "design_intent": "Target: извинение/ответственность И требование изменения в одном сообщении; «но» не должно читаться как контратака. Род A мужской, B женский."
+      },
+      "provenance": {
+        "method": "external_dialogue_seeded",
+        "source_kind": "human_improvised_dialogue",
+        "source_corpus": "Aniemore/resd_annotated",
+        "source_revision": "54e01a8aadf46488780a2ba665cfbc490c9a80b6",
+        "source_ref": [
+          "31_fear_enthusiasm_f_140",
+          "07_fear_neutral f_040"
+        ],
+        "source_license": "MIT",
+        "source_text_copied": false,
+        "transformation": "interaction_structure_only",
+        "source_language": "ru",
+        "source_modality": "spoken studio improvisation (20 actors, no script), transcript column `text`"
+      }
+    }
+  ]
+}

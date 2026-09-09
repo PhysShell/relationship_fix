@@ -162,6 +162,75 @@ Creating a new table has no such problem. The migration this version actually
 performs on a live hs-v1 database is two `CREATE TABLE` statements and nothing
 else; `survey_session` is not touched, and its rows are not rewritten.
 
+## Pilot mode: a token-bound, dumb renderer of a sealed packet
+
+The dogfood flow above is the debug surface. The scientific pilot is a second
+mode of the same server, and everything about it follows one rule: show a
+person exactly the bytes they were issued, store exactly what they answered,
+and be able to prove both.
+
+```text
+sealed package (data/pilot/v0.1: CHECKSUMS.sha256 + presentation/annotator-N.jsonl)
+        │
+package registry (data/pilot/package-registry.json: status + seal pin)
+        │
+issuance record (RF_ISSUANCE_DIR/annotator-N.json: token sha256, package,
+                 presentation sha256, instruction sha256, ontology sha256)
+        │
+GET /t/<token>  ──►  session bound to that record (pilot_binding row)
+        │
+/intro          ──►  the bound instruction document (byte-exact at /instructions,
+                     hash on the page) + the active labels of the pinned ontology
+/item/N         ──►  the N-th row of the presentation file: its messages, its
+                     order, its target; nothing translated, reordered or looked up
+/done           ──►  thanks; no download
+annotation-web-export <package> <annotator> <dir>
+                ──►  responses/annotator-N.jsonl (rf.pilot-response.v1, packet
+                     order) + annotator-N.export.json (the binding, the layer hash)
+```
+
+What the server proves at start, for every record in `RF_ISSUANCE_DIR`, and
+refuses to start otherwise (`Registry.loadBindings`):
+
+- the package is in the registry with status `issuable`; `frozen_non_issuable`
+  (annotation-pilot-v0) and unknown packages are refused;
+- `CHECKSUMS.sha256` exists and hashes to the registry pin and to the record;
+- the sealed entries for `items.jsonl` and the annotator's presentation file
+  equal the record; the presentation file, the instruction document and the
+  ontology file hash to what the record says;
+- the presentation rows are plain `rf.pilot-item.v1` stimuli — a row carrying
+  `authoring` or another schema is refused as a facilitator file;
+- tokens and (package, annotator) pairs are unique across records.
+
+What the server never reads: `items.jsonl`, `presentation-map/`,
+`pilot-manifest.json`. Canonical ids and authoring metadata are not in the
+process, so they cannot reach a browser; the test fixture has no `items.jsonl`
+at all. The identity of the package is the sealed hash of `items.jsonl`, read
+from the seal.
+
+The session is bound, not the URL: `pilot_binding` stores the hashes the
+session started under, and a record that changes underneath a running session
+is refused (`bindingUnchanged`), as is a record the running server has not
+proven. Reopening the token resumes the same session at the first incomplete
+item. Quotes are stored exactly as typed and accepted only as exact substrings
+of the target (`checkEvidenceText`: no trimming, no normalisation). Feedback
+is offered on every item; the export carries `"feedback": {"flags": [], "note": ""}`
+for an item where the disclosure was never opened or left empty — meaningful
+feedback (any flag, or a non-blank note) is the report's question.
+
+The dogfood surface is off unless `RF_DOGFOOD_ENABLED=1`; with it off, `/`
+says there is no open study and `/language` is 404, so a pilot annotator who
+lands on the root cannot start a dogfood session.
+
+Issuance records are created by the research tooling (`metrics.issuance new`),
+not by this app; this app never issues anything. Eligibility is an external
+record per person (`rf.annotator-eligibility.v1`, kept outside the sealed
+package — the package's own `eligibility.json` is the null template sealed
+with it and is never edited); `new` refuses unless every criterion the
+manifest names is exactly true there, and writes that record's sha256 into
+the issuance record. This server does not read the `eligibility` field; the
+parser tolerates it, so records with it load on the deployed release.
+
 ## Schema migrations
 
 Schema change is explicit, ordered and owned by a separate executable. The
@@ -185,6 +254,7 @@ The history is append-only, oldest first:
 | --- | --- |
 | `0001-baseline-hs-v1` | `survey_session`, `annotation`, `annotation_label`, `evidence`, `audit_event` |
 | `0002-session-instrument-and-item-feedback` | adds `session_instrument`, `item_feedback` |
+| `0003-pilot-binding` | adds `pilot_binding` (a survey session bound to one issuance record: token sha256, package, annotator, the hashes of what was issued) |
 
 `0001` is not "the schema as of the commit that introduced migrations". It is the
 schema production was *already* running, transcribed from a real hs-v1 database
@@ -293,10 +363,22 @@ The server listens on `127.0.0.1:8080` by default.
 Useful environment variables:
 
 ```text
-RF_DB_PATH            SQLite path, default annotation.db (both executables)
+RF_DB_PATH            SQLite path, default annotation.db (all executables)
 RF_SESSION_KEY_PATH   Yesod client-session key, default client-session-key.aes
 RF_SECURE_COOKIES     1/true/yes enables Secure session cookies
-PORT                   listen port, default 8080
+RF_DOGFOOD_ENABLED    1/true/yes serves the Catalog dogfood surface at /; default off
+RF_REPO_ROOT          base for the registry, package dirs, instruction and ontology paths
+                      (default .; in a nix release $RELEASE/share/relationship-fix)
+RF_PACKAGE_REGISTRY   default $RF_REPO_ROOT/data/pilot/package-registry.json
+RF_ISSUANCE_DIR       directory of issuance records; unset = nothing issued
+PORT                  listen port, default 8080
+```
+
+Export a completed pilot session (read-only on the database):
+
+```bash
+RF_DB_PATH=annotation.db RF_REPO_ROOT=../.. RF_ISSUANCE_DIR=../../data/pilot/v0.1/issuance \
+  stack run annotation-web-export -- annotation-pilot-v0.1 annotator-1 ../../data/pilot/v0.1/responses
 ```
 
 For local plain HTTP, leave `RF_SECURE_COOKIES` unset. For deployment behind HTTPS, set it to `1`.

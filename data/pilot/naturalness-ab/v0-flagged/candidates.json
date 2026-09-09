@@ -1,0 +1,915 @@
+{
+  "schema_version": "rf.naturalness-ab-candidates.v1",
+  "ab_id": "naturalness-ab-v0-flagged",
+  "status": "facilitator_only_not_shown_to_raters",
+  "triage_source": "docs/research/dialogue-naturalness-gate.md §7 (ручной проход 2026-09-07)",
+  "candidate_origin_note": "Все кандидаты — llm_assisted (предложены моделью под инвариантами gate §6). Принятый кандидат наследует это в authoring.origin; «human» после принятия LLM-кандидата было бы ложью.",
+  "admissibility_note": "Кандидат находится ровно в одном из трёх списков: candidates (допущен в A/B), vetoed (снят фасилитатором до выдачи по пункту veto_checklist, с причиной; след не удаляется) или rejected (negative control протокола редактирования, история не переписывается). A/B сравнивает только candidates.",
+  "veto_checklist": [
+    {
+      "id": "V1",
+      "check": "construct: target по-прежнему делает всё, что делал оригинал (извинение / требование / признание / уход / отсрочка с возвратом), и ничего сверх"
+    },
+    {
+      "id": "V2",
+      "check": "direction: кто кого обвиняет, о чём просит, перед кем извиняется — не изменилось"
+    },
+    {
+      "id": "V3",
+      "check": "no_new_action: не появилось новое наблюдаемое действие — извинение, объяснение, обобщение, новый факт"
+    },
+    {
+      "id": "V4",
+      "check": "no_lost_action: не исчезло старое — span, несущий действие, или его непрерывный семантический эквивалент на месте"
+    },
+    {
+      "id": "V5",
+      "check": "intensity: не мягче и не жёстче оригинала больше чем на ступень"
+    },
+    {
+      "id": "V6",
+      "check": "speaker: род и роль говорящих не изменились; неустановленный род не введён"
+    },
+    {
+      "id": "V7",
+      "check": "adjacency: не ухудшилась — B по-прежнему читается как ответ на A, число сообщений и авторы те же"
+    },
+    {
+      "id": "V8",
+      "check": "no_template: нет текстов примеров онтологии и психологической лексики, которой не было в источнике"
+    },
+    {
+      "id": "V9",
+      "check": "natural_stratum: для pn-* правка чисто лексическая"
+    },
+    {
+      "id": "V10",
+      "check": "evidence: цитируемый span target остаётся точной подстрокой (нет парафраза, который нельзя процитировать в annotation-web)"
+    }
+  ],
+  "items": [
+    {
+      "item_id": "pc-02",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "SCRIPTED_DEMAND",
+        "THERAPIST_VOICE",
+        "ctx:NON_ADJACENT_REPLY"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target: настойчивое требование изменить поведение впредь, без оценки личности. Род: A женский (приготовила), B мужской (написал, забыл).",
+      "original": {
+        "messages": [
+          {
+            "author": "b",
+            "text": "Я задержусь сегодня, часа на два."
+          },
+          {
+            "author": "a",
+            "text": "Ты мне даже не написал, я ужин приготовила."
+          },
+          {
+            "author": "b",
+            "text": "Забыл, извини."
+          },
+          {
+            "author": "a",
+            "text": "Мне нужно, чтобы ты предупреждал заранее. Каждый раз, без исключений."
+          }
+        ],
+        "target_index": 3
+      },
+      "candidates": [
+        {
+          "candidate_id": "pc-02-c1",
+          "origin": "llm_assisted",
+          "scope": "target + context m2",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Я задержусь сегодня, часа на два."
+            },
+            {
+              "author": "a",
+              "text": "Только сейчас пишешь? Я ужин приготовила."
+            },
+            {
+              "author": "b",
+              "text": "Забыл, извини."
+            },
+            {
+              "author": "a",
+              "text": "Ну напиши ты заранее, а? Я же каждый раз об этом прошу."
+            }
+          ],
+          "checker": "Требование есть («напиши ты заранее»), повтор/нажим есть («каждый раз об этом прошу» — о своих просьбах, не о его личности). m2 больше не противоречит m1 (он написал, но поздно). Род A сохранён («приготовила»), род B — через m3 («забыл»)."
+        },
+        {
+          "candidate_id": "pc-02-c2",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Я задержусь сегодня, часа на два."
+            },
+            {
+              "author": "a",
+              "text": "Ты мне даже не написал, я ужин приготовила."
+            },
+            {
+              "author": "b",
+              "text": "Забыл, извини."
+            },
+            {
+              "author": "a",
+              "text": "Предупреждай заранее, я серьёзно. Вообще каждый раз."
+            }
+          ],
+          "checker": "Требование + нажим («я серьёзно», «вообще каждый раз»), без оценки личности. Контекст не тронут: A/B покажет, мешает ли противоречие m1/m2 само по себе."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-05",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "THERAPIST_VOICE",
+        "ctx:EXPLICIT_EMOTION_REPORT",
+        "ctx:FORMAL_REGISTER"
+      ],
+      "severity": "high",
+      "edit_constraint": "Target: признание переживания партнёра И извинение/ответственность в одном сообщении (граница validation/repair). Род A не установлен — не вводить; B мужской (перегнул).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Мне было неприятно при всех это слушать."
+          },
+          {
+            "author": "b",
+            "text": "Слышу тебя. Я правда перегнул при ребятах, извини."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "pc-05-c1",
+          "origin": "llm_assisted",
+          "scope": "target + context",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мне вообще не зашло, что ты это при всех выдал."
+            },
+            {
+              "author": "b",
+              "text": "Да, понимаю, при ребятах это было стрёмно. Перегнул, извини."
+            }
+          ],
+          "checker": "Оба действия на месте: признание («понимаю, при ребятах это было стрёмно») и извинение/ответственность («перегнул, извини»). Род A не введён, B мужской сохранён («выдал», «перегнул»)."
+        },
+        {
+          "candidate_id": "pc-05-c2",
+          "origin": "llm_assisted",
+          "scope": "target + context",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ты это при всех сказал, мне было реально неприятно."
+            },
+            {
+              "author": "b",
+              "text": "Ну да, при ребятах это было лишнее, понимаю. Извини, перегнул."
+            }
+          ],
+          "checker": "Признание («при ребятах это было лишнее, понимаю») и извинение («извини, перегнул»). A по-прежнему называет чувство, но в живом регистре."
+        }
+      ],
+      "rejected": [
+        {
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мне было неприятно при всех это слушать."
+            },
+            {
+              "author": "b",
+              "text": "Да, перегнул при ребятах. Извини."
+            }
+          ],
+          "why": "Минимально и живо, но признание переживания партнёра исчезло: в target осталось только извинение/ответственность. Граница validation/repair, ради которой item написан, стёрта."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-06",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "ctx:FORMAL_REGISTER",
+        "ctx:EXPOSITION_FOR_READER"
+      ],
+      "severity": "medium",
+      "edit_constraint": "Target не меняется: извинение по форме + немедленная контратака. Род B мужской (повысил), A женский (первая начала ты).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Ты повысил на меня голос при моей маме."
+          },
+          {
+            "author": "b",
+            "text": "Ну прости! Хотя вообще-то первая начала ты."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "pc-06-c1",
+          "origin": "llm_assisted",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ты при маме на меня голос повысил, между прочим."
+            },
+            {
+              "author": "b",
+              "text": "Ну прости! Хотя вообще-то первая начала ты."
+            }
+          ],
+          "checker": "Target нетронут. Интенсивность претензии та же («голос повысил»), ушла ремарка «при моей маме» как экспозиция."
+        },
+        {
+          "candidate_id": "pc-06-c2",
+          "origin": "llm_assisted",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ты на меня при маме голос повысил. При маме!"
+            },
+            {
+              "author": "b",
+              "text": "Ну прости! Хотя вообще-то первая начала ты."
+            }
+          ],
+          "checker": "Target нетронут. Повтор «При маме!» — живой способ подчеркнуть, без усиления обвинения."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-09",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "OVER_SPECIFIED_COMMITMENT"
+      ],
+      "severity": "medium",
+      "edit_constraint": "Target: отсрочка с конкретным временем возврата (не avoidance). Род B не установлен — не вводить.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Нам надо обсудить, что было в субботу."
+          },
+          {
+            "author": "b",
+            "text": "Давай сегодня в восемь спокойно сядем и обсудим, сейчас я на созвоне. Я помню, что это важно."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "pc-09-c1",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Нам надо обсудить, что было в субботу."
+            },
+            {
+              "author": "b",
+              "text": "Давай в восемь сядем и нормально поговорим, я сейчас на созвоне."
+            }
+          ],
+          "checker": "Конкретный возврат («в восемь») есть. Хвост-заверение убран целиком: Q2 покажет, читается ли это как потеря смысла."
+        },
+        {
+          "candidate_id": "pc-09-c2",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Нам надо обсудить, что было в субботу."
+            },
+            {
+              "author": "b",
+              "text": "Сейчас на созвоне, в восемь сядем и обсудим. Я помню."
+            }
+          ],
+          "checker": "Конкретный возврат есть; хвост сокращён до «Я помню» без рода и без «что это важно»."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-12",
+      "source_package": "annotation-pilot-v0",
+      "language": "en",
+      "stratum": "challenge",
+      "flags": [
+        "THERAPIST_VOICE",
+        "SCRIPTED_DEMAND"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target: insistent demand for a behaviour change, no personal evaluation. Genders unspecified — keep unspecified.",
+      "original": {
+        "messages": [
+          {
+            "author": "b",
+            "text": "Change of plans, I'm going to Max's after work."
+          },
+          {
+            "author": "a",
+            "text": "I need you to start texting me when plans change. Every time. I'm serious."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "pc-12-c1",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Change of plans, I'm going to Max's after work."
+            },
+            {
+              "author": "a",
+              "text": "ok but text me when plans change. every time, I mean it."
+            }
+          ],
+          "checker": "Demand («text me when plans change») + insistence («every time, I mean it»); no evaluation of the partner; register matches EN natural items."
+        },
+        {
+          "candidate_id": "pc-12-c2",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "b",
+              "text": "Change of plans, I'm going to Max's after work."
+            },
+            {
+              "author": "a",
+              "text": "can you please just text me when plans change?? every time. I'm serious"
+            }
+          ],
+          "checker": "Request form, but «??», «every time», «I'm serious» carry the pressure; no personal evaluation."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-13",
+      "source_package": "annotation-pilot-v0",
+      "language": "en",
+      "stratum": "challenge",
+      "flags": [
+        "THERAPIST_VOICE"
+      ],
+      "severity": "high",
+      "edit_constraint": "Target: acknowledges that the partner's reaction is understandable, WITHOUT an apology. Genders unspecified.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "I sat there for an hour before you even replied."
+          },
+          {
+            "author": "b",
+            "text": "That actually makes sense — I'd be upset too if I'd waited an hour."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "pc-13-c1",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "I sat there for an hour before you even replied."
+            },
+            {
+              "author": "b",
+              "text": "yeah, fair. I'd be pissed too tbh"
+            }
+          ],
+          "checker": "Acknowledgement present as contiguous spans («that's fair» / «I'd be pissed too»); no apology added; register as in pn-05/pn-16/pn-17."
+        },
+        {
+          "candidate_id": "pc-13-c2",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "I sat there for an hour before you even replied."
+            },
+            {
+              "author": "b",
+              "text": "ok that's fair, an hour is a lot. I'd be annoyed too"
+            }
+          ],
+          "checker": "Acknowledgement present; «an hour is a lot» echoes the partner's point without the reflective-listening formula."
+        }
+      ],
+      "rejected": [
+        {
+          "messages": [
+            {
+              "author": "a",
+              "text": "I sat there for an hour before you even replied."
+            },
+            {
+              "author": "b",
+              "text": "yeah that's fair, I'd be pissed too. phone was on silent, sorry"
+            }
+          ],
+          "why": "Natural, but adds an apology and an explanation: a new observable action appears in the target."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-16",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium",
+      "edit_constraint": "Target «Ясно.» не меняется. A содержательно раскрывает переживание. Род A женский (пустая).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Мне правда тяжело даются эти созвоны с твоими родителями. Я каждый раз потом пустая."
+          },
+          {
+            "author": "b",
+            "text": "Ясно."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "pc-16-c1",
+          "origin": "llm_assisted",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Эти созвоны с твоими родителями меня просто выжимают. Я потом никакая."
+            },
+            {
+              "author": "b",
+              "text": "Ясно."
+            }
+          ],
+          "checker": "Target нетронут. Переживание раскрыто так же содержательно; род A женский сохранён («никакая»)."
+        },
+        {
+          "candidate_id": "pc-16-c2",
+          "origin": "llm_assisted",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Каждый раз после созвона с твоими родителями я как выжатая. Правда тяжело."
+            },
+            {
+              "author": "b",
+              "text": "Ясно."
+            }
+          ],
+          "checker": "Target нетронут. «Правда тяжело» оставляет явное называние, но в живом регистре; род A сохранён («выжатая»)."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pc-17",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "challenge",
+      "flags": [
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target «Понимаю.» не меняется. A предъявляет обиду. Род A не установлен — не вводить; B мужской (отменил).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Меня задело, что ты отменил встречу и даже не позвонил."
+          },
+          {
+            "author": "b",
+            "text": "Понимаю."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "pc-17-c1",
+          "origin": "llm_assisted",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ты отменил встречу и даже не позвонил. Обидно вообще-то."
+            },
+            {
+              "author": "b",
+              "text": "Понимаю."
+            }
+          ],
+          "checker": "Target нетронут. Обида видна без формулы «меня задело, что»; род A не введён («обидно» безлично), B мужской сохранён."
+        },
+        {
+          "candidate_id": "pc-17-c2",
+          "origin": "llm_assisted",
+          "scope": "context only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ты отменил и даже не позвонил. Мне правда обидно было."
+            },
+            {
+              "author": "b",
+              "text": "Понимаю."
+            }
+          ],
+          "checker": "Target нетронут. Чувство названо, но как реплика, а не как I-statement; род A не введён."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "pn-10",
+      "source_package": "annotation-pilot-v0",
+      "language": "ru",
+      "stratum": "natural",
+      "flags": [
+        "THERAPIST_VOICE"
+      ],
+      "severity": "medium",
+      "edit_constraint": "Natural-страта: действие target не меняется вообще, только лексика хвоста. Род A женский (устала, вымоталась).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Устала так, что руки трясутся. Три отчёта за день."
+          },
+          {
+            "author": "b",
+            "text": "Понимаю, день был жесть. Ты правда вымоталась."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "pn-10-c1",
+          "origin": "llm_assisted",
+          "scope": "target only (lexical)",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Устала так, что руки трясутся. Три отчёта за день."
+            },
+            {
+              "author": "b",
+              "text": "Понимаю, день жесть. Вымоталась, конечно."
+            }
+          ],
+          "checker": "Те же два действия (признание дня + признание её состояния), убрано только отражающее «Ты правда». Род сохранён («вымоталась»)."
+        },
+        {
+          "candidate_id": "pn-10-c2",
+          "origin": "llm_assisted",
+          "scope": "target only (lexical)",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Устала так, что руки трясутся. Три отчёта за день."
+            },
+            {
+              "author": "b",
+              "text": "Понимаю, день жесть. Ты реально вымоталась."
+            }
+          ],
+          "checker": "Чисто лексическая замена «правда» → «реально»; содержание идентично."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "dg-04",
+      "source_package": "annotation-ux-v6",
+      "language": "ru",
+      "stratum": "dogfood",
+      "flags": [
+        "EXPOSITION_FOR_READER"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target: конкретное причинное описание одного эпизода, без генерализации и без оценки личности. Род A женский (проснулась) — обращение к A в женском роде.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Я проснулась от холода."
+          },
+          {
+            "author": "b",
+            "text": "Ты вчера оставила окно открытым, и утром в комнате было холодно."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "dg-04-c1",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Я проснулась от холода."
+            },
+            {
+              "author": "b",
+              "text": "Ну так ты вчера окно на ночь открытым оставила."
+            }
+          ],
+          "checker": "Причинная атрибуция конкретного эпизода; нет «вечно/опять/всегда», нет характеристики личности; B перестал пересказывать A её же сообщение. Род («оставила») сохранён."
+        },
+        {
+          "candidate_id": "dg-04-c2",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Я проснулась от холода."
+            },
+            {
+              "author": "b",
+              "text": "Ты вчера окно на ночь не закрыла, вот и выстудило."
+            }
+          ],
+          "checker": "Нейтральная констатация причины; «не закрыла» сохраняет род; генерализации нет."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "dg-05",
+      "source_package": "annotation-ux-v6",
+      "language": "ru",
+      "stratum": "dogfood",
+      "flags": [
+        "THERAPIST_VOICE",
+        "ctx:EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "high",
+      "edit_constraint": "Target: содержательное признание переживания (в отличие от голого «Понятно»). Род A женский (одной); род B в источнике НЕ установлен — не вводить.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Мне было страшно одной ждать результаты обследования."
+          },
+          {
+            "author": "b",
+            "text": "Понимаю, почему тебе было страшно. Это правда тяжёлое ожидание."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "dg-05-c1",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мне было страшно одной ждать результаты обследования."
+            },
+            {
+              "author": "b",
+              "text": "Блин, одной такое ждать — жесть, конечно. Понятно, что страшно было."
+            }
+          ],
+          "checker": "Признание по существу («понятно, что страшно было» — не голое «понятно»); род B не введён."
+        },
+        {
+          "candidate_id": "dg-05-c2",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мне было страшно одной ждать результаты обследования."
+            },
+            {
+              "author": "b",
+              "text": "Одной ждать такое — ещё бы не страшно. Жесть, а не ожидание."
+            }
+          ],
+          "checker": "Признание переживания через «ещё бы не страшно»; род B не введён."
+        }
+      ],
+      "rejected": [
+        {
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мне было страшно одной ждать результаты обследования."
+            },
+            {
+              "author": "b",
+              "text": "Блин, одной такое ждать — жесть. Я бы тоже перетрусил."
+            }
+          ],
+          "why": "Самый живой вариант, но «перетрусил» делает B мужчиной, а в источнике род B не установлен. Edit добавил факт."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "dg-06",
+      "source_package": "annotation-ux-v6",
+      "language": "ru",
+      "stratum": "dogfood",
+      "flags": [
+        "OVER_SPECIFIED_COMMITMENT",
+        "EXPLICIT_EMOTION_REPORT"
+      ],
+      "severity": "medium-high",
+      "edit_constraint": "Target: явная пауза С конкретным возвратом (граница repair/avoidance). Род B мужской (злой) сохраняется.",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Мы опять кричим друг на друга, это уже никуда не ведёт."
+          },
+          {
+            "author": "b",
+            "text": "Стоп. Я сейчас злой и говорю лишнее. Давай на час разойдёмся и вернёмся к этому в девять."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "dg-06-c1",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мы опять кричим друг на друга, это уже никуда не ведёт."
+            },
+            {
+              "author": "b",
+              "text": "Стоп. Я злой сейчас и наговорю лишнего. Давай час порознь и в девять вернёмся."
+            }
+          ],
+          "checker": "Пауза + конкретный возврат («в девять вернёмся»); «злой» сохраняет род; мета-самоотчёт заменён живым «наговорю лишнего»."
+        },
+        {
+          "candidate_id": "dg-06-c2",
+          "origin": "llm_assisted",
+          "scope": "target only",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Мы опять кричим друг на друга, это уже никуда не ведёт."
+            },
+            {
+              "author": "b",
+              "text": "Стоп, я сейчас злой, наговорю ерунды. Час пауза, в девять продолжим?"
+            }
+          ],
+          "checker": "Пауза + конкретный возврат («в девять продолжим»); вопросительная форма — предложение, не уход."
+        }
+      ],
+      "vetoed": []
+    },
+    {
+      "item_id": "dg-09",
+      "source_package": "annotation-ux-v6",
+      "language": "ru",
+      "stratum": "dogfood",
+      "flags": [
+        "THERAPIST_VOICE",
+        "SYMMETRIC_APOLOGY",
+        "SCRIPTED_DEMAND",
+        "ctx:EXPOSITION_FOR_READER",
+        "ctx:NON_ADJACENT_REPLY"
+      ],
+      "severity": "high",
+      "edit_constraint": "Target: извинение/ответственность И требование изменения в одном сообщении; «но» не должно читаться как контратака. Род A мужской (забыл), B женский (должна).",
+      "original": {
+        "messages": [
+          {
+            "author": "a",
+            "text": "Я опять забыл предупредить, что задержусь."
+          },
+          {
+            "author": "b",
+            "text": "Я не должна была на тебя орать, прости. Но мне правда нужно, чтобы ты начал писать, когда задерживаешься. Каждый раз."
+          }
+        ],
+        "target_index": 1
+      },
+      "candidates": [
+        {
+          "candidate_id": "dg-09-c1",
+          "origin": "llm_assisted",
+          "scope": "target + context",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ну да, опять не предупредил. Знаю, знаю."
+            },
+            {
+              "author": "b",
+              "text": "Я зря наорала, прости. Но ты можешь просто писать, когда задерживаешься? Вот прям каждый раз."
+            }
+          ],
+          "checker": "Извинение («зря наорала, прости») и требование («можешь просто писать… вот прям каждый раз») на месте; «но» без контратаки; род A («не предупредил») и B («наорала») сохранён; A читается как реплика в треде, а не как признание-заставка."
+        },
+        {
+          "candidate_id": "dg-09-c2",
+          "origin": "llm_assisted",
+          "scope": "target + context",
+          "messages": [
+            {
+              "author": "a",
+              "text": "Да, не написал. Косяк."
+            },
+            {
+              "author": "b",
+              "text": "Зря орала, извини. Но если задерживаешься — напиши, ну правда. Каждый раз."
+            }
+          ],
+          "checker": "Извинение («зря орала, извини») и требование («напиши… каждый раз»); род сохранён («не написал» / «орала»)."
+        }
+      ],
+      "rejected": [
+        {
+          "messages": [
+            {
+              "author": "a",
+              "text": "Ну да, опять не предупредил. Знаю, знаю."
+            },
+            {
+              "author": "b",
+              "text": "Я зря наорала, да. Но напиши ты просто. Каждый раз одно и то же."
+            }
+          ],
+          "why": "Звучит живее всех, но «каждый раз одно и то же» — генерализация о партнёре, которой нет в источнике: требование превращается в упрёк, граница pressure/blame стёрта."
+        }
+      ],
+      "vetoed": []
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "rf.package-registry.v1",
+  "note": "Runtime authority for package status (cutover contract H, web gate 1). annotation-web serves a package only if it is listed here with status issuable AND its CHECKSUMS.sha256 hashes to the pin below; unknown or unsealed packages are refused. Status is a property of the package's place in the history, not of any item. Paths are relative to the repository root (RF_REPO_ROOT).",
+  "packages": {
+    "annotation-pilot-v0": {
+      "dir": "data/pilot/v0",
+      "status": "frozen_non_issuable",
+      "reason": "frozen historical package, never issued; superseded by annotation-pilot-v0.1 (naturalness gate, 2026-09-07)"
+    },
+    "annotation-pilot-v0.1": {
+      "dir": "data/pilot/v0.1",
+      "status": "issuable",
+      "checksums_sha256": "c87fc7cec2f4e931acd9a8680f639c5a1b765b17b9c760e1bd15acefc7eb50a0",
+      "sealed": "2026-09-08",
+      "note": "the only issuable pilot package; issuance itself (J) needs eligibility + a hash-pinned issuance record per annotator"
+    }
+  }
+}

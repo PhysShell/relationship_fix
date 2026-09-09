@@ -1,0 +1,654 @@
+{
+  "schema_version": "rf.naturalness-audit-packet.v1",
+  "auditor_id": "auditor-2",
+  "items": [
+    {
+      "audit_item_id": "audit-a3103f",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Забрал обоих, едем домой, всё ок."
+        },
+        {
+          "author": "A",
+          "text": "Спасибо, что забрал детей сегодня, ты меня спас 🙏"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-f2e907",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Тогда в субботу к твоим, а в воскресенье отсыпаемся?"
+        },
+        {
+          "author": "A",
+          "text": "ок, договорились"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-684318",
+      "language": "en",
+      "messages": [
+        {
+          "author": "A",
+          "text": "We're at the restaurant, got a table by the window."
+        },
+        {
+          "author": "B",
+          "text": "running late, sorry! be there in 15"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-29ed7f",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Меня задело, что ты отменил встречу и даже не позвонил."
+        },
+        {
+          "author": "B",
+          "text": "Понимаю."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-2aea45",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Нам надо обсудить, что было в субботу."
+        },
+        {
+          "author": "B",
+          "text": "Давай сегодня в восемь спокойно сядем и обсудим, сейчас я на созвоне. Я помню, что это важно."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-3ee7d1",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Нам надо поговорить про кредит. Это уже серьёзно."
+        },
+        {
+          "author": "B",
+          "text": "Слушай, а ты видела, что Лена выложила? 😅"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-a4ff53",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Я записала нас к стоматологу на пятницу, 16:30."
+        },
+        {
+          "author": "B",
+          "text": "ок 👍"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-914051",
+      "language": "en",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Change of plans, I'm going to Max's after work."
+        },
+        {
+          "author": "A",
+          "text": "I need you to start texting me when plans change. Every time. I'm serious."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-12ee56",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Мне правда тяжело даются эти созвоны с твоими родителями. Я каждый раз потом пустая."
+        },
+        {
+          "author": "B",
+          "text": "Ясно."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-95c7da",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Я опять забыл предупредить, что задержусь."
+        },
+        {
+          "author": "B",
+          "text": "Я не должна была на тебя орать, прости. Но мне правда нужно, чтобы ты начал писать, когда задерживаешься. Каждый раз."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-a0b319",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Я сегодня ужасно устала, просто никакая."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-dcb15c",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Мы опять кричим друг на друга, это уже никуда не ведёт."
+        },
+        {
+          "author": "B",
+          "text": "Стоп. Я сейчас злой и говорю лишнее. Давай на час разойдёмся и вернёмся к этому в девять."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-97f436",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Выезжаю через десять минут."
+        },
+        {
+          "author": "B",
+          "text": "Купи хлеба по дороге, пожалуйста."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-f65120",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Я опять всё испортил."
+        },
+        {
+          "author": "B",
+          "text": "Ну ты гений."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-cc13e7",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Опять я виноват, что задержался на работе?"
+        },
+        {
+          "author": "A",
+          "text": "Прости, я не хотела орать. Но так больше нельзя — просто начни предупреждать, ладно?"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-4eeb81",
+      "language": "en",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Maybe if your family minded their own business we'd be fine."
+        },
+        {
+          "author": "A",
+          "text": "Wow."
+        },
+        {
+          "author": "B",
+          "text": "I'm sorry, that came out way harsher than I meant. Can we rewind?"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-1324f2",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Как прошло собеседование?? Держала кулаки всё утро."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-698f52",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Пришло письмо — страховка на машину закончилась ещё во вторник."
+        },
+        {
+          "author": "B",
+          "text": "Да, это я забыл продлить. Мой косяк."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-6a602e",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Я купил билеты на 19:00. В смысле на завтра. В смысле на другой фильм 🤦"
+        },
+        {
+          "author": "B",
+          "text": "боже, какой же ты олень 😂💜"
+        },
+        {
+          "author": "A",
+          "text": "твой олень 😌"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-514852",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Я случайно купил билеты не на тот день 🤦"
+        },
+        {
+          "author": "B",
+          "text": "гений планирования 😂❤️ люблю тебя, катастрофа"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-ca9851",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Значит, с меня продукты, с тебя ужин."
+        },
+        {
+          "author": "B",
+          "text": "🤝"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-0db605",
+      "language": "en",
+      "messages": [
+        {
+          "author": "B",
+          "text": "grabbed the tickets, row 12"
+        },
+        {
+          "author": "A",
+          "text": "perfect, thank you!!"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-eed462",
+      "language": "en",
+      "messages": [
+        {
+          "author": "A",
+          "text": "did you feed the cat or should I?"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-12d128",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "B",
+          "text": "[переслал мем про сов и жаворонков]"
+        },
+        {
+          "author": "A",
+          "text": "ахахах это буквально мы 😂"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-9617b1",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Мне кажется, ты меня просто не слушаешь, когда я говорю про работу."
+        },
+        {
+          "author": "B",
+          "text": "Ну да, ну да, я всё прекрасно понимаю, куда уж мне."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-48fde1",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Дождь обещают весь день, возьми зонт."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-289640",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Во сколько ты сегодня дома?"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-9e6182",
+      "language": "en",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Waited at the school gate for forty minutes."
+        },
+        {
+          "author": "B",
+          "text": "Traffic was insane, my phone died."
+        },
+        {
+          "author": "A",
+          "text": "You do this every single time. I can't rely on you at all."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-07fd10",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Я в банке, нужен номер договора."
+        },
+        {
+          "author": "A",
+          "text": "Скинь, пожалуйста, фото первой страницы."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-51fa76",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Устала так, что руки трясутся. Три отчёта за день."
+        },
+        {
+          "author": "B",
+          "text": "Понимаю, день был жесть. Ты правда вымоталась."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-360fd1",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Мне было неприятно при всех это слушать."
+        },
+        {
+          "author": "B",
+          "text": "Слышу тебя. Я правда перегнул при ребятах, извини."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-01d5fd",
+      "language": "en",
+      "messages": [
+        {
+          "author": "A",
+          "text": "call me when you're free, nothing urgent"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-6ec2dd",
+      "language": "en",
+      "messages": [
+        {
+          "author": "A",
+          "text": "I sat there for an hour before you even replied."
+        },
+        {
+          "author": "B",
+          "text": "That actually makes sense — I'd be upset too if I'd waited an hour."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-c8cf22",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Я задержусь сегодня, часа на два."
+        },
+        {
+          "author": "A",
+          "text": "Ты мне даже не написал, я ужин приготовила."
+        },
+        {
+          "author": "B",
+          "text": "Забыл, извини."
+        },
+        {
+          "author": "A",
+          "text": "Мне нужно, чтобы ты предупреждал заранее. Каждый раз, без исключений."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-34eea2",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Мне было страшно одной ждать результаты обследования."
+        },
+        {
+          "author": "B",
+          "text": "Понимаю, почему тебе было страшно. Это правда тяжёлое ожидание."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-f1a1a6",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Ты повысил на меня голос при моей маме."
+        },
+        {
+          "author": "B",
+          "text": "Ну прости! Хотя вообще-то первая начала ты."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-f3a102",
+      "language": "en",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Landed. Hotel is fine, view of a parking lot lol"
+        },
+        {
+          "author": "A",
+          "text": "miss you. this trip is too long 🥺"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-b42545",
+      "language": "en",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Can we talk about what happened at dinner?"
+        },
+        {
+          "author": "B",
+          "text": "anyway — did you catch the game? insane finish"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-947798",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Я, наверное, всё-таки поеду на рыбалку в выходные."
+        },
+        {
+          "author": "A",
+          "text": "Опять двадцать пять 🙄"
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-e506d6",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Посуда так и стоит со вчера."
+        },
+        {
+          "author": "B",
+          "text": "Вечером сделаю."
+        },
+        {
+          "author": "A",
+          "text": "Сколько можно просить?! Опять всё на мне."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-908f65",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "B",
+          "text": "Добралась нормально, заселилась."
+        },
+        {
+          "author": "A",
+          "text": "Люблю тебя 😘 Спокойной ночи."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-586328",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Ну как поговорили с начальником?"
+        },
+        {
+          "author": "B",
+          "text": "Нормально. Потом расскажу."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-c59956",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Мы же договаривались, что сегодня ты заберёшь посылку."
+        },
+        {
+          "author": "B",
+          "text": "Блин. Вылетело из головы совсем."
+        },
+        {
+          "author": "A",
+          "text": "С тобой вечно так. На тебя вообще нельзя положиться."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-c4980b",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Я проснулась от холода."
+        },
+        {
+          "author": "B",
+          "text": "Ты вчера оставила окно открытым, и утром в комнате было холодно."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-569af4",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Я не собираюсь опять это выслушивать."
+        },
+        {
+          "author": "B",
+          "text": "А я не собираюсь опять извиняться первым."
+        },
+        {
+          "author": "A",
+          "text": "Так, стоп. Предлагаю перемирие и пиццу 🍕 Мы же не враги."
+        }
+      ]
+    },
+    {
+      "audit_item_id": "audit-80c998",
+      "language": "ru",
+      "messages": [
+        {
+          "author": "A",
+          "text": "Не забудь, пожалуйста, оплатить интернет сегодня."
+        }
+      ]
+    }
+  ]
+}

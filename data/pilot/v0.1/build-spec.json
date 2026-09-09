@@ -1,0 +1,39 @@
+{
+  "schema_version": "rf.pilot-build-spec.v1",
+  "package_id": "annotation-pilot-v0.1",
+  "build_date": "2026-09-08",
+  "contract": "docs/pilot-v0.1-cutover-contract.md",
+  "decisions": "cutover contract §«Пять развилок» + три закрытых пункта 2026-09-08: fresh ids pc-21/pc-22/dg-10/dg-11; replacement = origin llm_assisted, accepted_via facilitator, parent null, revision_reason null; carried_over = origin unrecorded, accepted_via carried_over, parent frozen v0 + hash; dogfood v6 frozen, changes materialize as v7",
+  "source_package_dir": "../v0",
+  "candidates_file": "../naturalness-ab/v0-flagged-donor/candidates.json",
+  "candidates_sha256": "df3eb3eb69b4b6d3980ba131ca3922850beaf1aa93e69064a592fe07e3f8db72",
+  "replacements": {
+    "pc-02": "pc-21",
+    "pc-05": "pc-22"
+  },
+  "carried_over_origin": "unrecorded",
+  "revision_reason": "naturalness",
+  "ontology": "../../ontology/behavior-v0.1.json",
+  "instructions": "docs/pilot-v0-instructions.md",
+  "presentation": {
+    "annotator-1": {
+      "seed": "rf-pilot-v0.1/annotator-1/2026-09-08"
+    },
+    "annotator-2": {
+      "seed": "rf-pilot-v0.1/annotator-2/2026-09-08"
+    }
+  },
+  "dogfood": {
+    "source_yaml": "../v0/form/dogfood-v6-items.yaml",
+    "source_sha256": "4b2cd0bfc2ba4dab87d5ca0d2e79465ed0e3eab01b9411917ae7a5a110daf8a8",
+    "source_snapshot": "../naturalness-audit/v0-all/sources/dogfood-v6-items.snapshot.json",
+    "source_dogfood_id": "annotation-ux-v6",
+    "target_yaml": "form/dogfood-v7-items.yaml",
+    "target_dogfood_id": "annotation-ux-v7",
+    "provenance_file": "form/dogfood-v7-provenance.json",
+    "replacements": {
+      "dg-04": "dg-10",
+      "dg-09": "dg-11"
+    }
+  }
+}
