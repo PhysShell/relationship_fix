@@ -1,18 +1,59 @@
 name: annotation-web
 
+# Two independent judges of two independent halves. The Haskell job proves the
+# instrument; the Python job proves the research tooling that seals packages
+# and issues people. Both read data/pilot, data/ontology and the instruction
+# document, so a change to any of those wakes both: a sealed package whose
+# tests only ran on the author's machine is not evidence.
 on:
   push:
     paths:
       - 'src/annotation-web/**'
       - 'deploy/**'
+      - 'research/python/**'
+      - 'data/pilot/**'
+      - 'data/ontology/**'
+      - 'docs/pilot-v0.1-instructions.md'
       - '.github/workflows/annotation-web.yml'
   pull_request:
     paths:
       - 'src/annotation-web/**'
       - 'deploy/**'
+      - 'research/python/**'
+      - 'data/pilot/**'
+      - 'data/ontology/**'
+      - 'docs/pilot-v0.1-instructions.md'
       - '.github/workflows/annotation-web.yml'
 
 jobs:
+  # The research tooling: validate_items, materialize (exact-equality gate,
+  # seal), issuance (external eligibility, token once), agreement, the
+  # Catalog-vs-dogfood-yaml cross-check. Stdlib-only apart from the
+  # human-interface group (openpyxl), which is installed so the xlsx tests run
+  # instead of skipping. The canonical runner is uv with the committed lock.
+  research-python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: research/python
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: research/python/uv.lock
+
+      - name: Sync from the committed lock
+        run: uv sync --locked --group human-interface
+
+      - name: Research Python tests
+        run: uv run --group human-interface python -m unittest discover -s tests -v
+
   build:
     runs-on: ubuntu-latest
     defaults:
