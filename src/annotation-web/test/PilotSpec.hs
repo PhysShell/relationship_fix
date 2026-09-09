@@ -452,7 +452,7 @@ resumeAfterRestart token db = do
       opened <- WT.request (WT.setPath Wai.defaultRequest (TE.encodeUtf8 ("/t/" <> token)))
       -- 303 on HTTP/1.1, 302 on the HTTP/1.0 request wai-test sends: both are the redirect
       unless (HTTP.statusCode (simpleStatus opened) `elem` [302, 303]) $ liftIO (expectationFailure "reopening the token did not redirect")
-      let cookie = BC.takeWhile (/= ';') (fromMaybe "" (lookup HTTP.hSetCookie (simpleHeaders opened)))
+      let cookie = BC.takeWhile (/= ';') (fromMaybe "" (lookup "Set-Cookie" (simpleHeaders opened)))
       -- wai-test keeps its own cookie jar and prepends a Cookie header of its
       -- own on every request; a hand-made Cookie header would sit behind it.
       -- Rely on the jar, as a browser would, and only diagnose if it fails.
