@@ -398,6 +398,74 @@ that are host state:
   person, written by `metrics.issuance new` and copied there by the
   facilitator. Back it up with the database; a lost record is a session the
   server can no longer prove.
+- **Eligibility is host/private state too**, never the sealed package:
+  `data/pilot/v0.1/eligibility.json` is the null template sealed with the
+  package and is never edited (editing it breaks the seal, and issuance
+  refuses a broken seal). The operational record per person is
+  `rf.annotator-eligibility.v1`, kept at a private path or
+  `/var/lib/relationship-fix/eligibility/annotator-N.json`:
+
+  ```json
+  {
+    "schema_version": "rf.annotator-eligibility.v1",
+    "package_id": "annotation-pilot-v0.1",
+    "annotator_id": "annotator-1",
+    "criteria": {
+      "did_not_author_ontology": true,
+      "fluent_ru": true,
+      "fluent_en": true,
+      "has_not_seen_items": true
+    },
+    "established_at": "2026-09-09T10:00:00Z",
+    "established_by": "facilitator"
+  }
+  ```
+
+## Issuing a person (J), step by step
+
+Production flow once the web is deployed and healthy (`/` says "no open
+study", which is correct: people enter only through `/t/<token>`):
+
+```text
+establish eligibility for annotator-N  →  eligibility/annotator-N.json (private)
+        │
+metrics.issuance new                   →  issuance/annotator-N.json + the personal link, printed once
+        │
+copy the record to RF_ISSUANCE_DIR on the host, restart relationship-fix.service
+        │
+the server proves every record at start (or refuses to start)
+        │
+the person opens https://<host>/t/<token> and annotates 40 items
+        │
+annotation-web-export (offline; refuses until complete)
+```
+
+From `research/python`, with the repository root two levels up:
+
+```bash
+RF_PUBLIC_BASE_URL=https://relationship-fix.192-248-184-141.sslip.io \
+uv run python -m metrics.issuance new --root ../.. \
+  --package annotation-pilot-v0.1 --annotator annotator-1 \
+  --eligibility /secure/eligibility/annotator-1.json \
+  --instructions docs/pilot-v0.1-instructions.md \
+  --out /secure/issuance/annotator-1.json
+```
+
+The command proves the sealed package and the eligibility record, writes the
+issuance record with only the token's sha256, and prints the personal link
+exactly once. Nothing else ever shows the token again. Then:
+
+```bash
+scp /secure/issuance/annotator-1.json host:/var/lib/relationship-fix/issuance/
+ssh host sudo systemctl restart relationship-fix.service
+ssh host journalctl -u relationship-fix -n 5   # "N issuance binding(s) proven"
+```
+
+No redeploy is needed for issuance: the release already reads records from
+`RF_ISSUANCE_DIR` at start and ignores the `eligibility` field it does not
+need. Repeat for annotator-2. Keep the eligibility and issuance records
+together with the database backups; `metrics.issuance verify --record …
+--eligibility …` re-derives every hash later.
 
 Unit environment, in addition to `RF_DB_PATH`:
 

@@ -222,9 +222,14 @@ The dogfood surface is off unless `RF_DOGFOOD_ENABLED=1`; with it off, `/`
 says there is no open study and `/language` is 404, so a pilot annotator who
 lands on the root cannot start a dogfood session.
 
-Issuance records are created by the research tooling (`metrics.issuance new`,
-which also refuses without eligibility), not by this app; this app never
-issues anything.
+Issuance records are created by the research tooling (`metrics.issuance new`),
+not by this app; this app never issues anything. Eligibility is an external
+record per person (`rf.annotator-eligibility.v1`, kept outside the sealed
+package — the package's own `eligibility.json` is the null template sealed
+with it and is never edited); `new` refuses unless every criterion the
+manifest names is exactly true there, and writes that record's sha256 into
+the issuance record. This server does not read the `eligibility` field; the
+parser tolerates it, so records with it load on the deployed release.
 
 ## Schema migrations
 

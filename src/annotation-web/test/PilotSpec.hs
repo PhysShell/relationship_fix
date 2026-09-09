@@ -129,6 +129,10 @@ recordValue packageId annotator tokenHash dir itemsSha checksumsSha presFile pre
   , "presentation" .= object ["file" .= presFile, "sha256" .= presSha]
   , "instructions" .= object ["file" .= insFile, "sha256" .= insSha]
   , "ontology" .= object ["file" .= ontFile, "version" .= ontVersion, "sha256" .= ontSha, "active_labels" .= active]
+    -- Eligibility provenance as metrics.issuance writes it: a field this
+    -- parser does not read and must keep tolerating, so a record can carry
+    -- more than the server needs without a redeploy.
+  , "eligibility" .= object ["schema_version" .= ("rf.annotator-eligibility.v1" :: Text), "sha256" .= T.replicate 64 "e", "established_by" .= ("test" :: Text)]
   , "ui_language" .= ("ru" :: Text)
   , "issued_at" .= ("2026-09-08T00:00:00Z" :: Text)
   , "issued_by" .= ("test" :: Text)
