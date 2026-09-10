@@ -1,15 +1,73 @@
 """Тесты agreement-математики. Гейтящие числа обязаны быть воспроизводимы и проверяемы."""
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from metrics.agreement import (
     build_unit_rows,
+    check_eligibility,
     confusion_analysis,
     feedback_crosstab,
     krippendorff_alpha_binary,
     label_stats,
     validate_responses,
 )
+
+REQUIRED = ["did_not_author_ontology", "fluent_ru", "fluent_en", "has_not_seen_items"]
+
+
+def write_record(dir_path, annotator, package_id="annotation-pilot-v0.1", criteria=REQUIRED, schema="rf.issuance-record.v1"):
+    record = {
+        "schema_version": schema,
+        "package_id": package_id,
+        "annotator_id": annotator,
+        "eligibility": {"criteria": criteria},
+    }
+    (dir_path / f"{annotator}.json").write_text(json.dumps(record), encoding="utf-8")
+
+
+class EligibilityCheckTests(unittest.TestCase):
+    """agreement больше не читает sealed eligibility.json (issuance repair, d95bdbe:
+    тот файл — null template, запечатанный с пакетом, и остаётся null навсегда).
+    Единственный источник — issuance record, который metrics.issuance new уже
+    проверил сам перед выдачей."""
+
+    def test_valid_issuance_records_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_record(d, "annotator-1")
+            write_record(d, "annotator-2")
+            self.assertIsNone(check_eligibility(d, "annotation-pilot-v0.1", ["annotator-1", "annotator-2"], REQUIRED))
+
+    def test_missing_record_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_record(d, "annotator-1")
+            problem = check_eligibility(d, "annotation-pilot-v0.1", ["annotator-1", "annotator-2"], REQUIRED)
+            self.assertIn("annotator-2.json", problem)
+
+    def test_wrong_package_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_record(d, "annotator-1", package_id="annotation-pilot-v0")
+            problem = check_eligibility(d, "annotation-pilot-v0.1", ["annotator-1"], REQUIRED)
+            self.assertIn("package_id", problem)
+
+    def test_missing_criterion_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_record(d, "annotator-1", criteria=["did_not_author_ontology", "fluent_ru", "fluent_en"])
+            problem = check_eligibility(d, "annotation-pilot-v0.1", ["annotator-1"], REQUIRED)
+            self.assertIn("has_not_seen_items", problem)
+
+    def test_bad_schema_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            write_record(d, "annotator-1", schema="rf.annotator-eligibility.v1")
+            problem = check_eligibility(d, "annotation-pilot-v0.1", ["annotator-1"], REQUIRED)
+            self.assertIn("schema_version", problem)
 
 
 class KrippendorffAlphaTests(unittest.TestCase):

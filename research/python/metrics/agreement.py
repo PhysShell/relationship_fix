@@ -20,7 +20,8 @@ response-слои, пишет pilot-report.json + pilot-report.md. Ничего 
   (dialogue-naturalness-gate §3, §9).
 
 Запуск (гейтящие числа — только отсюда, не из notebook):
-    uv run python -m metrics.agreement --pilot-dir ../../data/pilot/v0
+    uv run python -m metrics.agreement --pilot-dir ../../data/pilot/v0.1 \
+        --issuance-dir /var/lib/relationship-fix/issuance
 """
 
 from __future__ import annotations
@@ -285,21 +286,32 @@ def feedback_crosstab(rows: list[dict], strata: dict[str, str]) -> dict:
     }
 
 
-def check_eligibility(pilot_dir: Path, annotators: list[str]) -> str | None:
-    """Eligibility записывается фасилитатором ДО выдачи пакета (protocol §1): четыре
-    булевых поля, без демографии. Отчёт не строится, пока это не сделано."""
-    path = pilot_dir / "eligibility.json"
-    if not path.exists():
-        return f"MISSING: {path} — заполните eligibility до выдачи пакета (protocol §1)."
-    records = json.loads(path.read_text(encoding="utf-8")).get("annotators", {})
-    required = ("did_not_author_ontology", "fluent_ru", "fluent_en", "has_not_seen_items")
+def check_eligibility(issuance_dir: Path, package_id: str, annotators: list[str],
+                       required_criteria: list[str]) -> str | None:
+    """Eligibility больше не читается из sealed eligibility.json: тот файл — null
+    template, запечатанный вместе с пакетом, и остаётся null навсегда (issuance
+    repair, `d95bdbe`). Операционная запись — внешний rf.annotator-eligibility.v1
+    per person; отчёт доверяет issuance record'у, который `metrics.issuance new`
+    уже построил только после того, как проверил эту запись сам (все нужные
+    критерии присутствуют и равны true) и зафиксировал их список по имени.
+    Отчёт не строится, пока для каждого annotator'а нет такой issuance-записи."""
     for annotator in annotators:
-        record = records.get(annotator)
-        if record is None:
-            return f"eligibility.json: нет записи для {annotator}."
-        for field in required:
-            if record.get(field) is not True:
-                return f"eligibility.json: {annotator}.{field} != true — разметчик не проходит критерии pilot."
+        path = issuance_dir / f"{annotator}.json"
+        if not path.exists():
+            return f"MISSING: {path} — issuance record нужен, чтобы отчёт мог проверить eligibility."
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if record.get("schema_version") != "rf.issuance-record.v1":
+            return f"{path}: schema_version должен быть rf.issuance-record.v1."
+        if record.get("package_id") != package_id:
+            return f"{path}: package_id {record.get('package_id')!r}, а не {package_id!r}."
+        if record.get("annotator_id") != annotator:
+            return f"{path}: annotator_id {record.get('annotator_id')!r}, а не {annotator!r}."
+        criteria = (record.get("eligibility") or {}).get("criteria")
+        if not isinstance(criteria, list):
+            return f"{path}: issuance record не несёт eligibility.criteria."
+        missing = [c for c in required_criteria if c not in criteria]
+        if missing:
+            return f"{path}: eligibility для {annotator} не покрывает {missing} — issuance record им не проверен."
     return None
 
 
@@ -322,13 +334,14 @@ def remap_layer(pilot_dir: Path, annotator: str, responses: list[dict]) -> tuple
     return remapped, issues
 
 
-def run(pilot_dir: Path) -> int:
+def run(pilot_dir: Path, issuance_dir: Path) -> int:
     manifest = json.loads((pilot_dir / "pilot-manifest.json").read_text(encoding="utf-8"))
     items = load_jsonl(pilot_dir / manifest["items_file"])
     strata = json.loads((pilot_dir / manifest["strata_file"]).read_text(encoding="utf-8"))["strata"]
     active = set(manifest["active_labels"])
 
-    eligibility_problem = check_eligibility(pilot_dir, manifest["annotators"])
+    eligibility_problem = check_eligibility(issuance_dir, manifest["pilot_id"], manifest["annotators"],
+                                            manifest.get("eligibility_criteria", []))
     if eligibility_problem:
         print(eligibility_problem, file=sys.stderr)
         return 2
@@ -450,7 +463,11 @@ def render_markdown(report: dict) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pilot-dir", type=Path, required=True)
-    return run(parser.parse_args().pilot_dir)
+    parser.add_argument("--issuance-dir", type=Path, required=True,
+                        help="RF_ISSUANCE_DIR: per-annotator rf.issuance-record.v1 files, "
+                             "the only source this report trusts for eligibility")
+    args = parser.parse_args()
+    return run(args.pilot_dir, args.issuance_dir)
 
 
 if __name__ == "__main__":
