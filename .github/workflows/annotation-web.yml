@@ -73,6 +73,21 @@ jobs:
             exit 1
           fi
 
+      # yesod-core's toWaiApp bakes in an unconditional request logger that
+      # writes every request path -- bearer tokens in /t/<token> included --
+      # to stdout in cleartext. The fix (toWaiAppPlain + reapplying
+      # defaultMiddlewaresNoLogging by hand) is one import and one line;
+      # nothing stops a future "cleanup" from quietly reverting to the
+      # one-liner that looks equivalent and silently reopens the leak. This
+      # only inspects non-comment lines, so mentioning toWaiApp in prose
+      # (like this very check's own error message) does not self-trigger.
+      - name: Enforce no-request-logging-middleware invariant
+        run: |
+          if grep -nE '\btoWaiApp\b' app/Main.hs | grep -vE '^[0-9]+:[[:space:]]*--' | grep -q .; then
+            echo 'app/Main.hs must build the WAI application via toWaiAppPlain + defaultMiddlewaresNoLogging, not toWaiApp: the latter logs every request path, bearer tokens included, in cleartext.' >&2
+            exit 1
+          fi
+
       - name: Setup Haskell
         uses: haskell-actions/setup@v2
         with:
