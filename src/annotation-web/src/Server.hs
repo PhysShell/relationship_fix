@@ -130,7 +130,7 @@ data App = App
 mkYesod "App" [parseRoutes|
 / HomeR GET
 /language LanguageR POST
-/t/#Text TokenR GET
+/t/#Text TokenR GET POST
 /instructions InstructionsR GET
 /intro IntroR GET
 /item/#Int ItemR GET
@@ -639,8 +639,16 @@ postLanguageR = do
 
 -- | The personal link. The token is hashed and looked up among the bindings
 -- this server proved at start; an unknown token is a 404 with nothing else
--- said. A known token resumes the session it already has, or starts one and
--- records exactly which bytes it was started against.
+-- said.
+--
+-- GET never claims the token: a session that already exists (from an earlier
+-- claim, on this or another device) is resumed, but a token nobody has
+-- claimed yet only renders a landing page with a button. Link-preview bots,
+-- antivirus scanners and corporate proxies all prefetch bare GETs; if GET
+-- itself created the session, the first "real" open could belong to one of
+-- those instead of the person the link was issued to, and nobody would be
+-- able to tell from the server's own state. Only POST -- an explicit,
+-- CSRF-protected "Начать" -- claims an unclaimed token.
 getTokenR :: Text -> Handler Html
 getTokenR token = do
   app <- getYesod
@@ -648,25 +656,66 @@ getTokenR token = do
   case Map.lookup key (appBindings app) of
     Nothing -> notFound
     Just binding -> do
+      existing <- runDB $ getBy (UniquePilotBindingToken key)
+      case existing of
+        Just (Entity _ pb)
+          | bindingUnchanged pb (bindRecord binding) -> resumeClaimed pb
+          | otherwise -> permissionDenied "this session's issuance record changed after the session started"
+        Nothing -> generateFormPost csrfForm >>= uncurry (renderClaim (bindUiLanguage binding))
+
+-- | The only handler that may create a @PilotBinding@. Same token, same
+-- lookup and the same "already claimed" branch as the GET above -- claiming
+-- twice (a resent form, two tabs) resumes rather than double-inserts -- but
+-- an unclaimed token only ever becomes a session here, behind a form
+-- submission a prefetching bot cannot produce.
+postTokenR :: Text -> Handler Html
+postTokenR token = do
+  app <- getYesod
+  let key = tokenSha token
+  case Map.lookup key (appBindings app) of
+    Nothing -> notFound
+    Just binding -> do
       let rec = bindRecord binding
       existing <- runDB $ getBy (UniquePilotBindingToken key)
-      sid <- case existing of
+      case existing of
         Just (Entity _ pb)
-          | bindingUnchanged pb rec -> pure (pilotBindingSurveySessionId pb)
+          | bindingUnchanged pb rec -> resumeClaimed pb
           | otherwise -> permissionDenied "this session's issuance record changed after the session started"
         Nothing -> do
-          now <- liftIO getCurrentTime
-          created <- runDB $ do
-            created <- insert $ SurveySession (languageCode (bindUiLanguage binding)) now Nothing
-            insert_ $ SessionInstrument created (instrumentVersionCode InstrumentPilot)
-            insert_ $ PilotBinding created key (irPackageId rec) (irAnnotatorId rec)
-              (irItemsSha rec) (irChecksumsSha rec) (irPresentationSha rec)
-              (irInstructionsSha rec) (irOntologySha rec) (T.pack (irRecordFile rec))
-            pure created
-          logEvent created Nothing "pilot_session_bound" (Just (irPackageId rec <> "/" <> irAnnotatorId rec))
-          pure created
-      setSession "annotation_session_id" (T.pack $ show $ fromSqlKey sid)
-      redirect IntroR
+          ((result, _), _) <- runFormPost csrfForm
+          case result of
+            FormSuccess () -> do
+              now <- liftIO getCurrentTime
+              created <- runDB $ do
+                created <- insert $ SurveySession (languageCode (bindUiLanguage binding)) now Nothing
+                insert_ $ SessionInstrument created (instrumentVersionCode InstrumentPilot)
+                insert_ $ PilotBinding created key (irPackageId rec) (irAnnotatorId rec)
+                  (irItemsSha rec) (irChecksumsSha rec) (irPresentationSha rec)
+                  (irInstructionsSha rec) (irOntologySha rec) (T.pack (irRecordFile rec))
+                pure created
+              logEvent created Nothing "pilot_session_bound" (Just (irPackageId rec <> "/" <> irAnnotatorId rec))
+              setSession "annotation_session_id" (T.pack $ show $ fromSqlKey created)
+              redirect IntroR
+            _ -> invalidArgs ["invalid claim request"]
+
+resumeClaimed :: PilotBinding -> Handler Html
+resumeClaimed pb = do
+  setSession "annotation_session_id" (T.pack $ show $ fromSqlKey (pilotBindingSurveySessionId pb))
+  redirect IntroR
+
+-- | Shown only for a token nobody has claimed yet: no session, no cookie, no
+-- database row -- a GET that lands here twice, ten times, or never followed
+-- by the POST leaves exactly nothing behind.
+renderClaim :: Language -> Widget -> Enctype -> Handler Html
+renderClaim lang widget enctype = defaultLayout [whamlet|
+    <section .card>
+      <p .eyebrow>Relationship Fix
+      <h1>#{tr lang "Личная ссылка" "Personal link"}
+      <p>#{tr lang "Эта ссылка предназначена только вам. Нажмите «Начать», чтобы открыть разметку." "This link is meant for you alone. Press \"Start\" to open the annotation."}
+      <form #claim-form method=post enctype=#{enctype} .stack>
+        ^{widget}
+        <button type=submit .primary>#{tr lang "Начать" "Start"}
+  |]
 
 -- | The instruction document the session is bound to, byte for byte, as the
 -- record's hash proved it at start. Not rendered, not paraphrased.

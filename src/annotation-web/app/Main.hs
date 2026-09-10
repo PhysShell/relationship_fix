@@ -24,7 +24,7 @@ import System.Exit (exitFailure)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import Text.Read (readMaybe)
-import Yesod (toWaiApp)
+import Yesod (defaultMiddlewaresNoLogging, toWaiAppPlain)
 
 main :: IO ()
 main = do
@@ -62,7 +62,17 @@ main = do
       hPutStrLn stderr ("annotation-web: " <> T.unpack (renderSchemaFault (fault :: SchemaFault)))
       exitFailure
     Right foundation -> do
-      wai <- toWaiApp foundation
+      -- toWaiApp's own default middleware stack includes an unconditional
+      -- Apache-format request logger that writes the full request path --
+      -- query string and all -- to this process's stdout, which systemd
+      -- captures into the journal. /t/<token> IS the request path here, so
+      -- that logger would put every bearer token issued into the journal in
+      -- cleartext on the very first request, bot or human. toWaiAppPlain
+      -- carries no middleware at all; reapplying defaultMiddlewaresNoLogging
+      -- (yesod-core's own name for "everything toWaiApp adds, minus the
+      -- logger") keeps gzip/autohead/method-and-accept-override and drops
+      -- only the logger.
+      wai <- defaultMiddlewaresNoLogging <$> toWaiAppPlain foundation
       runSettings (setPort port $ setHost "127.0.0.1" defaultSettings) wai
   where
     flag = maybe False (`elem` ["1", "true", "yes"])
