@@ -388,9 +388,20 @@ followTo expected = do
     Left err -> liftIO $ expectationFailure (T.unpack err)
     Right url -> assertEq "redirect target" expected url
 
+-- | The whole claim dance a real browser does: GET the landing page (safe,
+-- side-effect-free even for an unclaimed token), then POST the "Начать"
+-- form, which is the only thing that may create the session.
 openToken :: Text -> YesodExample App ()
 openToken token = do
   get (TokenR token)
+  claimToken token
+
+claimToken :: Text -> YesodExample App ()
+claimToken token = do
+  request $ do
+    setMethod "POST"
+    setUrl (TokenR token)
+    addToken_ "#claim-form"
   followTo "/intro"
 
 submitStep :: Route App -> [(Text, Text)] -> YesodExample App ()
@@ -492,6 +503,33 @@ webSpec fixture = ydescribe "the token-bound pilot surface" $ do
   yit "answers an unknown token with 404 and nothing else" $ do
     get (TokenR "not-a-token")
     statusIs 404
+
+  yit "a claim-pending token renders a landing page and claims nothing" $ do
+    get (TokenR token)
+    statusIs 200
+    htmlCount "#claim-form" 1
+    sessions <- sessionCount
+    assertEq "no binding created by a bare GET" 0 sessions
+
+  yit "opening it any number of times before claiming is still harmless" $ do
+    get (TokenR token)
+    get (TokenR token)
+    get (TokenR token)
+    statusIs 200
+    sessions <- sessionCount
+    assertEq "however many times it is prefetched, nothing is created" 0 sessions
+
+  yit "only the POST claims it; resuming afterwards never opens a second session" $ do
+    get (TokenR token)
+    claimToken token
+    sessions <- sessionCount
+    assertEq "one binding after the real claim" 1 sessions
+    -- a second open (another device, the same browser again) resumes
+    get (TokenR token)
+    statusIs 303
+    followTo "/intro"
+    sessionsAfterResume <- sessionCount
+    assertEq "resuming does not create a second binding" 1 sessionsAfterResume
 
   yit "opens the bound intro: the instruction hash and the pinned ontology, not the dogfood glossary" $ do
     openToken token
