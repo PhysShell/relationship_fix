@@ -184,14 +184,13 @@ def validate(pilot_dir: Path, ontology_path: Path) -> list[str]:
         if len(annotators) >= 2 and orders[annotators[0]] == orders[annotators[1]]:
             issues.append("presentation: порядки разметчиков идентичны — blind ordering не работает")
 
-    # --- eligibility (информационно: гейтит agreement, не валидация пакета) ---
-    eligibility_path = pilot_dir / "eligibility.json"
-    if eligibility_path.exists():
-        records = json.loads(eligibility_path.read_text(encoding="utf-8")).get("annotators", {})
-        pending = [a for a, r in records.items() if not all(v is True for v in r.values())]
-        if pending:
-            print(f"eligibility: НЕ заполнено для {pending} — agreement-отчёт будет отказывать до заполнения")
-    else:
+    # --- eligibility (informational only) ---
+    # eligibility.json — the null template sealed with the package (issuance
+    # repair, d95bdbe) — stays null forever by design; filling it would break
+    # the seal. The real gate lives in per-annotator issuance records, checked
+    # by `metrics.issuance new` before issuance and by `metrics.agreement`
+    # before a report is built. Here we only confirm the sealed template exists.
+    if not (pilot_dir / "eligibility.json").exists():
         issues.append("eligibility.json отсутствует")
 
     counts = Counter(strata.values())
