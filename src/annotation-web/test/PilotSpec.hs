@@ -34,7 +34,9 @@ import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Database.Persist.Sql (Entity (..), Filter, SelectOpt (Asc), entityVal, runSqlPool, selectList, (==.))
+import Data.Time (getCurrentTime)
+import Database.Persist.Sql (Entity (..), Filter, SelectOpt (Asc), entityVal, getBy, insert, insert_, runSqlPool, selectList, (==.))
+import Domain (languageCode)
 import Export
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
@@ -531,6 +533,25 @@ webSpec fixture = ydescribe "the token-bound pilot surface" $ do
     sessionsAfterResume <- sessionCount
     assertEq "resuming does not create a second binding" 1 sessionsAfterResume
 
+  yit "a token claimed elsewhere between the check and the insert resumes there, not a crash" $ do
+    -- The claim handler's own "is it already claimed" check and its own
+    -- insert are two separate round trips to the database. Two POSTs
+    -- arriving close enough both pass the check before either has inserted,
+    -- and the code cannot tell that situation apart from "another request's
+    -- insert has just committed" -- both are a live conflict on
+    -- UniquePilotBindingToken at the moment this request tries to write.
+    -- Winning an actual scheduler race to prove the handling is flaky by
+    -- construction; manufacturing the conflict directly exercises the exact
+    -- same code path deterministically.
+    get (TokenR token)
+    statusIs 200
+    winner <- seedCompetingBinding token
+    claimToken token
+    sessions <- sessionCount
+    assertEq "still exactly one binding, not two" 1 sessions
+    stillOnlyWinner <- boundSessionFor token
+    assertEq "the surviving row is the one that was already there" (Just winner) stillOnlyWinner
+
   yit "opens the bound intro: the instruction hash and the pinned ontology, not the dogfood glossary" $ do
     openToken token
     statusIs 200
@@ -677,6 +698,25 @@ webSpec fixture = ydescribe "the token-bound pilot surface" $ do
     sessionCount = do
       site <- getTestYesod
       liftIO $ flip runSqlPool (appPool site) $ length <$> selectList ([] :: [Filter PilotBinding]) []
+    boundSessionFor tok = do
+      site <- getTestYesod
+      liftIO $ flip runSqlPool (appPool site) $
+        fmap (pilotBindingSurveySessionId . entityVal) <$> getBy (UniquePilotBindingToken (tokenSha tok))
+    -- Directly inserts a PilotBinding for `tok`, as another request's own
+    -- claim would have just committed one. Returns its SurveySessionId, the
+    -- one a correct claimUnclaimed must resume into rather than duplicate.
+    seedCompetingBinding tok = do
+      site <- getTestYesod
+      binding <- bindingFor tok
+      let rec = bindRecord binding
+      liftIO $ flip runSqlPool (appPool site) $ do
+        now <- liftIO getCurrentTime
+        sid <- insert $ SurveySession (languageCode (bindUiLanguage binding)) now Nothing
+        insert_ $ SessionInstrument sid (instrumentVersionCode InstrumentPilot)
+        insert_ $ PilotBinding sid (tokenSha tok) (irPackageId rec) (irAnnotatorId rec)
+          (irItemsSha rec) (irChecksumsSha rec) (irPresentationSha rec)
+          (irInstructionsSha rec) (irOntologySha rec) (T.pack (irRecordFile rec))
+        pure sid
 
 -- ---------------------------------------------------------------- the real package
 

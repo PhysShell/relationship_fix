@@ -684,19 +684,41 @@ postTokenR token = do
         Nothing -> do
           ((result, _), _) <- runFormPost csrfForm
           case result of
-            FormSuccess () -> do
-              now <- liftIO getCurrentTime
-              created <- runDB $ do
-                created <- insert $ SurveySession (languageCode (bindUiLanguage binding)) now Nothing
-                insert_ $ SessionInstrument created (instrumentVersionCode InstrumentPilot)
-                insert_ $ PilotBinding created key (irPackageId rec) (irAnnotatorId rec)
-                  (irItemsSha rec) (irChecksumsSha rec) (irPresentationSha rec)
-                  (irInstructionsSha rec) (irOntologySha rec) (T.pack (irRecordFile rec))
-                pure created
-              logEvent created Nothing "pilot_session_bound" (Just (irPackageId rec <> "/" <> irAnnotatorId rec))
-              setSession "annotation_session_id" (T.pack $ show $ fromSqlKey created)
-              redirect IntroR
+            FormSuccess () -> claimUnclaimed key rec (bindUiLanguage binding) >>= resumeClaimed
             _ -> invalidArgs ["invalid claim request"]
+
+-- | Create the binding for a token this request's own check just found
+-- unclaimed -- and survive a second request that got past the same check for
+-- the same reason. The check above and this insert are two separate
+-- round trips to the database, not one transaction, so two POSTs arriving
+-- close enough both reach here having seen "unclaimed". @insertUnique@ is
+-- what actually decides that only once: it performs the insert and hands
+-- back the key, or -- if @UniquePilotBindingToken@ already has a row, because
+-- the other request's insert already committed -- hands back @Nothing@
+-- instead of letting the write fail. The loser's own @SurveySession@ /
+-- @SessionInstrument@ rows are left in place, unreferenced by any
+-- @PilotBinding@ and thus never surfaced anywhere: an orphan is a fine price
+-- for "exactly one claim wins" not depending on which of two requests a
+-- database file lock happened to let through first.
+claimUnclaimed :: Text -> IssuanceRecord -> Language -> Handler PilotBinding
+claimUnclaimed key rec lang = do
+  now <- liftIO getCurrentTime
+  outcome <- runDB $ do
+    sid <- insert $ SurveySession (languageCode lang) now Nothing
+    insert_ $ SessionInstrument sid (instrumentVersionCode InstrumentPilot)
+    let candidate = PilotBinding sid key (irPackageId rec) (irAnnotatorId rec)
+          (irItemsSha rec) (irChecksumsSha rec) (irPresentationSha rec)
+          (irInstructionsSha rec) (irOntologySha rec) (T.pack (irRecordFile rec))
+    won <- insertUnique candidate
+    case won of
+      Just _ -> pure (Left (sid, candidate))
+      Nothing -> Right <$> getBy (UniquePilotBindingToken key)
+  case outcome of
+    Left (sid, pb) -> do
+      logEvent sid Nothing "pilot_session_bound" (Just (irPackageId rec <> "/" <> irAnnotatorId rec))
+      pure pb
+    Right (Just (Entity _ pb)) -> pure pb
+    Right Nothing -> error "unreachable: insertUnique found a conflict, so a row exists"
 
 resumeClaimed :: PilotBinding -> Handler Html
 resumeClaimed pb = do

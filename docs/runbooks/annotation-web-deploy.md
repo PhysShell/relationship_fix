@@ -493,3 +493,47 @@ RF_ISSUANCE_DIR=/var/lib/relationship-fix/issuance \
 The export refuses an incomplete session and names the items; the
 `annotator-N.export.json` next to the layer repeats the binding and the layer's
 sha256 for the issuance ledger.
+
+## J issuance safety invariants
+
+Found by review before the first two links were handed out, on `b8b17f1`
+(2026-09-10) — a prefetch bot, antivirus scanner or corporate proxy following
+a bare `GET` used to be able to consume a token's "first open" before the
+person it was issued to did, and every open logged the bearer token itself
+in cleartext. Both are fixed; this table is what stops a later "simplify
+this" from quietly reopening either one.
+
+| # | Invariant | Enforced by | Test |
+|---|---|---|---|
+| 1 | `GET /t/<valid-token>` (unclaimed) → 200, no `PilotBinding` row, token still claimable | `getTokenR` only ever reads (`getBy`); the unclaimed branch renders a landing page and touches the database not at all | `PilotSpec.hs`: "a claim-pending token renders a landing page and claims nothing", "opening it any number of times before claiming is still harmless" |
+| 2 | `GET /t/<revoked-or-unknown-token>` → 404, no mutation | `Map.lookup` against `appBindings`, loaded once at start from `RF_ISSUANCE_DIR`; a token whose record was moved out (see "Revoking" below) and the process restarted is not in that map, indistinguishable from one that never existed | `PilotSpec.hs`: "answers an unknown token with 404 and nothing else" |
+| 3 | `POST` claim on an unclaimed token → exactly one `PilotBinding`; a second claim (concurrent or sequential) cannot create another | `claimUnclaimed` uses `insertUnique` on `PilotBinding`, not a check-then-blind-insert: a losing insert returns `Nothing` instead of throwing, and the loser resumes the winner's row | `PilotSpec.hs`: "only the POST claims it; resuming afterwards never opens a second session" (sequential), "a token claimed elsewhere between the check and the insert resumes there, not a crash" (manufactures the exact DB conflict a real race would produce — deterministic, not a thread-timing gamble) |
+| 4 | The raw token never appears in application or proxy logs | `app/Main.hs` builds the WAI app via `toWaiAppPlain` + `defaultMiddlewaresNoLogging`, not `toWaiApp` (whose built-in middleware logs the full request path — the token, for `/t/<token>` — to stdout/journal in cleartext); Caddy's site block carries no `log` directive | CI step "Enforce no-request-logging-middleware invariant" (greps `app/Main.hs` for a reintroduced bare `toWaiApp`) |
+| 5 | A revoked issuance record is retained as audit evidence, not deleted, and stops being served | Procedure, not code (same principle as `contamination-ledger.json`'s vetoed-not-deleted candidates): move the record out of `RF_ISSUANCE_DIR` into `RF_ISSUANCE_DIR/revoked/<name>.revoked-<timestamp>.json` with a one-line reason, then restart. The removed file is simply absent from the next `loadBindings` scan — see invariant 2 | Operational; not unit-testable (the app has no notion of "revoked", only "present or absent at start") |
+
+### Revoking and reissuing a token
+
+Needed if a token is exposed outside its intended one-time-display channel
+(pasted somewhere persisted, shown twice, sent to the wrong place) — treat
+exposure as compromise regardless of whether anyone is known to have used it;
+a `pilot_binding` row (or its absence) settles that either way:
+
+```bash
+sudo sqlite3 /var/lib/relationship-fix/annotation.db \
+  "select annotator_id from pilot_binding where token_sha256 = '<sha256>';"
+```
+
+```bash
+mkdir -p /var/lib/relationship-fix/issuance/revoked
+mv /var/lib/relationship-fix/issuance/annotator-N.json \
+   /var/lib/relationship-fix/issuance/revoked/annotator-N.revoked-$(date -u +%Y-%m-%dT%H%M%SZ).json
+echo 'revoked <date>: <reason>' >> /var/lib/relationship-fix/issuance/revoked/README.txt
+# metrics.issuance new again with the same eligibility record (unchanged) → a
+# fresh token → copy to RF_ISSUANCE_DIR → restart, same as first issuance.
+sudo systemctl restart relationship-fix.service
+journalctl -u relationship-fix -n 5   # "N issuance binding(s) proven"
+```
+
+If a `pilot_binding` row existed for the old token, that session and its
+answers are untouched by revocation — only the link that opens it changes.
+Revoking does not delete or renumber anything a completed export would read.
