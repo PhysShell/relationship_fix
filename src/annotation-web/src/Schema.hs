@@ -157,6 +157,25 @@ schemaMigrations =
             \CONSTRAINT \"unique_pilot_binding_token\" UNIQUE (\"token_sha256\"))"
           ]
       }
+  , -- Simple pilot mode (2026-09-12): no per-person issuance record, no
+    -- bearer token -- a session binds directly to one of the sealed
+    -- package's annotator slots, first-come. pilot_binding is rebuilt rather
+    -- than altered because nothing else references its rows by foreign key
+    -- and, at the point this migration was written, the table was empty in
+    -- production; an ALTER that had to preserve real rows would not have
+    -- been able to take this shortcut.
+    SchemaMigration
+      { smName = "0004-simple-pilot-slot"
+      , smUp =
+          [ "DROP TABLE \"pilot_binding\""
+          , "CREATE TABLE \"pilot_binding\"(\
+            \\"id\" INTEGER PRIMARY KEY,\
+            \\"survey_session_id\" INTEGER NOT NULL REFERENCES \"survey_session\" ON DELETE RESTRICT ON UPDATE RESTRICT,\
+            \\"annotator_id\" VARCHAR NOT NULL,\
+            \CONSTRAINT \"unique_pilot_binding_session\" UNIQUE (\"survey_session_id\"),\
+            \CONSTRAINT \"unique_pilot_binding_annotator\" UNIQUE (\"annotator_id\"))"
+          ]
+      }
   ]
 
 migrationNames :: [SchemaMigration] -> [MigrationName]

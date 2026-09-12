@@ -30,12 +30,13 @@ import Yesod.Test
 main :: IO ()
 main = withSystemTempDirectory "annotation-web-test" $ \dir -> do
   counter <- newIORef (0 :: Int)
-  fixture <- PilotSpec.makeFixture (dir </> "pilot-fixture")
-  real <- PilotSpec.makeRealFixture (dir </> "real-fixture")
+  fixture <- PilotSpec.makeFixture
+  registryFixture <- PilotSpec.makeRegistryFixture (dir </> "registry-fixture")
+  real <- PilotSpec.makeRealFixture
   hspec $ do
     domainSpec
     MigrationSpec.spec
-    PilotSpec.loaderSpec fixture
+    PilotSpec.loaderSpec registryFixture
     yesodSpecWithSiteGenerator (freshSite dir counter) $ do
       formSpec
       markupSpec

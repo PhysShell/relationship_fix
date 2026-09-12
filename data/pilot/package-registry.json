@@ -12,7 +12,9 @@
       "status": "issuable",
       "checksums_sha256": "c87fc7cec2f4e931acd9a8680f639c5a1b765b17b9c760e1bd15acefc7eb50a0",
       "sealed": "2026-09-08",
-      "note": "the only issuable pilot package; issuance itself (J) needs eligibility + a hash-pinned issuance record per annotator"
+      "instructions_file": "docs/pilot-v0.1-instructions.md",
+      "instructions_sha256": "4916d178a5e582346169e0d86d1e988b0199cc796d6fea852156254cef8c4cbc",
+      "note": "the only issuable pilot package; simple mode (2026-09-12): one shared link, first two distinct sessions claim the sealed package's two presentation slots (annotator-1/annotator-2) by first-come, no per-person issuance record. instructions_file lives here, not in the sealed manifest, because the manifest's own `instructions` field is a frozen erratum pointing at the v0 document (see dialogue-naturalness-gate.md §3) and the manifest is sealed against edits."
     }
   }
 }

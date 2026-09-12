@@ -6,8 +6,8 @@
 -- from the database, walks the packet in the packet's own order, refuses a
 -- session that is not complete, and writes one @rf.pilot-response.v1@ line per
 -- presented item -- the format @metrics.agreement@ consumes -- plus an export
--- record that repeats the binding (package, hashes, pseudonym) so the file can
--- be tied back to exactly what the person was shown.
+-- record that repeats the package identity and hashes so the file can be
+-- tied back to exactly which sealed package produced it.
 --
 -- Feedback semantics are the instruction's: the channel was offered on every
 -- item of a pilot session, so every line carries @feedback@; an item where the
@@ -36,12 +36,12 @@ import Database.Persist.Sql (ConnectionPool, Entity (..), SelectOpt (Asc), SqlPe
 import Domain
 import qualified Feedback as F
 import Packet (PresentedItem (..), sha256Hex)
-import Registry (Binding (..), IssuanceRecord (..))
+import Registry (PilotConfig (..), PilotSlot (..))
 import Server
 
 data PilotExport = PilotExport
-  { peRecord :: IssuanceRecord
-  , peTokenSha :: Text
+  { pePackageId :: Text
+  , peAnnotatorId :: Text
   , peStartedAt :: UTCTime
   , peCompletedAt :: Maybe UTCTime
   , peResponses :: [A.Value]
@@ -50,58 +50,54 @@ data PilotExport = PilotExport
 
 data ExportFault
   = ExportNoSession Text Text
-    -- ^ package, annotator: nobody has opened this token yet.
-  | ExportBindingChanged Text
+    -- ^ package, annotator: nobody has claimed this slot yet.
   | ExportIncomplete [Text]
     -- ^ Opaque ids of items without a complete annotation.
   deriving stock (Eq, Show)
 
 renderExportFault :: ExportFault -> Text
 renderExportFault fault = case fault of
-  ExportNoSession pkg annotator -> "no session for " <> pkg <> "/" <> annotator <> " — the token has not been opened"
-  ExportBindingChanged annotator -> "session for " <> annotator <> " was bound to different hashes than the loaded record — refusing to export"
+  ExportNoSession pkg annotator -> "no session for " <> pkg <> "/" <> annotator <> " — the slot has not been claimed"
   ExportIncomplete missing -> "session incomplete: " <> T.pack (show (length missing)) <> " item(s) without a complete annotation (" <> T.intercalate ", " (take 5 missing) <> (if length missing > 5 then ", …" else "") <> ")"
 
-exportPilot :: ConnectionPool -> Binding -> IO (Either ExportFault PilotExport)
-exportPilot pool binding = runSqlPool (exportPilotDb binding) pool
+exportPilot :: ConnectionPool -> PilotConfig -> Text -> IO (Either ExportFault PilotExport)
+exportPilot pool cfg annotatorId = runSqlPool (exportPilotDb cfg annotatorId) pool
 
-exportPilotDb :: Binding -> SqlPersistT IO (Either ExportFault PilotExport)
-exportPilotDb binding = do
-  let rec = bindRecord binding
-      key = irTokenSha rec
-  stored <- getBy (UniquePilotBindingToken key)
-  case stored of
-    Nothing -> pure (Left (ExportNoSession (irPackageId rec) (irAnnotatorId rec)))
-    Just (Entity _ pb)
-      | not (bindingUnchanged pb rec) -> pure (Left (ExportBindingChanged (irAnnotatorId rec)))
-      | otherwise -> do
-          let sid = pilotBindingSurveySessionId pb
-          session <- get sid
-          rows <- forM (bindItems binding) $ \item -> do
-            ann <- getBy (UniqueSessionItem sid (piId item))
-            case ann of
-              Nothing -> pure (Left (piId item))
-              Just (Entity aid annotation) -> do
-                labelRows <- selectList [AnnotationLabelAnnotationId ==. aid] [Asc AnnotationLabelId]
-                evidenceRows <- selectList [EvidenceAnnotationId ==. aid] [Asc EvidenceId]
-                feedbackRow <- getBy (UniqueItemFeedback aid)
-                let labels = catMaybes [parseBehaviorLabel (annotationLabelLabelId v) | Entity _ v <- labelRows]
-                    evidence = catMaybes [(\l -> (l, evidenceQuote v)) <$> parseBehaviorLabel (evidenceLabelId v) | Entity _ v <- evidenceRows]
-                    feedback = entityVal <$> feedbackRow
-                if annotationComplete annotation labels evidence
-                  then pure (Right (responseValue (irAnnotatorId rec) item annotation labels evidence feedback))
-                  else pure (Left (piId item))
-          let missing = [i | Left i <- rows]
-          case (session, missing) of
-            (Nothing, _) -> pure (Left (ExportNoSession (irPackageId rec) (irAnnotatorId rec)))
-            (_, _ : _) -> pure (Left (ExportIncomplete missing))
-            (Just s, []) -> pure $ Right PilotExport
-              { peRecord = rec
-              , peTokenSha = key
-              , peStartedAt = surveySessionStartedAt s
-              , peCompletedAt = surveySessionCompletedAt s
-              , peResponses = [v | Right v <- rows]
-              }
+exportPilotDb :: PilotConfig -> Text -> SqlPersistT IO (Either ExportFault PilotExport)
+exportPilotDb cfg annotatorId = case [s | s <- pcSlots cfg, psAnnotatorId s == annotatorId] of
+  [] -> pure (Left (ExportNoSession (pcPackageId cfg) annotatorId))
+  (slot : _) -> do
+    stored <- getBy (UniquePilotBindingAnnotator annotatorId)
+    case stored of
+      Nothing -> pure (Left (ExportNoSession (pcPackageId cfg) annotatorId))
+      Just (Entity _ pb) -> do
+        let sid = pilotBindingSurveySessionId pb
+        session <- get sid
+        rows <- forM (psItems slot) $ \item -> do
+          ann <- getBy (UniqueSessionItem sid (piId item))
+          case ann of
+            Nothing -> pure (Left (piId item))
+            Just (Entity aid annotation) -> do
+              labelRows <- selectList [AnnotationLabelAnnotationId ==. aid] [Asc AnnotationLabelId]
+              evidenceRows <- selectList [EvidenceAnnotationId ==. aid] [Asc EvidenceId]
+              feedbackRow <- getBy (UniqueItemFeedback aid)
+              let labels = catMaybes [parseBehaviorLabel (annotationLabelLabelId v) | Entity _ v <- labelRows]
+                  evidence = catMaybes [(\l -> (l, evidenceQuote v)) <$> parseBehaviorLabel (evidenceLabelId v) | Entity _ v <- evidenceRows]
+                  feedback = entityVal <$> feedbackRow
+              if annotationComplete annotation labels evidence
+                then pure (Right (responseValue annotatorId item annotation labels evidence feedback))
+                else pure (Left (piId item))
+        let missing = [i | Left i <- rows]
+        case (session, missing) of
+          (Nothing, _) -> pure (Left (ExportNoSession (pcPackageId cfg) annotatorId))
+          (_, _ : _) -> pure (Left (ExportIncomplete missing))
+          (Just s, []) -> pure $ Right PilotExport
+            { pePackageId = pcPackageId cfg
+            , peAnnotatorId = annotatorId
+            , peStartedAt = surveySessionStartedAt s
+            , peCompletedAt = surveySessionCompletedAt s
+            , peResponses = [v | Right v <- rows]
+            }
 
 -- | One @rf.pilot-response.v1@ line. Field presence follows the instruction's
 -- appendix: labels and quotes only when assigned, the reason (and note) only
@@ -134,26 +130,17 @@ responseValue annotator item annotation labels evidence feedback = object $
 responsesJsonl :: [A.Value] -> BS.ByteString
 responsesJsonl values = BL.toStrict (BL.concat [A.encode v <> "\n" | v <- values])
 
--- | The export record: what was exported, from which binding, and the hash of
--- the response file so the two can be tied together in the issuance ledger.
+-- | The export record: what was exported, from which package, and the hash of
+-- the response file so the two can be tied together later.
 exportRecordValue :: PilotExport -> BS.ByteString -> A.Value
 exportRecordValue export responses =
-  let rec = peRecord export
-   in object
-        [ "schema_version" .= ("rf.pilot-export.v1" :: Text)
-        , "package_id" .= irPackageId rec
-        , "annotator_id" .= irAnnotatorId rec
-        , "token_sha256" .= peTokenSha export
-        , "record_file" .= irRecordFile rec
-        , "items_sha256" .= irItemsSha rec
-        , "checksums_sha256" .= irChecksumsSha rec
-        , "presentation_sha256" .= irPresentationSha rec
-        , "instructions_sha256" .= irInstructionsSha rec
-        , "ontology_sha256" .= irOntologySha rec
-        , "ontology_version" .= irOntologyVersion rec
-        , "started_at" .= peStartedAt export
-        , "completed_at" .= peCompletedAt export
-        , "n_items" .= length (peResponses export)
-        , "responses_sha256" .= sha256Hex responses
-        , "instrument_version" .= instrumentVersionCode InstrumentPilot
-        ]
+  object
+    [ "schema_version" .= ("rf.pilot-export.v1" :: Text)
+    , "package_id" .= pePackageId export
+    , "annotator_id" .= peAnnotatorId export
+    , "started_at" .= peStartedAt export
+    , "completed_at" .= peCompletedAt export
+    , "n_items" .= length (peResponses export)
+    , "responses_sha256" .= sha256Hex responses
+    , "instrument_version" .= instrumentVersionCode InstrumentPilot
+    ]

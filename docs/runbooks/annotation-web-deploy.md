@@ -383,9 +383,14 @@ bad migration; it does not protect against losing the disk.
 
 ## Pilot surface: what a release must carry and what stays on the host
 
-From the web cutover on, the server proves every issuance binding at start and
-refuses to start otherwise. That needs files next to the binaries and files
-that are host state:
+Simple pilot mode (2026-09-12; see the erratum at the top of
+[the cutover contract](../pilot-v0.1-cutover-contract.md) for why): with
+`RF_PILOT_ENABLED=1`, the server proves the one `issuable` package in the
+registry at start — seal, manifest, every presentation file its manifest
+names as a slot, the instruction document and the ontology file — and
+refuses to start otherwise. No per-person issuance record, no bearer token:
+identity is a slot (`annotator-1`, `annotator-2`, …), claimed first-come by
+whichever browser session gets there first.
 
 - **In the release** (`$RELEASE/share/relationship-fix`, installed by the
   flake's `postInstall`): `data/pilot/package-registry.json`,
@@ -393,38 +398,104 @@ that are host state:
   `docs/pilot-v0.1-instructions.md`, `data/ontology/behavior-v0.1.json`.
   Never `items.jsonl` or `presentation-map/`: the server must not hold
   canonical ids.
-- **On the host**, like the database: `RF_ISSUANCE_DIR`
-  (`/var/lib/relationship-fix/issuance`), one `annotator-N.json` per issued
-  person, written by `metrics.issuance new` and copied there by the
-  facilitator. Back it up with the database; a lost record is a session the
-  server can no longer prove.
-- **Eligibility is host/private state too**, never the sealed package:
-  `data/pilot/v0.1/eligibility.json` is the null template sealed with the
-  package and is never edited (editing it breaks the seal, and issuance
-  refuses a broken seal). The operational record per person is
-  `rf.annotator-eligibility.v1`, kept at a private path or
-  `/var/lib/relationship-fix/eligibility/annotator-N.json`:
+- **Nothing host-state is needed for issuance any more.** There is no
+  `RF_ISSUANCE_DIR`, no eligibility record, no per-person file to copy
+  anywhere. The registry itself (not sealed, restart-effective) carries
+  `instructions_file` and `instructions_sha256` for the package, since the
+  sealed manifest's own `instructions` field is a frozen erratum pointing at
+  the v0 document (`dialogue-naturalness-gate.md` §3) and the manifest
+  cannot be edited without breaking the seal.
 
-  ```json
-  {
-    "schema_version": "rf.annotator-eligibility.v1",
-    "package_id": "annotation-pilot-v0.1",
-    "annotator_id": "annotator-1",
-    "criteria": {
-      "did_not_author_ontology": true,
-      "fluent_ru": true,
-      "fluent_en": true,
-      "has_not_seen_items": true
-    },
-    "established_at": "2026-09-09T10:00:00Z",
-    "established_by": "facilitator"
-  }
-  ```
+## Issuing people (J), simple pilot mode
 
-## Issuing a person (J), step by step
+The whole "issuance" step is now: send the same one link to both people.
 
-Production flow once the web is deployed and healthy (`/` says "no open
-study", which is correct: people enter only through `/t/<token>`):
+```text
+deploy with RF_PILOT_ENABLED=1
+        │
+the server proves the sealed package at start (or refuses to start)
+        │
+first person opens https://<host>/, presses "Начать" → claims annotator-1
+second person opens the same link, presses "Начать" → claims annotator-2
+        │
+each annotates 40 items, resumable from the same browser at any time
+        │
+annotation-web-export annotator-1|annotator-2 (offline; refuses until complete)
+```
+
+Unit environment, in addition to `RF_DB_PATH`:
+
+```text
+RF_REPO_ROOT=/nix/var/nix/profiles/relationship-fix/share/relationship-fix
+RF_PILOT_ENABLED=1
+RF_DOGFOOD_ENABLED=0
+RF_SECURE_COOKIES=1
+```
+
+The health check hits `/`; with a pilot package loaded this renders the
+claim landing page (200), so activation health is unchanged. A release whose
+package does not prove exits before it listens, which the health check
+reports as a failed activation (state B) and rolls back.
+
+Collecting a completed session is offline and read-only, same as before:
+
+```bash
+RF_DB_PATH=/var/lib/relationship-fix/annotation.db \
+RF_REPO_ROOT=/nix/var/nix/profiles/relationship-fix/share/relationship-fix \
+  $RELEASE/bin/annotation-web-export annotation-pilot-v0.1 annotator-1 /var/lib/relationship-fix/exports
+```
+
+The export refuses an incomplete session and names the items.
+
+## J safety invariants, simple pilot mode
+
+| # | Invariant | Enforced by | Test |
+|---|---|---|---|
+| 1 | `GET /` (unclaimed) → 200, no `PilotBinding` row, still claimable | `getHomeR` only ever reads a session cookie / `get sid`; the unclaimed branch renders a landing page and touches the database not at all — protects against messenger link-preview prefetch, which fetches a shared URL unclicked the moment it is pasted into a chat | `PilotSpec.hs`: "a fresh visitor gets a landing page and claims nothing until the button is pressed", "opening it any number of times before claiming is still harmless" |
+| 2 | `POST /` claims exactly one slot; a second claim (concurrent or sequential) cannot create another for the same slot | `claimNextSlot` uses `insertUnique` on `PilotBinding.annotator_id`, not a check-then-blind-insert: a losing insert returns `Nothing` instead of throwing, and the loser moves on to the next slot rather than crashing | `PilotSpec.hs`: "only the POST claims a slot; resuming afterwards never opens a second session" (sequential), "a slot claimed elsewhere between the check and the insert resumes there, not a crash" (manufactures the exact DB conflict a real race would produce — deterministic, not a thread-timing gamble) |
+| 3 | Both slots taken → plain refusal page, no crash, no third slot invented | `claimNextSlot []` renders a fixed "both taken" page | `PilotSpec.hs`: "both slots taken: a third visitor sees a plain refusal, no crash" |
+| 4 | No per-request path (there is no token in it any more) is logged in cleartext | `app/Main.hs` builds the WAI app via `toWaiAppPlain` + `defaultMiddlewaresNoLogging`, not `toWaiApp` (whose built-in middleware logs the full request path to stdout/journal) | CI step "Enforce no-request-logging-middleware invariant" (greps `app/Main.hs` for a reintroduced bare `toWaiApp`) |
+| 5 | Which slot maps to which real person is the facilitator's own record, not the system's | Procedure, not code: the facilitator notes which pseudonym pressed "Начать" first (e.g. by asking, or by being the one who sends the link and watches for the claim), same spirit as `contamination-ledger.json`'s pseudonym bookkeeping | Not unit-testable; this is a deliberate, accepted reduction from the earlier cryptographically-issued-per-person model — see the cutover contract erratum |
+
+## Controlled pilot mode (historical, dormant — not the current deploy path)
+
+Everything below this line describes the bearer-token issuance system
+deployed 2026-09-09 through 2026-09-12 (commits `b8b17f1`, `367af14`) and
+retired in favour of simple pilot mode above, once review concluded a
+2-person pilot of people the facilitator invited directly did not need
+per-person cryptographic issuance, external eligibility records or a
+revoke/reissue procedure — the corresponding UX and operational cost were
+disproportionate to what those bought. The code (`research/python/metrics/
+issuance.py`, the `rf.issuance-record.v1` / `rf.annotator-eligibility.v1`
+schemas) is untouched in git history and this documentation is kept, not
+deleted, for the day a pilot actually needs it: paid external annotators,
+blind assignment across more than a couple of people, or a real requirement
+to prove which specific person produced which dataset.
+
+Eligibility was host/private state, never the sealed package:
+`data/pilot/v0.1/eligibility.json` is the null template sealed with the
+package and is never edited (editing it breaks the seal, and issuance
+refuses a broken seal). The operational record per person was
+`rf.annotator-eligibility.v1`, kept at a private path:
+
+```json
+{
+  "schema_version": "rf.annotator-eligibility.v1",
+  "package_id": "annotation-pilot-v0.1",
+  "annotator_id": "annotator-1",
+  "criteria": {
+    "did_not_author_ontology": true,
+    "fluent_ru": true,
+    "fluent_en": true,
+    "has_not_seen_items": true
+  },
+  "established_at": "2026-09-09T10:00:00Z",
+  "established_by": "facilitator"
+}
+```
+
+Production flow once deployed and healthy (`/` said "no open study"; people
+entered only through `/t/<token>`):
 
 ```text
 establish eligibility for annotator-N  →  eligibility/annotator-N.json (private)
@@ -440,8 +511,6 @@ the person opens https://<host>/t/<token> and annotates 40 items
 annotation-web-export (offline; refuses until complete)
 ```
 
-From `research/python`, with the repository root two levels up:
-
 ```bash
 RF_PUBLIC_BASE_URL=https://relationship-fix.192-248-184-141.sslip.io \
 uv run python -m metrics.issuance new --root ../.. \
@@ -451,9 +520,9 @@ uv run python -m metrics.issuance new --root ../.. \
   --out /secure/issuance/annotator-1.json
 ```
 
-The command proves the sealed package and the eligibility record, writes the
-issuance record with only the token's sha256, and prints the personal link
-exactly once. Nothing else ever shows the token again. Then:
+The command proved the sealed package and the eligibility record, wrote the
+issuance record with only the token's sha256, and printed the personal link
+exactly once. Then:
 
 ```bash
 scp /secure/issuance/annotator-1.json host:/var/lib/relationship-fix/issuance/
@@ -461,79 +530,16 @@ ssh host sudo systemctl restart relationship-fix.service
 ssh host journalctl -u relationship-fix -n 5   # "N issuance binding(s) proven"
 ```
 
-No redeploy is needed for issuance: the release already reads records from
-`RF_ISSUANCE_DIR` at start and ignores the `eligibility` field it does not
-need. Repeat for annotator-2. Keep the eligibility and issuance records
-together with the database backups; `metrics.issuance verify --record …
---eligibility …` re-derives every hash later.
-
-Unit environment, in addition to `RF_DB_PATH`:
-
-```text
-RF_REPO_ROOT=/nix/var/nix/profiles/relationship-fix/share/relationship-fix
-RF_ISSUANCE_DIR=/var/lib/relationship-fix/issuance
-RF_DOGFOOD_ENABLED=0
-RF_SECURE_COOKIES=1
-```
-
-The health check hits `/`, which with the dogfood surface off renders the
-"no open study" page: a 200, so activation health is unchanged. A release
-whose bindings do not prove exits before it listens, which the health check
-reports as a failed activation (state B) and rolls back.
-
-Collecting a completed session is offline and read-only:
-
-```bash
-RF_DB_PATH=/var/lib/relationship-fix/annotation.db \
-RF_REPO_ROOT=/nix/var/nix/profiles/relationship-fix/share/relationship-fix \
-RF_ISSUANCE_DIR=/var/lib/relationship-fix/issuance \
-  $RELEASE/bin/annotation-web-export annotation-pilot-v0.1 annotator-1 /var/lib/relationship-fix/exports
-```
-
-The export refuses an incomplete session and names the items; the
-`annotator-N.export.json` next to the layer repeats the binding and the layer's
-sha256 for the issuance ledger.
-
-## J issuance safety invariants
-
-Found by review before the first two links were handed out, on `b8b17f1`
-(2026-09-10) — a prefetch bot, antivirus scanner or corporate proxy following
-a bare `GET` used to be able to consume a token's "first open" before the
-person it was issued to did, and every open logged the bearer token itself
-in cleartext. Both are fixed; this table is what stops a later "simplify
-this" from quietly reopening either one.
+Old J safety invariants table, for the record — the token-claim race,
+the request-logging leak, and the revoke procedure it protected against are
+moot without a token, but the underlying lessons (claim on POST only, don't
+let a middleware default log a secret, keep a paper trail instead of
+deleting) are exactly what invariants 1, 2 and 4 above still are:
 
 | # | Invariant | Enforced by | Test |
 |---|---|---|---|
-| 1 | `GET /t/<valid-token>` (unclaimed) → 200, no `PilotBinding` row, token still claimable | `getTokenR` only ever reads (`getBy`); the unclaimed branch renders a landing page and touches the database not at all | `PilotSpec.hs`: "a claim-pending token renders a landing page and claims nothing", "opening it any number of times before claiming is still harmless" |
-| 2 | `GET /t/<revoked-or-unknown-token>` → 404, no mutation | `Map.lookup` against `appBindings`, loaded once at start from `RF_ISSUANCE_DIR`; a token whose record was moved out (see "Revoking" below) and the process restarted is not in that map, indistinguishable from one that never existed | `PilotSpec.hs`: "answers an unknown token with 404 and nothing else" |
-| 3 | `POST` claim on an unclaimed token → exactly one `PilotBinding`; a second claim (concurrent or sequential) cannot create another | `claimUnclaimed` uses `insertUnique` on `PilotBinding`, not a check-then-blind-insert: a losing insert returns `Nothing` instead of throwing, and the loser resumes the winner's row | `PilotSpec.hs`: "only the POST claims it; resuming afterwards never opens a second session" (sequential), "a token claimed elsewhere between the check and the insert resumes there, not a crash" (manufactures the exact DB conflict a real race would produce — deterministic, not a thread-timing gamble) |
-| 4 | The raw token never appears in application or proxy logs | `app/Main.hs` builds the WAI app via `toWaiAppPlain` + `defaultMiddlewaresNoLogging`, not `toWaiApp` (whose built-in middleware logs the full request path — the token, for `/t/<token>` — to stdout/journal in cleartext); Caddy's site block carries no `log` directive | CI step "Enforce no-request-logging-middleware invariant" (greps `app/Main.hs` for a reintroduced bare `toWaiApp`) |
-| 5 | A revoked issuance record is retained as audit evidence, not deleted, and stops being served | Procedure, not code (same principle as `contamination-ledger.json`'s vetoed-not-deleted candidates): move the record out of `RF_ISSUANCE_DIR` into `RF_ISSUANCE_DIR/revoked/<name>.revoked-<timestamp>.json` with a one-line reason, then restart. The removed file is simply absent from the next `loadBindings` scan — see invariant 2 | Operational; not unit-testable (the app has no notion of "revoked", only "present or absent at start") |
-
-### Revoking and reissuing a token
-
-Needed if a token is exposed outside its intended one-time-display channel
-(pasted somewhere persisted, shown twice, sent to the wrong place) — treat
-exposure as compromise regardless of whether anyone is known to have used it;
-a `pilot_binding` row (or its absence) settles that either way:
-
-```bash
-sudo sqlite3 /var/lib/relationship-fix/annotation.db \
-  "select annotator_id from pilot_binding where token_sha256 = '<sha256>';"
-```
-
-```bash
-mkdir -p /var/lib/relationship-fix/issuance/revoked
-mv /var/lib/relationship-fix/issuance/annotator-N.json \
-   /var/lib/relationship-fix/issuance/revoked/annotator-N.revoked-$(date -u +%Y-%m-%dT%H%M%SZ).json
-echo 'revoked <date>: <reason>' >> /var/lib/relationship-fix/issuance/revoked/README.txt
-# metrics.issuance new again with the same eligibility record (unchanged) → a
-# fresh token → copy to RF_ISSUANCE_DIR → restart, same as first issuance.
-sudo systemctl restart relationship-fix.service
-journalctl -u relationship-fix -n 5   # "N issuance binding(s) proven"
-```
-
-If a `pilot_binding` row existed for the old token, that session and its
-answers are untouched by revocation — only the link that opens it changes.
-Revoking does not delete or renumber anything a completed export would read.
+| 1 | `GET /t/<valid-token>` (unclaimed) → 200, no `PilotBinding` row, token still claimable | `getTokenR` only ever read (`getBy`); the unclaimed branch rendered a landing page and touched the database not at all | (removed with the token system) |
+| 2 | `GET /t/<revoked-or-unknown-token>` → 404, no mutation | `Map.lookup` against `appBindings`, loaded once at start from `RF_ISSUANCE_DIR` | (removed with the token system) |
+| 3 | `POST` claim on an unclaimed token → exactly one `PilotBinding`; a second claim could not create another | `claimUnclaimed` used `insertUnique` on `PilotBinding.token_sha256` | (removed with the token system) |
+| 4 | The raw token never appeared in application or proxy logs | `app/Main.hs`'s `toWaiAppPlain` + `defaultMiddlewaresNoLogging` (this part is unchanged and still true) | CI step "Enforce no-request-logging-middleware invariant" |
+| 5 | A revoked issuance record was retained as audit evidence, not deleted | Procedure: moved to `RF_ISSUANCE_DIR/revoked/<name>.revoked-<timestamp>.json` with a reason | (removed with the token system) |

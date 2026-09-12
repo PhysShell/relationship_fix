@@ -20,8 +20,8 @@ response-слои, пишет pilot-report.json + pilot-report.md. Ничего 
   (dialogue-naturalness-gate §3, §9).
 
 Запуск (гейтящие числа — только отсюда, не из notebook):
-    uv run python -m metrics.agreement --pilot-dir ../../data/pilot/v0.1 \
-        --issuance-dir /var/lib/relationship-fix/issuance
+    uv run python -m metrics.agreement --pilot-dir ../../data/pilot/v0.1
+    # controlled-issuance mode only: добавить --issuance-dir /var/lib/relationship-fix/issuance
 """
 
 from __future__ import annotations
@@ -334,17 +334,23 @@ def remap_layer(pilot_dir: Path, annotator: str, responses: list[dict]) -> tuple
     return remapped, issues
 
 
-def run(pilot_dir: Path, issuance_dir: Path) -> int:
+def run(pilot_dir: Path, issuance_dir: Path | None = None) -> int:
     manifest = json.loads((pilot_dir / "pilot-manifest.json").read_text(encoding="utf-8"))
     items = load_jsonl(pilot_dir / manifest["items_file"])
     strata = json.loads((pilot_dir / manifest["strata_file"]).read_text(encoding="utf-8"))["strata"]
     active = set(manifest["active_labels"])
 
-    eligibility_problem = check_eligibility(issuance_dir, manifest["pilot_id"], manifest["annotators"],
-                                            manifest.get("eligibility_criteria", []))
-    if eligibility_problem:
-        print(eligibility_problem, file=sys.stderr)
-        return 2
+    # Provenance verification is an additional gate for controlled-issuance
+    # mode (per-person bearer tokens, external eligibility records), not a
+    # requirement of the report itself: simple pilot mode (2026-09-12, two
+    # facilitator-invited people, one shared link) has no issuance record to
+    # check. Pass --issuance-dir only when that machinery was actually used.
+    if issuance_dir is not None:
+        eligibility_problem = check_eligibility(issuance_dir, manifest["pilot_id"], manifest["annotators"],
+                                                manifest.get("eligibility_criteria", []))
+        if eligibility_problem:
+            print(eligibility_problem, file=sys.stderr)
+            return 2
 
     layers = {}
     remap_issues: list[str] = []
@@ -463,9 +469,11 @@ def render_markdown(report: dict) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pilot-dir", type=Path, required=True)
-    parser.add_argument("--issuance-dir", type=Path, required=True,
-                        help="RF_ISSUANCE_DIR: per-annotator rf.issuance-record.v1 files, "
-                             "the only source this report trusts for eligibility")
+    parser.add_argument("--issuance-dir", type=Path, default=None,
+                        help="optional: RF_ISSUANCE_DIR from controlled-issuance mode. "
+                             "Per-annotator rf.issuance-record.v1 files, checked for eligibility "
+                             "if given; omitted entirely, the report trusts the facilitator's own "
+                             "manual annotator↔person matching (simple pilot mode).")
     args = parser.parse_args()
     return run(args.pilot_dir, args.issuance_dir)
 
