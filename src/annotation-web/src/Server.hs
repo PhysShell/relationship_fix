@@ -21,7 +21,6 @@ import Control.Exception (throwIO)
 import Control.Monad (forM, forM_, unless, when)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Int (Int64)
-import qualified Data.Map.Strict as Map
 import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -33,7 +32,7 @@ import Domain
 import qualified Feedback as F
 import qualified Ontology as O
 import Packet (PresentedItem (..), PresentedMessage (..), presentedTarget)
-import Registry (Binding (..), IssuanceRecord (..), tokenSha)
+import Registry (PilotConfig (..), PilotSlot (..))
 import qualified Schema
 import Yesod
 
@@ -93,25 +92,17 @@ AuditEvent
     value Text Maybe
     occurredAt UTCTime
     deriving Show
--- | A pilot session is a survey session bound to one issuance record. What is
--- stored is what the person was issued -- package, annotator pseudonym and the
--- hashes of the presentation file, the instruction document and the ontology
--- -- so that the record on disk changing later is detectable and refused,
--- rather than silently re-binding a running session to different bytes. The
--- token is never stored; its sha256 is.
+-- | A pilot session is a survey session bound to one of the sealed package's
+-- annotator slots (simple pilot mode, 2026-09-12: no per-person issuance
+-- record, no bearer token -- see Registry's module comment). The unique
+-- constraint on annotatorId is the whole safety property: at most one session
+-- may ever hold a given slot, so two people (or one person opening the link
+-- twice) cannot silently end up sharing one.
 PilotBinding
     surveySessionId SurveySessionId
-    tokenSha256 Text
-    packageId Text
     annotatorId Text
-    itemsSha256 Text
-    checksumsSha256 Text
-    presentationSha256 Text
-    instructionsSha256 Text
-    ontologySha256 Text
-    recordFile Text
     UniquePilotBindingSession surveySessionId
-    UniquePilotBindingToken tokenSha256
+    UniquePilotBindingAnnotator annotatorId
     deriving Show
 |]
 
@@ -119,18 +110,17 @@ data App = App
   { appPool :: ConnectionPool
   , appSessionKeyPath :: FilePath
   , appSecureCookies :: Bool
-  , appBindings :: Map.Map Text Binding
-    -- ^ Proven issuance bindings, keyed by token sha256. Loaded once at start;
-    -- a token that is not here does not exist.
+  , appPilotConfig :: Maybe PilotConfig
+    -- ^ The one sealed, issuable package this server proved at start.
+    -- @Nothing@ means no pilot is being served (dogfood only, if enabled).
   , appDogfoodEnabled :: Bool
     -- ^ The Catalog-backed debug surface at @/@. Off in production: a pilot
     -- annotator who lands on @/@ must not be able to start a dogfood session.
   }
 
 mkYesod "App" [parseRoutes|
-/ HomeR GET
+/ HomeR GET POST
 /language LanguageR POST
-/t/#Text TokenR GET POST
 /instructions InstructionsR GET
 /intro IntroR GET
 /item/#Int ItemR GET
@@ -274,7 +264,7 @@ instrumentFor sid = do
 
 -- | What a session shows: the Catalog-backed dogfood surface, or one sealed
 -- pilot packet. Decided by the session's own binding row, never by the URL.
-data Mode = Dogfood | Pilot Binding
+data Mode = Dogfood | Pilot PilotSlot
 
 sessionMode :: SurveySessionId -> Handler Mode
 sessionMode sid = do
@@ -283,28 +273,15 @@ sessionMode sid = do
     Nothing -> pure Dogfood
     Just (Entity _ pb) -> do
       app <- getYesod
-      case Map.lookup (pilotBindingTokenSha256 pb) (appBindings app) of
-        -- The record this session was bound to is not among the ones this
-        -- server proved at start. Serving the session anyway would mean
+      case appPilotConfig app of
+        -- The package this session was bound to is not the one loaded on
+        -- this server (or none is). Serving the session anyway would mean
         -- showing bytes nobody has vouched for; refusing is the only honest
-        -- answer, and the message says what to fix.
-        Nothing -> permissionDenied "this session's issuance record is not loaded on this server"
-        Just binding
-          | bindingUnchanged pb (bindRecord binding) -> pure (Pilot binding)
-          | otherwise -> permissionDenied "this session's issuance record changed after the session started"
-
--- | The hashes the session was started under must still be the hashes the
--- loaded record carries. Anything else is a different packet, instruction or
--- ontology than the person was issued.
-bindingUnchanged :: PilotBinding -> IssuanceRecord -> Bool
-bindingUnchanged pb rec =
-  pilotBindingPackageId pb == irPackageId rec
-    && pilotBindingAnnotatorId pb == irAnnotatorId rec
-    && pilotBindingItemsSha256 pb == irItemsSha rec
-    && pilotBindingChecksumsSha256 pb == irChecksumsSha rec
-    && pilotBindingPresentationSha256 pb == irPresentationSha rec
-    && pilotBindingInstructionsSha256 pb == irInstructionsSha rec
-    && pilotBindingOntologySha256 pb == irOntologySha rec
+        -- answer.
+        Nothing -> permissionDenied "no pilot package is loaded on this server"
+        Just cfg -> case [s | s <- pcSlots cfg, psAnnotatorId s == pilotBindingAnnotatorId pb] of
+          (slot : _) -> pure (Pilot slot)
+          [] -> permissionDenied "this session's annotator slot is not in the loaded package"
 
 -- | One episode as shown, whichever surface it came from. The renderer only
 -- ever sees this: exact texts in exact order with exactly one target.
@@ -328,7 +305,7 @@ data Stimulus = Stimulus
 
 stimuli :: Mode -> Language -> [Stimulus]
 stimuli Dogfood lang = map (dogfoodStimulus lang) items
-stimuli (Pilot binding) _ = map pilotStimulus (bindItems binding)
+stimuli (Pilot slot) _ = map pilotStimulus (psItems slot)
 
 dogfoodStimulus :: Language -> Item -> Stimulus
 dogfoodStimulus lang item =
@@ -595,9 +572,97 @@ csrfForm = renderFields $ pure ()
 getHomeR :: Handler Html
 getHomeR = do
   app <- getYesod
-  if appDogfoodEnabled app
-    then generateFormPost languageForm >>= uncurry renderHome
-    else renderClosed
+  case appPilotConfig app of
+    Just cfg -> do
+      resumed <- resumeIfSessionValid
+      case resumed of
+        Just () -> redirect IntroR  -- unreachable: resumeIfSessionValid already redirected to get here
+        Nothing -> generateFormPost csrfForm >>= uncurry (renderClaimLanding cfg)
+    Nothing ->
+      if appDogfoodEnabled app
+        then generateFormPost languageForm >>= uncurry renderHome
+        else renderClosed
+
+-- | Simple pilot mode's whole "identity" system: one shared link, no picker
+-- screen, no per-person token. GET only ever resumes an already-claimed
+-- session or shows a landing page; claiming a fresh slot happens on POST
+-- alone. A shared link is the thing most likely of all to be pasted
+-- straight into a chat, and chat clients fetch link previews themselves,
+-- unclicked -- a GET that claimed on its own would very plausibly hand both
+-- slots to preview bots before either invited person ever saw the page.
+--
+-- Once a slot IS claimed, @insertUnique@ (not a check-then-insert) is what
+-- makes "first POST wins" a real guarantee: two browsers racing to claim
+-- cannot both win the same slot, for the identical reason a bearer-token
+-- claim (git history) could not let two POSTs both win one token.
+postHomeR :: Handler Html
+postHomeR = do
+  app <- getYesod
+  case appPilotConfig app of
+    Nothing -> notFound
+    Just cfg -> do
+      resumed <- resumeIfSessionValid
+      case resumed of
+        Just () -> redirect IntroR  -- unreachable: resumeIfSessionValid already redirected to get here
+        Nothing -> do
+          ((result, _), _) <- runFormPost csrfForm
+          case result of
+            FormSuccess () -> claimNextSlot (pcSlots cfg)
+            _ -> invalidArgs ["invalid claim request"]
+
+-- | If this browser's session cookie still names a real session, redirect
+-- into it and report that as having handled the request. @Nothing@ means
+-- the caller still has to decide what an unclaimed visitor sees.
+resumeIfSessionValid :: Handler (Maybe ())
+resumeIfSessionValid = do
+  existing <- lookupSession "annotation_session_id"
+  case existing >>= parseSessionKey of
+    Nothing -> pure Nothing
+    Just sid -> do
+      stored <- runDB $ get sid
+      case stored of
+        Just _ -> redirect IntroR
+        Nothing -> deleteSession "annotation_session_id" >> pure Nothing
+
+-- | Shown to a visitor with no valid session yet: no claim, no cookie, no
+-- database row, however many times (or by however many link-preview bots)
+-- it is fetched. Only the POST behind its button may claim a slot.
+renderClaimLanding :: PilotConfig -> Widget -> Enctype -> Handler Html
+renderClaimLanding _cfg widget enctype = defaultLayout [whamlet|
+    <section .card>
+      <p .eyebrow>Relationship Fix
+      <h1>Разметка диалогов / Dialogue annotation
+      <p>Нажмите «Начать». / Press "Start".
+      <form #claim-form method=post enctype=#{enctype} .stack>
+        ^{widget}
+        <button type=submit .primary>Начать / Start
+  |]
+
+claimNextSlot :: [PilotSlot] -> Handler Html
+claimNextSlot [] = renderPilotFull
+claimNextSlot (slot : rest) = do
+  now <- liftIO getCurrentTime
+  outcome <- runDB $ do
+    sid <- insert $ SurveySession "ru" now Nothing
+    insert_ $ SessionInstrument sid (instrumentVersionCode InstrumentPilot)
+    won <- insertUnique $ PilotBinding sid (psAnnotatorId slot)
+    pure (sid, won)
+  case outcome of
+    (sid, Just _) -> do
+      logEvent sid Nothing "pilot_session_bound" (Just (psAnnotatorId slot))
+      setSession "annotation_session_id" (T.pack $ show $ fromSqlKey sid)
+      redirect IntroR
+    (_, Nothing) -> claimNextSlot rest
+
+-- | Every slot is already claimed and this browser holds none of them: two
+-- people, two slots, nothing left to hand out.
+renderPilotFull :: Handler Html
+renderPilotFull = defaultLayout [whamlet|
+    <section .card>
+      <p .eyebrow>Relationship Fix
+      <h1>Оба места уже заняты / Both slots are already taken
+      <p>Если это ошибка — обратитесь к фасилитатору. / If this looks wrong, contact the facilitator.
+  |]
 
 -- | What @/@ shows when the dogfood surface is off: nothing to start. Pilot
 -- annotators arrive through their personal link and never need this page.
@@ -606,7 +671,7 @@ renderClosed = defaultLayout [whamlet|
     <section .card>
       <p .eyebrow>Relationship Fix
       <h1>Здесь нет открытого исследования / No open study here
-      <p>Если вы участвуете в разметке, откройте личную ссылку, которую вам прислал фасилитатор. / If you are taking part in the annotation study, open the personal link the facilitator sent you.
+      <p>Обратитесь к фасилитатору. / Contact the facilitator.
   |]
 
 renderHome :: Widget -> Enctype -> Handler Html
@@ -637,108 +702,6 @@ postLanguageR = do
       redirect IntroR
     _ -> renderHome widget enctype
 
--- | The personal link. The token is hashed and looked up among the bindings
--- this server proved at start; an unknown token is a 404 with nothing else
--- said.
---
--- GET never claims the token: a session that already exists (from an earlier
--- claim, on this or another device) is resumed, but a token nobody has
--- claimed yet only renders a landing page with a button. Link-preview bots,
--- antivirus scanners and corporate proxies all prefetch bare GETs; if GET
--- itself created the session, the first "real" open could belong to one of
--- those instead of the person the link was issued to, and nobody would be
--- able to tell from the server's own state. Only POST -- an explicit,
--- CSRF-protected "Начать" -- claims an unclaimed token.
-getTokenR :: Text -> Handler Html
-getTokenR token = do
-  app <- getYesod
-  let key = tokenSha token
-  case Map.lookup key (appBindings app) of
-    Nothing -> notFound
-    Just binding -> do
-      existing <- runDB $ getBy (UniquePilotBindingToken key)
-      case existing of
-        Just (Entity _ pb)
-          | bindingUnchanged pb (bindRecord binding) -> resumeClaimed pb
-          | otherwise -> permissionDenied "this session's issuance record changed after the session started"
-        Nothing -> generateFormPost csrfForm >>= uncurry (renderClaim (bindUiLanguage binding))
-
--- | The only handler that may create a @PilotBinding@. Same token, same
--- lookup and the same "already claimed" branch as the GET above -- claiming
--- twice (a resent form, two tabs) resumes rather than double-inserts -- but
--- an unclaimed token only ever becomes a session here, behind a form
--- submission a prefetching bot cannot produce.
-postTokenR :: Text -> Handler Html
-postTokenR token = do
-  app <- getYesod
-  let key = tokenSha token
-  case Map.lookup key (appBindings app) of
-    Nothing -> notFound
-    Just binding -> do
-      let rec = bindRecord binding
-      existing <- runDB $ getBy (UniquePilotBindingToken key)
-      case existing of
-        Just (Entity _ pb)
-          | bindingUnchanged pb rec -> resumeClaimed pb
-          | otherwise -> permissionDenied "this session's issuance record changed after the session started"
-        Nothing -> do
-          ((result, _), _) <- runFormPost csrfForm
-          case result of
-            FormSuccess () -> claimUnclaimed key rec (bindUiLanguage binding) >>= resumeClaimed
-            _ -> invalidArgs ["invalid claim request"]
-
--- | Create the binding for a token this request's own check just found
--- unclaimed -- and survive a second request that got past the same check for
--- the same reason. The check above and this insert are two separate
--- round trips to the database, not one transaction, so two POSTs arriving
--- close enough both reach here having seen "unclaimed". @insertUnique@ is
--- what actually decides that only once: it performs the insert and hands
--- back the key, or -- if @UniquePilotBindingToken@ already has a row, because
--- the other request's insert already committed -- hands back @Nothing@
--- instead of letting the write fail. The loser's own @SurveySession@ /
--- @SessionInstrument@ rows are left in place, unreferenced by any
--- @PilotBinding@ and thus never surfaced anywhere: an orphan is a fine price
--- for "exactly one claim wins" not depending on which of two requests a
--- database file lock happened to let through first.
-claimUnclaimed :: Text -> IssuanceRecord -> Language -> Handler PilotBinding
-claimUnclaimed key rec lang = do
-  now <- liftIO getCurrentTime
-  outcome <- runDB $ do
-    sid <- insert $ SurveySession (languageCode lang) now Nothing
-    insert_ $ SessionInstrument sid (instrumentVersionCode InstrumentPilot)
-    let candidate = PilotBinding sid key (irPackageId rec) (irAnnotatorId rec)
-          (irItemsSha rec) (irChecksumsSha rec) (irPresentationSha rec)
-          (irInstructionsSha rec) (irOntologySha rec) (T.pack (irRecordFile rec))
-    won <- insertUnique candidate
-    case won of
-      Just _ -> pure (Left (sid, candidate))
-      Nothing -> Right <$> getBy (UniquePilotBindingToken key)
-  case outcome of
-    Left (sid, pb) -> do
-      logEvent sid Nothing "pilot_session_bound" (Just (irPackageId rec <> "/" <> irAnnotatorId rec))
-      pure pb
-    Right (Just (Entity _ pb)) -> pure pb
-    Right Nothing -> error "unreachable: insertUnique found a conflict, so a row exists"
-
-resumeClaimed :: PilotBinding -> Handler Html
-resumeClaimed pb = do
-  setSession "annotation_session_id" (T.pack $ show $ fromSqlKey (pilotBindingSurveySessionId pb))
-  redirect IntroR
-
--- | Shown only for a token nobody has claimed yet: no session, no cookie, no
--- database row -- a GET that lands here twice, ten times, or never followed
--- by the POST leaves exactly nothing behind.
-renderClaim :: Language -> Widget -> Enctype -> Handler Html
-renderClaim lang widget enctype = defaultLayout [whamlet|
-    <section .card>
-      <p .eyebrow>Relationship Fix
-      <h1>#{tr lang "Личная ссылка" "Personal link"}
-      <p>#{tr lang "Эта ссылка предназначена только вам. Нажмите «Начать», чтобы открыть разметку." "This link is meant for you alone. Press \"Start\" to open the annotation."}
-      <form #claim-form method=post enctype=#{enctype} .stack>
-        ^{widget}
-        <button type=submit .primary>#{tr lang "Начать" "Start"}
-  |]
-
 -- | The instruction document the session is bound to, byte for byte, as the
 -- record's hash proved it at start. Not rendered, not paraphrased.
 getInstructionsR :: Handler TypedContent
@@ -747,9 +710,11 @@ getInstructionsR = do
   mode <- sessionMode sid
   case mode of
     Dogfood -> notFound
-    Pilot binding -> do
+    Pilot _ -> do
+      app <- getYesod
+      cfg <- maybe (permissionDenied "no pilot package is loaded on this server") pure (appPilotConfig app)
       addHeader "Content-Disposition" "inline; filename=pilot-instructions.md"
-      pure $ TypedContent "text/plain; charset=utf-8" (toContent (bindInstructions binding))
+      pure $ TypedContent "text/plain; charset=utf-8" (toContent (pcInstructions cfg))
 
 getIntroR :: Handler Html
 getIntroR = do
@@ -757,7 +722,10 @@ getIntroR = do
   lang <- sessionLanguage session
   mode <- sessionMode sid
   case mode of
-    Pilot binding -> renderPilotIntro lang binding
+    Pilot slot -> do
+      app <- getYesod
+      cfg <- maybe (permissionDenied "no pilot package is loaded on this server") pure (appPilotConfig app)
+      renderPilotIntro lang cfg slot
     Dogfood -> defaultLayout [whamlet|
     <section .card>
       <p .eyebrow>Relationship Fix · no-JS annotation dogfood
@@ -782,29 +750,25 @@ getIntroR = do
         <a href=@{ItemR 0} .primary>#{tr lang "Начать" "Start"}
   |]
 
--- | The pilot intro: the bound instruction document (linked byte-exact, with
--- its hash on the page so the person can match it against what the
--- facilitator said they would get) and the active labels of the pinned
--- ontology artifact, rendered from that artifact. Nothing from the dogfood
--- glossary appears here.
-renderPilotIntro :: Language -> Binding -> Handler Html
-renderPilotIntro lang binding = do
-  let rec = bindRecord binding
-      episodeCount = length (bindItems binding)
-      ontologyLabels = bindOntology binding
+-- | The pilot intro: the package's instruction document (linked byte-exact)
+-- and the active labels of the pinned ontology artifact, rendered from that
+-- artifact. Nothing from the dogfood glossary appears here.
+renderPilotIntro :: Language -> PilotConfig -> PilotSlot -> Handler Html
+renderPilotIntro lang cfg slot = do
+  let episodeCount = length (psItems slot)
+      ontologyLabels = pcOntology cfg
       nameOf label = tr lang (O.olNameRu label) (O.olNameEn label)
   defaultLayout [whamlet|
     <section .card>
-      <p .eyebrow>Relationship Fix · #{irPackageId rec}
+      <p .eyebrow>Relationship Fix · #{pcPackageId cfg}
       <h1>#{tr lang "Разметка диалогов" "Dialogue annotation"}
-      <p>#{tr lang "Вы участвуете под анонимным id" "You are taking part under the anonymous id"} <strong>#{irAnnotatorId rec}</strong>. #{tr lang "Эпизодов:" "Episodes:"} #{episodeCount}.
+      <p>#{tr lang "Вы участвуете под анонимным id" "You are taking part under the anonymous id"} <strong>#{psAnnotatorId slot}</strong>. #{tr lang "Эпизодов:" "Episodes:"} #{episodeCount}.
       <h2>#{tr lang "Инструкция" "Instructions"}
-      <p>#{tr lang "Прочитайте инструкцию целиком до первого эпизода. Это ровно тот документ, который вам выдан; его отпечаток:" "Read the instructions in full before the first episode. This is exactly the document you were issued; its fingerprint:"}
-      <p><code>sha256 #{irInstructionsSha rec}</code>
+      <p>#{tr lang "Прочитайте инструкцию целиком до первого эпизода." "Read the instructions in full before the first episode."}
       <p>
         <a href=@{InstructionsR} .secondary>#{tr lang "Открыть инструкцию" "Open the instructions"}
-      <h2>#{tr lang "Категории" "Categories"} · #{irOntologyVersion rec}
-      <p>#{tr lang "Определения ниже взяты из закреплённой версии онтологии" "The definitions below are taken from the pinned ontology version"} (<code>sha256 #{T.take 12 (irOntologySha rec)}…</code>).
+      <h2>#{tr lang "Категории" "Categories"} · #{pcOntologyVersion cfg}
+      <p>#{tr lang "Определения ниже взяты из закреплённой версии онтологии." "The definitions below are taken from the pinned ontology version."}
       $forall label <- ontologyLabels
         <section .category>
           <h3>#{O.olId label} — #{nameOf label}
@@ -1301,7 +1265,7 @@ makeFoundation dbPath sessionKeyPath secureCookies =
     { fcDbPath = dbPath
     , fcSessionKeyPath = sessionKeyPath
     , fcSecureCookies = secureCookies
-    , fcBindings = Map.empty
+    , fcPilotConfig = Nothing
     , fcDogfoodEnabled = True
     }
 
@@ -1309,7 +1273,7 @@ data FoundationConfig = FoundationConfig
   { fcDbPath :: FilePath
   , fcSessionKeyPath :: FilePath
   , fcSecureCookies :: Bool
-  , fcBindings :: Map.Map Text Binding
+  , fcPilotConfig :: Maybe PilotConfig
   , fcDogfoodEnabled :: Bool
   }
 
@@ -1328,7 +1292,7 @@ makeFoundationWith cfg = do
     { appPool = pool
     , appSessionKeyPath = fcSessionKeyPath cfg
     , appSecureCookies = fcSecureCookies cfg
-    , appBindings = fcBindings cfg
+    , appPilotConfig = fcPilotConfig cfg
     , appDogfoodEnabled = fcDogfoodEnabled cfg
     }
 

@@ -1,5 +1,16 @@
 # Cutover contract: annotation-pilot-v0.1 (materialization) — DECIDED 2026-09-08 · A–I EXECUTED · web cutover EXECUTED 2026-09-08 · J blocked
 
+**Erratum (2026-09-12): the "Web cutover" section below (bearer tokens, per-person
+issuance records, external eligibility records) was retired in favour of
+"simple pilot mode" — one shared link, first-come slot claim, no per-person
+token — on review that this two-person pilot of directly-invited people did
+not need per-person cryptographic issuance. Not edited in place: the section
+stays as the record of what A–I and the first web cutover actually verified;
+current behaviour is [docs/runbooks/annotation-web-deploy.md](runbooks/annotation-web-deploy.md)
+§"J safety invariants, simple pilot mode". The A–I package-materialization
+contract below (registry, seal, exact-equality gate, provenance) is entirely
+unaffected — only the web-facing access layer on top of it changed.**
+
 Статус: решения по развилкам закрыты фасилитатором **до** сборки; три открытых пункта закрыты 2026-09-08 (ниже); GO получен на A–I (research artifact), **не** на web cutover и **не** на issuance. Пакет собран и запечатан: [data/pilot/v0.1](../data/pilot/v0.1/README.md). Порядок соблюдён: сначала механизм (commit `1c7c25f`: инвариант, build/verify/seal, dogfood sidecar, тесты), затем пакет. Вход сборки: [naturalness-ab/v0-flagged-donor/candidates.json](../data/pilot/naturalness-ab/v0-flagged-donor/candidates.json) (13/13 accepted, `facilitator_review.at_build`) и frozen [v0](../data/pilot/v0/README.md).
 
 Зачем документ: четыре replacement, retirement, новые ids, lineage и dogfood/Catalog cutover дают достаточно мест, где можно очень аккуратно соврать самому себе. «Собрать как очевидно» не разрешено; архитектуру за фасилитатора агент не выбирает.

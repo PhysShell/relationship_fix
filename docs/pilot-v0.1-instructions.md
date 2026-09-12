@@ -65,7 +65,7 @@
 
 ## Приложение для фасилитатора и коллектора: canonical response
 
-Разметчик этого не пишет. Интерфейс (после web cutover — token-bound renderer/collector) или фасилитатор материализует **ровно одну строку** `rf.pilot-response.v1` на каждый из 40 item, с `item_id` из presentation-набора разметчика:
+Разметчик этого не пишет. Интерфейс (веб-страница) или фасилитатор материализует **ровно одну строку** `rf.pilot-response.v1` на каждый из 40 item, с `item_id` из presentation-набора разметчика:
 
 ```json
 {"schema_version":"rf.pilot-response.v1","item_id":"item-3f9a2c","annotator_id":"annotator-1","decision":"assigned","labels":["B.BLAME_CRITICISM"],"quotes":[{"label":"B.BLAME_CRITICISM","quote":"вечно так"}],"feedback":{"flags":[],"note":""}}
