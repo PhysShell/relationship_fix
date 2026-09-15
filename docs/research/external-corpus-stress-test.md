@@ -14,6 +14,50 @@ Crosswalk target: the actual operational definitions, inclusion/exclusion criter
 
 ---
 
+## 0. Facilitator calibration note (2026-09-15)
+
+This note is an addendum, not a correction-in-place: the sections below are left exactly as the research pass produced them, so the reasoning trail stays auditable. Read against §5/§8/§9, the report's own language runs ahead of what its own evidence supports in five specific ways.
+
+1. **"Three independent sources" (§5.2) overstates the source count.** There are two corpora here — BenSyc and Relationship Advice — not three; the "two unrelated Relationship Advice examples" are two observations from one source, not two sources. More importantly, both corpora are overwhelmingly `bystander → poster`, while every RF behavior label is `partner → partner` (§3 already says this plainly for the crosswalk in general; §5's invalidation argument quietly leans on the same convergence as if the directionality caveat didn't apply to it too).
+2. **`NO_MATCH` (8 rows in §4's table) is doing too much work.** It currently covers cases where RF *should* have nothing to say (BenSyc Neutral, ESConv advice/question/self-disclosure, Relationship Advice Commentator's Opinion) exactly as often as cases that might be a real gap. `none_observed`/no-label-applies is the designed, correct outcome for most of these — it is not evidence of missing coverage. A future pass over this crosswalk should split `NO_MATCH` into at least `EXPECTED_NONE` (out of RF's claimed behavior set by design), `OUT_OF_SCOPE` (outside the partner-to-partner dyad, e.g. third-party advice-giving), and `CANDIDATE_GAP` (in scope, and RF genuinely has nothing to say). Reading "8 NO_MATCH" as "8 gaps" is not supported by the current classification.
+3. **The same conflation appears in `external-stress-sample.jsonl`'s `missing_construct` tags.** At least two of the three `missing_construct` records apply that tag to things RF was never meant to encode: plain agreement with a factual claim (BenSyc's "All around the world" record — agreement is not a target construct, not a gap), and third-party escalation (out of scope by the dyad restriction, not a hole in the dyad ontology). `missing_construct` should be reserved for "in RF's own claimed scope, and RF has no way to express it" — under that reading the sample supports at most one clean case, not three.
+4. **Phase C's "not an artifact of a small sample" claim (§8) is too strong for n=13.** The licensing rationale for not bulk-downloading either dataset is real (BenSyc: layered/research-only license; Relationship Advice: `license: unknown`) and is not disputed here. But a larger sample — IDs plus this project's own classification, no bulk text reproduced — was available within the same license posture and would have supported a real stress-test rather than an exploratory one. Treat §8's 13 records as a proof-of-method, not as a saturated sample.
+5. **The verdict itself should be downgraded one notch.** What this pass actually establishes is that non-generalizing emotional invalidation is a real, recognizable pattern *as a general conversational phenomenon* (BenSyc's taxonomy, both Relationship Advice examples) — it does not establish that this pattern is a reliable, separately-codeable *partner-to-partner* construct, because no partner-to-partner evidence was inspected. Read the finding as: **"candidate in-scope gap with cross-corpus analogical evidence; dyadic reliability unproven,"** not "genuine repeatable gap" (§5.3, §9). The report's own §5.4 test 3 and test 6 already say "not yet answerable" — this note is just naming that the headline language in §5.3/§9 is stronger than what tests 3 and 6 support.
+
+**What this changes operationally: nothing before the pilot.** §7's P0/P1/P2 ranking already correctly defers this to post-pilot work, and that stands. What it adds is the shape of the post-pilot experiment, sharper than "re-examine using confusion data":
+
+```text
+INV-01: Does non-generalizing emotional invalidation form
+        a reliable observable RF construct?
+
+Scope: partner → partner only.
+
+Contrast set:
+  A. ordinary disagreement
+  B. absence of validation
+  C. specific minimization / emotional dismissal
+  D. blame / criticism
+  E. sarcasm / mockery
+  F. pressure for change
+
+Design: collect 30-50 natural partner-directed candidate utterances,
+deliberately weighted toward the boundary cases above. Run them through
+v0.1 first (see where annotators currently place them — expect NONE_OBSERVED
+plus BLAME_CRITICISM confusion, per §5.3's own reasoning). Then, separately,
+ask a direct binary question per item:
+
+  "Does this utterance explicitly reject/minimize the legitimacy or
+   magnitude of the partner's stated feeling/concern?"
+
+Only if that second question shows high agreement, stable evidence spans,
+and low confusion with plain disagreement (contrast A) is there a basis for
+a `behavior-v0.2-candidate` label. A repeat of the sarcasm-boundary reliability
+problem the project already declined once (`docs/annotation-protocol-v0.md` §7)
+is the expected null result, not a surprising one.
+```
+
+---
+
 ## 1. Executive summary
 
 **Strongest finding.** A repeated, independently-occurring construct exists in two unrelated external corpora (BenSyc, Bengali Reddit; Relationship Advice, English Reddit) that the current Relationship Fix ontology cannot represent without distortion: **treating a stated concern or feeling as illegitimate or trivial — via calm dismissal, minimization, or mockery — without a generalizing personal attack.** Under `data/ontology/behavior-v0.1.json` today this pattern is not `B.BLAME_CRITICISM` (its inclusion criteria require generalization or a negative characterization of personality/pattern, and its own exclusion criteria explicitly route a non-generalizing complaint about a single episode to "this may be `B.PRESSURE_FOR_CHANGE` or nothing" — §Special investigation: invalidation, below, works through this line by line). It is not `B.VALIDATION`'s absence either — RF's own protocol is explicit that "none observed" is the ordinary, valid, most common outcome, not evidence of a distinct negative construct. The two are different claims, and the evidence below supports the stronger one: a repeatable **NO_MATCH**, not a soft "sort of covered."
