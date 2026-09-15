@@ -41,15 +41,19 @@
 
               # What the pilot surface proves at start, shipped inside the same
               # release as the server that proves it: the package registry, the
-              # sealed package's seal and presentation packets (never items.jsonl
-              # or presentation-map/ -- the server must not hold canonical ids),
-              # the instruction document and the pinned ontology. RF_REPO_ROOT
-              # points here; issuance records stay host state (RF_ISSUANCE_DIR).
+              # sealed package's seal, its manifest (read directly by Registry.hs
+              # since simple pilot mode -- annotators/active_labels/ontology_version
+              # come from here, not from a per-person issuance record) and
+              # presentation packets (never items.jsonl or presentation-map/ --
+              # the server must not hold canonical ids), the instruction document
+              # and the pinned ontology. RF_REPO_ROOT points here.
               share=$out/share/relationship-fix
               install -Dm644 ${./data/pilot/package-registry.json} \
                 $share/data/pilot/package-registry.json
               install -Dm644 ${./data/pilot/v0.1/CHECKSUMS.sha256} \
                 $share/data/pilot/v0.1/CHECKSUMS.sha256
+              install -Dm644 ${./data/pilot/v0.1/pilot-manifest.json} \
+                $share/data/pilot/v0.1/pilot-manifest.json
               mkdir -p $share/data/pilot/v0.1/presentation
               cp ${./data/pilot/v0.1/presentation}/*.jsonl \
                 $share/data/pilot/v0.1/presentation/
