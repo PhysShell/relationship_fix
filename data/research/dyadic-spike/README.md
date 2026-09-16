@@ -27,8 +27,14 @@
 | `single_message_must_not_open_gate` | 1 | одно неоднозначное сообщение → гейт закрыт |
 | `segmentation_temporal_gap` | 1 | разрыв > часа обязан разрезать |
 | `missing_timestamps` | 1 | нет времени → `timing_available: false` |
+| `softening_with_no_partner_response__must_not_support` | 2 | «прости» без ответа партнёра → обязано быть `ABSENT`, не `SUPPORTING` |
+| `negatives_not_answering_each_other__must_not_be_attack_attack` | 1 | два негатива подряд от одного актора → не цикл |
+| `softening_and_negativity_on_unrelated_topics` | 1 | негатив и softening на **разных темах** не смешиваются |
+| `episode_is_not_an_opportunity_for_conflict_patterns` | 1 | обычная бытовая переписка не старит конфликтные гипотезы |
 
 Наблюдения (L2) подаются **напрямую**, детекция не моделируется: провал спайка должен быть провалом представления, а не классификатора.
+
+**`topic` подаётся так же и по той же причине.** Тематическая связность не решается детерминированно из сырого текста; если бы предикат её угадывал, внутри него прятался бы классификатор, и `non_uptake` перестал бы быть наблюдением. Без темы отношения `continues_topic` / `non_uptake` не порождаются вовсе.
 
 ## Запуск
 

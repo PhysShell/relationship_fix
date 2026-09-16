@@ -13,6 +13,7 @@ from pathlib import Path
 from dyadic.interface import Act, build_context, contraindications, decide
 from dyadic.model import (
     BehaviorObservation,
+    InteractionRelation,
     ConfidenceComponents,
     EvidenceSpan,
     EvidenceStatus,
@@ -23,8 +24,13 @@ from dyadic.model import (
     retire,
 )
 from dyadic.segmentation import DEFAULT_GAP_SECONDS, Message, episode_identity, segment
-from dyadic.spike import run
-from dyadic.state import HypothesisLedger, SafetyAccumulator
+from dyadic.spike import derive_events, derive_relations, run
+from dyadic.state import (
+    PATTERNS,
+    SPIKE_ONLY_SAFETY_MIN_EPISODES,
+    HypothesisLedger,
+    SafetyAccumulator,
+)
 
 CORPUS = Path(__file__).resolve().parents[3] / "data/research/dyadic-spike/episodes.jsonl"
 
@@ -132,13 +138,23 @@ class RecurrenceAndDecayTests(unittest.TestCase):
         led.observe_episode("ep1", [ev("e1", "attack_attack", EvidenceStatus.SUPPORTING)])
         self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.CANDIDATE)
 
-    def test_decay_is_measured_in_observable_episodes_not_wall_clock(self):
+    def test_decay_needs_eligible_opportunities_not_elapsed_episodes(self):
+        """Quiet episodes must NOT age a hypothesis. Counting raw episodes was a
+        hidden form of "not observed -> weakened", the very inference this model
+        refuses everywhere else."""
         led = HypothesisLedger()
-        led.observe_episode("ep0", [ev("e0", "attack_attack", EvidenceStatus.SUPPORTING, episode="ep0")])
-        led.observe_episode("ep1", [ev("e1", "attack_attack", EvidenceStatus.SUPPORTING, episode="ep1")])
+        for i in range(2):
+            led.observe_episode(f"ep{i}", [ev(f"e{i}", "attack_attack", EvidenceStatus.SUPPORTING,
+                                              episode=f"ep{i}")], {"attack_attack"})
         self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.RECURRING)
-        for i in range(2, 5):
-            led.observe_episode(f"ep{i}", [])
+
+        for i in range(2, 8):                      # six episodes with no chance to show
+            led.observe_episode(f"ep{i}", [], set())
+        self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.RECURRING,
+                         "episodes where the pattern could not appear must not weaken it")
+
+        for i in range(8, 11):                     # three real opportunities, no support
+            led.observe_episode(f"ep{i}", [], {"attack_attack"})
         self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.WEAKENED)
 
     def test_retire_keeps_the_record(self):
@@ -148,7 +164,7 @@ class RecurrenceAndDecayTests(unittest.TestCase):
         h = led.hypotheses["attack_attack:a+b"]
         self.assertEqual(h.status, HypothesisStatus.RETIRED)
         self.assertEqual(h.evidence_for, ("e1",), "retirement is not deletion")
-        self.assertNotIn(h, led.competing())
+        self.assertNotIn(h, led.concurrent())
 
     def test_retire_is_pure(self):
         led = HypothesisLedger()
@@ -159,24 +175,24 @@ class RecurrenceAndDecayTests(unittest.TestCase):
         self.assertEqual(retired.status, HypothesisStatus.RETIRED)
 
 
-class CompetingHypothesesTests(unittest.TestCase):
+class ConcurrentHypothesesTests(unittest.TestCase):
     def test_contradictory_patterns_coexist(self):
         """No single current-state variable exists, so attack and alignment can
         both be live — which is the whole argument for Q4."""
         led = HypothesisLedger()
         led.observe_episode("ep1", [ev("e1", "attack_attack", EvidenceStatus.SUPPORTING),
                                     ev("e2", "constructive_alignment", EvidenceStatus.SUPPORTING)])
-        live = {h.pattern for h in led.competing()}
+        live = {h.pattern for h in led.concurrent()}
         self.assertEqual(live, {"attack_attack", "constructive_alignment"})
 
-    def test_competing_order_is_deterministic(self):
+    def test_concurrent_order_is_deterministic(self):
         led = HypothesisLedger()
         led.observe_episode("ep1", [ev("e1", "attack_attack", EvidenceStatus.SUPPORTING),
                                     ev("e2", "repair_softening", EvidenceStatus.SUPPORTING),
                                     ev("e3", "attack_attack", EvidenceStatus.SUPPORTING)])
-        self.assertEqual([h.hypothesis_id for h in led.competing()],
-                         [h.hypothesis_id for h in led.competing()])
-        self.assertEqual(led.competing()[0].pattern, "attack_attack")
+        self.assertEqual([h.hypothesis_id for h in led.concurrent()],
+                         [h.hypothesis_id for h in led.concurrent()])
+        self.assertEqual(led.concurrent()[0].pattern, "attack_attack")
 
 
 class SegmentationTests(unittest.TestCase):
@@ -216,6 +232,14 @@ class SafetyGateTests(unittest.TestCase):
         acc = SafetyAccumulator()
         acc.add("ep1", ev("e1", "safety_relevant", EvidenceStatus.SUPPORTING))
         self.assertFalse(acc.gate_open)
+
+    def test_thresholds_are_declared_placeholders(self):
+        """Nobody should find gate_open in six months and assume a number is
+        scientific because code exists."""
+        flags = SafetyAccumulator().as_flags()["coercive_control_accumulation"]
+        self.assertEqual(flags["policy_provenance"], "synthetic_placeholder")
+        self.assertTrue(flags["thresholds_are_placeholders"])
+        self.assertGreaterEqual(SPIKE_ONLY_SAFETY_MIN_EPISODES, 2)
 
     def test_gate_needs_accumulation_across_distinct_episodes(self):
         acc = SafetyAccumulator()
@@ -296,3 +320,107 @@ class SpikeDeterminismTests(unittest.TestCase):
         self.assertGreater(pw["components"]["unobservable_slots"], 0)
         self.assertLess(pw["components"]["observation_coverage"], 1.0)
         self.assertIn("withdrawer_internal_disengagement", pw["unobserved_slots"])
+
+
+def obs(oid, label, actor, topic=None, mid=None):
+    mid = mid or f"m-{oid}"
+    return BehaviorObservation(oid, label, actor, mid, (EvidenceSpan(mid, "x"),), topic)
+
+
+class InteractionRelationTests(unittest.TestCase):
+    """L2.5 — the floor that stops L3 being a bag of labels."""
+
+    def test_responds_to_is_the_next_cross_actor_observation_only(self):
+        rels = derive_relations([obs("o1", "BLAME_CRITICISM", "a"),
+                                 obs("o2", "BLAME_CRITICISM", "a"),
+                                 obs("o3", "ON_TOPIC_REPLY", "b")])
+        responds = [(r.from_observation, r.to_observation) for r in rels
+                    if r.relation is InteractionRelation.RESPONDS_TO]
+        self.assertIn(("o2", "o3"), responds)
+        self.assertNotIn(("o1", "o2"), responds, "same actor is never a response")
+
+    def test_non_uptake_requires_a_topic_change(self):
+        same = derive_relations([obs("o1", "RAISE_TOPIC", "a", "money"),
+                                 obs("o2", "ON_TOPIC_REPLY", "b", "money")])
+        diff = derive_relations([obs("o1", "RAISE_TOPIC", "a", "money"),
+                                 obs("o2", "TOPIC_SHIFT", "b", "weather")])
+        self.assertIn(InteractionRelation.CONTINUES_TOPIC, {r.relation for r in same})
+        self.assertIn(InteractionRelation.NON_UPTAKE, {r.relation for r in diff})
+
+    def test_missing_topic_yields_no_topic_relation(self):
+        """Topic is supplied, never guessed. Without it we say nothing."""
+        rels = derive_relations([obs("o1", "RAISE_TOPIC", "a"), obs("o2", "TOPIC_SHIFT", "b")])
+        kinds = {r.relation for r in rels}
+        self.assertNotIn(InteractionRelation.NON_UPTAKE, kinds)
+        self.assertNotIn(InteractionRelation.CONTINUES_TOPIC, kinds)
+
+
+class RelationAwarePredicateTests(unittest.TestCase):
+    """Regressions for defects the previous spike shipped."""
+
+    def test_softening_nobody_answered_is_absent_not_supporting(self):
+        """Was: `if later_negative: COUNTER else: SUPPORTING`, so "I said sorry
+        and then silence" counted as a successful repair — the exact
+        silence-as-evidence inference the model refuses for WITHDRAWAL."""
+        events, _, _, _ = derive_events(
+            "ep1", [obs("o1", "BLAME_CRITICISM", "a", "t"), obs("o2", "APOLOGY", "b", "t")],
+            ("a", "b"), None)
+        repair = [e for e in events if e.event_type == "repair_softening"]
+        self.assertEqual([e.status for e in repair], [EvidenceStatus.ABSENT])
+
+    def test_softening_answered_with_uptake_supports(self):
+        events, _, _, _ = derive_events(
+            "ep1", [obs("o1", "BLAME_CRITICISM", "a", "t"), obs("o2", "APOLOGY", "b", "t"),
+                    obs("o3", "VALIDATION", "a", "t")], ("a", "b"), None)
+        repair = [e for e in events if e.event_type == "repair_softening"]
+        self.assertIn(EvidenceStatus.SUPPORTING, [e.status for e in repair])
+
+    def test_softening_answered_with_renewed_negativity_counters(self):
+        events, _, _, _ = derive_events(
+            "ep1", [obs("o1", "APOLOGY", "a", "t"), obs("o2", "BLAME_CRITICISM", "b", "t")],
+            ("a", "b"), None)
+        repair = [e for e in events if e.event_type == "repair_softening"]
+        self.assertEqual([e.status for e in repair], [EvidenceStatus.COUNTER])
+
+    def test_negatives_that_do_not_answer_each_other_are_not_attack_attack(self):
+        """Was: both actors having any NEGATIVE anywhere in the episode."""
+        events, _, _, _ = derive_events(
+            "ep1", [obs("o1", "BLAME_CRITICISM", "a", "t1"), obs("o2", "BLAME_CRITICISM", "a", "t2"),
+                    obs("o3", "ON_TOPIC_REPLY", "b", "t2")], ("a", "b"), None)
+        self.assertNotIn("attack_attack", {e.event_type for e in events})
+
+    def test_negative_answering_negative_is_attack_attack(self):
+        events, _, _, _ = derive_events(
+            "ep1", [obs("o1", "BLAME_CRITICISM", "a", "t"), obs("o2", "BLAME_CRITICISM", "b", "t")],
+            ("a", "b"), None)
+        self.assertIn("attack_attack", {e.event_type for e in events})
+
+    def test_quiet_episode_offers_no_opportunity(self):
+        _, _, opportunities, _ = derive_events(
+            "ep1", [obs("o1", "NEUTRAL_REQUEST", "a", "t"), obs("o2", "ON_TOPIC_REPLY", "b", "t")],
+            ("a", "b"), None)
+        self.assertEqual(opportunities, set())
+
+
+class MixedTransitionIsDerivedTests(unittest.TestCase):
+    def test_mixed_transition_is_not_a_hypothesis(self):
+        self.assertNotIn("mixed_transition", PATTERNS)
+
+    def test_mixed_transition_is_computed_from_live_hypotheses(self):
+        led = HypothesisLedger()
+        self.assertFalse(led.is_mixed_transition())
+        for i in range(2):
+            led.observe_episode(f"n{i}", [ev(f"a{i}", "attack_attack", EvidenceStatus.SUPPORTING,
+                                             episode=f"n{i}")], {"attack_attack"})
+        self.assertFalse(led.is_mixed_transition(), "negative alone is not mixed")
+        for i in range(2):
+            led.observe_episode(f"s{i}", [ev(f"r{i}", "repair_softening", EvidenceStatus.SUPPORTING,
+                                             episode=f"s{i}")], {"repair_softening"})
+        self.assertTrue(led.is_mixed_transition())
+
+    def test_bare_candidates_do_not_make_a_snapshot_mixed(self):
+        led = HypothesisLedger()
+        led.observe_episode("ep1", [ev("e1", "attack_attack", EvidenceStatus.SUPPORTING),
+                                    ev("e2", "repair_softening", EvidenceStatus.SUPPORTING)])
+        self.assertFalse(led.is_mixed_transition(),
+                         "two single-episode candidates are not an established mixed state")

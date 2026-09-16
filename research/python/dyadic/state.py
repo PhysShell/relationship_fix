@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from .model import (
+    ABSENT_IS_AN_OPPORTUNITY,
     ConfidenceComponents,
     EvidenceStatus,
     HypothesisStatus,
@@ -36,8 +37,15 @@ PATTERNS = (
     "withdraw_withdraw",
     "repair_softening",
     "constructive_alignment",
-    "mixed_transition",
 )
+
+# `mixed_transition` is deliberately NOT here. RESCUE-Bench needed it because a
+# single categorical state forces one label and loses the rest; we allow several
+# concurrent hypotheses instead, so keeping a mixed_transition hypothesis would
+# be abolishing the escape hatch and then housing it next door. It is a DERIVED
+# presentation property (see `is_mixed_transition`) with no ledger of its own.
+NEGATIVE_PATTERNS = ("attack_attack", "pursue_withdraw", "withdraw_withdraw")
+SOFTENING_PATTERNS = ("repair_softening", "constructive_alignment")
 
 # Slots that a text-only observer cannot fill for each pattern. Kept explicit
 # rather than discovered at runtime, so that "we did not look" is a property of
@@ -58,9 +66,14 @@ class HypothesisLedger:
 
     # --- reading -------------------------------------------------------------
 
-    def competing(self, min_status: HypothesisStatus = HypothesisStatus.CANDIDATE) -> list[StateHypothesis]:
-        """All live hypotheses, most-supported first. Ties are broken by id so the
-        ordering is deterministic and a trace can be diffed across runs."""
+    def concurrent(self, min_status: HypothesisStatus = HypothesisStatus.CANDIDATE) -> list[StateHypothesis]:
+        """All live hypotheses, most-supported first. Ties broken by id so the
+        ordering is deterministic and traces diff cleanly.
+
+        Named `concurrent`, not `competing`: `attack_attack` and `repair_softening`
+        routinely hold at once and are not rivals for one slot. Genuine rivalry is
+        a special case, not the general shape.
+        """
         order = list(HypothesisStatus)
         live = [h for h in self.hypotheses.values() if h.status is not HypothesisStatus.RETIRED]
         live = [h for h in live if order.index(h.status) >= order.index(min_status)]
@@ -68,23 +81,33 @@ class HypothesisLedger:
 
     # --- writing -------------------------------------------------------------
 
-    def observe_episode(self, episode_id: str, events: list[RelationalEvent]) -> None:
+    def observe_episode(
+        self,
+        episode_id: str,
+        events: list[RelationalEvent],
+        opportunities: set[str] | None = None,
+    ) -> None:
         """Fold one episode's events into the ledger.
 
-        Order of operations is fixed: register the episode, apply every event,
-        then re-derive status for every hypothesis — including ones this episode
-        said nothing about, because staleness is a function of elapsed observable
-        episodes, not of wall-clock time.
+        `opportunities` is the set of PATTERNS that could have shown themselves in
+        this episode. Only those age; an episode of ordinary logistics is not
+        evidence that a conflict pattern went away.
         """
         if episode_id not in self.episode_order:
             self.episode_order.append(episode_id)
 
+        opportunities = set(opportunities or ())
         for event in events:
+            if ABSENT_IS_AN_OPPORTUNITY and event.status is EvidenceStatus.ABSENT:
+                opportunities.add(event.event_type)
             self._apply(episode_id, event)
 
         for hid, h in list(self.hypotheses.items()):
+            if h.pattern in opportunities and episode_id not in h.opportunity_episodes:
+                h = replace(h, opportunity_episodes=h.opportunity_episodes + (episode_id,))
+                self.hypotheses[hid] = h
             before = h.status
-            since = self._episodes_since(h.last_supported_episode)
+            since = self._opportunities_since_support(h)
             after = derive_status(h.components, since)
             if after is not before and h.status is not HypothesisStatus.RETIRED:
                 self.hypotheses[hid] = replace(h, status=after)
@@ -93,7 +116,7 @@ class HypothesisLedger:
                     "hypothesis_id": hid,
                     "from": before.value,
                     "to": after.value,
-                    "episodes_since_support": since,
+                    "opportunities_since_support": since,
                 })
 
     def _apply(self, episode_id: str, event: RelationalEvent) -> None:
@@ -153,18 +176,46 @@ class HypothesisLedger:
 
     # --- helpers -------------------------------------------------------------
 
-    def _episodes_since(self, episode_id: str | None) -> int:
-        if episode_id is None or episode_id not in self.episode_order:
+    def _opportunities_since_support(self, h: StateHypothesis) -> int:
+        """Count episodes that WERE a chance for this pattern and came after its
+        last support. Episodes where the pattern could not have been observed are
+        not counted, so a quiet week cannot weaken a hypothesis by itself."""
+        if h.last_supported_episode is None:
             return 0
-        return len(self.episode_order) - 1 - self.episode_order.index(episode_id)
+        try:
+            cutoff = self.episode_order.index(h.last_supported_episode)
+        except ValueError:
+            return 0
+        return sum(
+            1 for ep in h.opportunity_episodes
+            if ep in self.episode_order and self.episode_order.index(ep) > cutoff
+        )
+
+    def is_mixed_transition(self) -> bool:
+        """DERIVED, not a hypothesis: an ESTABLISHED negative and an ESTABLISHED
+        softening hypothesis are both live. No ledger, no evidence of its own,
+        nothing to age.
+
+        Candidates do not count: a single unanswered softening move should not
+        make the whole snapshot 'mixed', or the property is true from episode
+        three onwards forever and says nothing.
+        """
+        live = {h.pattern for h in self.concurrent(HypothesisStatus.SUPPORTED)}
+        return bool(live & set(NEGATIVE_PATTERNS)) and bool(live & set(SOFTENING_PATTERNS))
 
 
 # --- safety accumulation -----------------------------------------------------
 
-# Deliberately higher than pattern recurrence: safety gating must not fire on a
-# single ambiguous message, and must not be reachable within one episode.
-SAFETY_MIN_EPISODES = 3
-SAFETY_MIN_EVENTS = 4
+# SPIKE-ONLY PLACEHOLDERS. These numbers are NOT a validated safety threshold and
+# were never derived from anything: they are set higher than pattern recurrence so
+# the gate cannot fire on one ambiguous message, and that is their entire
+# justification. Named this way on purpose, because in six months someone will find
+# a ready-made boolean `gate_open` and assume that code existing makes a number
+# scientific. A real threshold needs a safety review and evidence neither of which
+# exists yet.
+SPIKE_ONLY_SAFETY_MIN_EPISODES = 3
+SPIKE_ONLY_SAFETY_MIN_EVENTS = 4
+SAFETY_POLICY_PROVENANCE = "synthetic_placeholder"
 
 
 @dataclass
@@ -192,7 +243,8 @@ class SafetyAccumulator:
         Requires accumulation across distinct episodes, so no single exchange —
         however ugly — can open it.
         """
-        return len(self.episodes) >= SAFETY_MIN_EPISODES and len(self.events) >= SAFETY_MIN_EVENTS
+        return (len(self.episodes) >= SPIKE_ONLY_SAFETY_MIN_EPISODES
+                and len(self.events) >= SPIKE_ONLY_SAFETY_MIN_EVENTS)
 
     def as_flags(self) -> dict:
         return {
@@ -200,6 +252,8 @@ class SafetyAccumulator:
                 "n_events": len(self.events),
                 "n_episodes": len(self.episodes),
                 "gate_open": self.gate_open,
+                "policy_provenance": SAFETY_POLICY_PROVENANCE,
+                "thresholds_are_placeholders": True,
                 "meaning": (
                     "capability gate: when open, symmetric couples advice and joint "
                     "mediation are suppressed. NOT a determination about any person."

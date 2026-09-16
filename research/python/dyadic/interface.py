@@ -69,7 +69,7 @@ def build_context(
     ledger: HypothesisLedger,
     safety: SafetyAccumulator,
 ) -> InterventionContext:
-    live = ledger.competing()
+    live = ledger.concurrent()
     evidence: list[str] = []
     counter: list[str] = []
     coverages: list[float] = []
@@ -96,7 +96,7 @@ def build_context(
             # first step towards the score this project forbids.
             "observation_coverage_per_hypothesis": coverages,
             "unobservable_slots": sorted(unobserved),
-            "n_competing_hypotheses": len(live),
+            "n_concurrent_hypotheses": len(live),
             "has_recurring_hypothesis": any(
                 h.status is HypothesisStatus.RECURRING for h in live
             ),
@@ -114,8 +114,8 @@ def contraindications(context: InterventionContext) -> list[str]:
         out.append("safety_gate_open__symmetric_advice_suppressed")
     if not context.uncertainty["has_recurring_hypothesis"]:
         out.append("no_recurring_pattern__single_episode_is_not_a_pattern")
-    if context.uncertainty["n_competing_hypotheses"] > 1:
-        out.append("competing_hypotheses_unresolved")
+    if context.uncertainty["n_concurrent_hypotheses"] > 1:
+        out.append("concurrent_hypotheses_unresolved")
     if context.uncertainty["unobservable_slots"]:
         out.append("pattern_depends_on_unobservable_slots")
     return out

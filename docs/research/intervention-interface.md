@@ -26,7 +26,7 @@ InterventionContext
     uncertainty
         observation_coverage_per_hypothesis[]   список, НЕ среднее
         unobservable_slots[]
-        n_competing_hypotheses
+        n_concurrent_hypotheses
         has_recurring_hypothesis
     safety_flags
 ```
@@ -71,7 +71,7 @@ InterventionDecision
 ```python
 safety_gate_open__symmetric_advice_suppressed     # safety-policy §9-§10
 no_recurring_pattern__single_episode_is_not_a_pattern
-competing_hypotheses_unresolved
+concurrent_hypotheses_unresolved
 pattern_depends_on_unobservable_slots
 ```
 
@@ -82,7 +82,9 @@ pattern_depends_on_unobservable_slots
 - `no_recurring_pattern…` — паттерн из одного эпизода не паттерн (`distinct_episodes ≥ 2`);
 - `pattern_depends_on_unobservable_slots` — срабатывает всегда, когда жива гипотеза `pursue_withdraw`, потому что слот `withdrawer_internal_disengagement` объявлен ненаблюдаемым **в схеме**.
 
-> Наблюдение из спайка: на 27 эпизодах синтетического корпуса **ни одно** решение не дошло до `intervene`. Это не баг заглушки — это то, что показывает набор блокеров. **Правдоподобный вывод: реалистичная система будет воздерживаться намного чаще, чем воздерживается продуктовая интуиция.**
+> **Чего из спайка НЕ следует.** На синтетическом корпусе ни одно решение не дошло до `intervene` — но `decide()` **запрограммирован всегда воздерживаться**. Ноль вмешательств здесь является unit-тестом заглушки, а не эмпирической находкой о правильной частоте abstention. Прежняя редакция этого документа делала из нуля вывод о том, как будет вести себя реалистичная система; вывод снят.
+>
+> Что действительно можно изучать по трейсу — **какие блокеры срабатывают и на каком материале**. Частоту действий нельзя: для неё нужна политика, которой нет, и данные, которых нет.
 
 ---
 
@@ -95,11 +97,14 @@ pattern_depends_on_unobservable_slots
 | Требование | Реализация |
 |---|---|
 | §9 no forced symmetry | `pursue_withdraw` асимметричен по построению (роли в `participants`, обратное направление — **отдельная** гипотеза с отдельным id) |
+| §12 не выводить паттерн из совместной встречаемости | предикаты построены на `InteractionRelation`: требуется, чтобы ход **отвечал** ходу |
 | §10 no mediation that can amplify harm | открытый гейт → `safety_gate_open__symmetric_advice_suppressed` в contraindications |
 | §12 gating, не диагноз | вывод гейта содержит строку «**NOT a determination about any person**»; тест запрещает слово `abuser` |
 | не выводить abuse из одного сообщения | гейт требует **≥3 различных эпизодов И ≥4 событий**; шесть событий внутри одного эпизода гейт не открывают |
 
-Пороги гейта (`SAFETY_MIN_EPISODES = 3`, `SAFETY_MIN_EVENTS = 4`) выше порога повторяемости паттернов (`RECURRENCE_EPISODES = 2`) намеренно: **safety-гейт должен быть труднее достижим, чем обычная гипотеза.**
+Пороги гейта (`SPIKE_ONLY_SAFETY_MIN_EPISODES = 3`, `SPIKE_ONLY_SAFETY_MIN_EVENTS = 4`) выше порога повторяемости паттернов (`RECURRENCE_EPISODES = 2`) намеренно: safety-гейт должен быть труднее достижим, чем обычная гипотеза.
+
+> **Но это не safety threshold, и имена констант теперь об этом кричат.** Числа ниоткуда не выведены: они больше порога повторяемости, и это всё их обоснование. Вывод гейта несёт `policy_provenance: "synthetic_placeholder"` и `thresholds_are_placeholders: true`, а тест это проверяет — потому что через полгода кто-нибудь найдёт готовый boolean `gate_open` и, как положено человечеству, решит, что раз код существует, значит число научное. Настоящий порог требует safety review и доказательств, которых нет.
 
 ---
 

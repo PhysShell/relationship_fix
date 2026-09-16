@@ -84,6 +84,7 @@ class BehaviorObservation:
     actor: str
     message_id: str
     evidence: tuple[EvidenceSpan, ...] = ()
+    topic: str | None = None   # supplied, never inferred here; see InteractionRelation
 
     def __post_init__(self) -> None:
         if not self.evidence:
@@ -109,25 +110,38 @@ class RelationalEvent:
     provenance: str = "deterministic_spike"
 
 
-class EventRelation(str, Enum):
-    """How two events relate. Kept small; each must be decidable from ordering
-    plus the events' own types, never from an inferred motive."""
+class InteractionRelation(str, Enum):
+    """L2.5 — the missing floor.
 
-    FOLLOWS = "follows"
-    RESPONDS_TO = "responds_to"
-    ESCALATES = "escalates"
-    SOFTENS = "softens"
-    REPEATS = "repeats"
-    CONTRADICTS = "contradicts"
-    REPAIRS = "repairs"
-    INTERRUPTS = "interrupts"
+    An event used to be built from labels co-occurring inside one episode, which
+    made L3 a bag of labels wearing an interaction model's coat: two people being
+    negative anywhere in forty messages became `attack_attack` even if neither
+    turn answered the other. Events are now built from RELATIONS between
+    observations, so ordering and direction are load-bearing.
+
+    Every relation must be decidable from ordering, actor and the observations'
+    own recorded topic — never from an inferred motive. `topic` is supplied by the
+    corpus exactly as labels are: topic continuity is not deterministically
+    decidable from raw text, and pretending otherwise would hide a classifier
+    inside a predicate.
+    """
+
+    RESPONDS_TO = "responds_to"        # next observation by the other actor
+    CONTINUES_TOPIC = "continues_topic"  # responds_to + same topic
+    NON_UPTAKE = "non_uptake"          # responds_to + different topic, i.e. present but not engaging
+    ESCALATES = "escalates"            # responds_to + negative answering negative
+    SOFTENS = "softens"                # responds_to + softening answering negative
 
 
 @dataclass(frozen=True, slots=True)
-class EventEdge:
-    from_event: str
-    to_event: str
-    relation: EventRelation
+class RelationEdge:
+    """A directed relation between two observations. This is what an event is
+    made of; `basis` records which rule fired so a trace can be audited."""
+
+    from_observation: str
+    to_observation: str
+    relation: InteractionRelation
+    basis: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +183,7 @@ class StateHypothesis:
     evidence_for: tuple[str, ...] = ()       # event ids
     evidence_against: tuple[str, ...] = ()   # event ids
     supporting_episodes: tuple[str, ...] = ()  # ordered, deduplicated; recurrence is counted from here
+    opportunity_episodes: tuple[str, ...] = ()  # episodes where this pattern COULD have shown
     unobserved_slots: tuple[str, ...] = ()   # named slots we could not fill
     first_seen_episode: str | None = None
     last_supported_episode: str | None = None
@@ -179,20 +194,33 @@ class StateHypothesis:
 # --- status derivation -------------------------------------------------------
 
 RECURRENCE_EPISODES = 2   # a pattern claimed from one episode is not a pattern
-STALENESS_EPISODES = 3    # observable episodes without support before weakening
+STALENESS_OPPORTUNITIES = 3
+
+# Explicit methodological policy, not a side effect of episode numbering.
+# An ABSENT event means we looked inside an observable window and found nothing,
+# so that episode WAS a chance for the pattern to show and did not take it.
+# INSUFFICIENT_OBSERVATION and NOT_APPLICABLE mean we could not look at all, so
+# they must never age a hypothesis — otherwise "we did not observe" quietly
+# becomes "the pattern weakened", which is the inference this whole model exists
+# to refuse.
+ABSENT_IS_AN_OPPORTUNITY = True
 
 
-def derive_status(c: ConfidenceComponents, episodes_since_support: int) -> HypothesisStatus:
+def derive_status(c: ConfidenceComponents, opportunities_since_support: int) -> HypothesisStatus:
     """Explicit, testable rules. No model self-report anywhere.
 
     Ordering matters: counterevidence is checked before recurrence so that a
     pattern cannot 'outvote' contradicting observations by sheer repetition.
+
+    `opportunities_since_support` counts ELIGIBLE OBSERVATION OPPORTUNITIES, not
+    elapsed episodes. An episode in which the pattern could not have shown itself
+    is not evidence that it went away.
     """
     if c.support_count == 0:
         return HypothesisStatus.CANDIDATE
     if c.counter_count > c.support_count:
         return HypothesisStatus.WEAKENED
-    if episodes_since_support >= STALENESS_EPISODES:
+    if opportunities_since_support >= STALENESS_OPPORTUNITIES:
         return HypothesisStatus.WEAKENED
     if c.distinct_episodes >= RECURRENCE_EPISODES:
         return HypothesisStatus.RECURRING

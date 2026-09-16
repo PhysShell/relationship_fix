@@ -27,7 +27,9 @@ from .model import (
     BehaviorObservation,
     EvidenceSpan,
     EvidenceStatus,
+    InteractionRelation,
     RelationalEvent,
+    RelationEdge,
     content_hash,
     to_jsonable,
 )
@@ -43,12 +45,37 @@ NEGATIVE = {"BLAME_CRITICISM", "PRESSURE_FOR_CHANGE", "CONTEMPT", "DEFENSIVENESS
 SOFTENING = {"APOLOGY", "TAKING_RESPONSIBILITY", "VALIDATION", "SOFTENING"}
 ALIGNING = {"AGREEMENT", "JOINT_PLAN"}
 PURSUING = {"PRESSURE_FOR_CHANGE", "RAISE_TOPIC", "BLAME_CRITICISM"}
+UPTAKE = {"VALIDATION", "TAKING_RESPONSIBILITY", "ON_TOPIC_REPLY", "AGREEMENT", "JOINT_PLAN"}
 SAFETY_RELEVANT = {"MONITORING", "ISOLATION_PRESSURE", "THREAT", "FINANCIAL_CONTROL"}
 
-# Non-uptake WITH continued presence is observable in text; plain silence is not.
-# That distinction is the single most important thing this spike encodes.
-NON_UPTAKE_PRESENT = {"TOPIC_SHIFT", "OFF_TOPIC_MESSAGE"}
-ON_TOPIC_UPTAKE = {"VALIDATION", "TAKING_RESPONSIBILITY", "ON_TOPIC_REPLY", "AGREEMENT", "JOINT_PLAN"}
+
+def derive_relations(observations: list[BehaviorObservation]) -> list[RelationEdge]:
+    """L2 -> L2.5. Relations between adjacent cross-actor observations.
+
+    Only the NEXT observation by the other actor counts as a response. That is
+    deliberately strict: without it, "responds to" degenerates into "appears
+    later in the same episode", which is how co-occurrence sneaks back in.
+    """
+    edges: list[RelationEdge] = []
+    for i, src in enumerate(observations):
+        nxt = next((o for o in observations[i + 1:] if o.actor != src.actor), None)
+        if nxt is None:
+            continue
+        edges.append(RelationEdge(src.observation_id, nxt.observation_id,
+                                  InteractionRelation.RESPONDS_TO, "next observation by other actor"))
+        if src.topic is not None and nxt.topic is not None:
+            same = src.topic == nxt.topic
+            edges.append(RelationEdge(
+                src.observation_id, nxt.observation_id,
+                InteractionRelation.CONTINUES_TOPIC if same else InteractionRelation.NON_UPTAKE,
+                f"topic {'==' if same else '!='} ({src.topic} -> {nxt.topic})"))
+        if src.label in NEGATIVE and nxt.label in NEGATIVE:
+            edges.append(RelationEdge(src.observation_id, nxt.observation_id,
+                                      InteractionRelation.ESCALATES, "negative answered by negative"))
+        if src.label in NEGATIVE and nxt.label in SOFTENING:
+            edges.append(RelationEdge(src.observation_id, nxt.observation_id,
+                                      InteractionRelation.SOFTENS, "negative answered by softening"))
+    return edges
 
 
 def _event(eid, etype, parts, episode_id, obs, status, evidence=(), counter=()):
@@ -64,92 +91,108 @@ def derive_events(
     observations: list[BehaviorObservation],
     actors: tuple[str, ...],
     silence_after: str | None,
-) -> tuple[list[RelationalEvent], list[RelationalEvent]]:
-    """Return (pattern_events, safety_events) for one episode.
+) -> tuple[list[RelationalEvent], list[RelationalEvent], set[str], list[RelationEdge]]:
+    """L2.5 -> L3. Every predicate is a statement about RELATIONS, never about
+    labels co-occurring somewhere in the episode.
 
-    `silence_after`: the actor who stopped producing messages entirely. Handled
-    below as ABSENT, never as disengagement.
+    Returns (pattern_events, safety_events, opportunities, relations).
+    `opportunities` names the patterns that could have shown themselves here, so
+    only those may age (see model.derive_status).
     """
     events: list[RelationalEvent] = []
     safety: list[RelationalEvent] = []
+    opportunities: set[str] = set()
+    relations = derive_relations(observations)
+    by_id = {o.observation_id: o for o in observations}
     a, b = actors
-    by_actor = {actor: [o for o in observations if o.actor == actor] for actor in actors}
-    ev = lambda os: tuple(s for o in os for s in o.evidence)  # noqa: E731
+    ev = lambda os: tuple(sp for o in os for sp in o.evidence)  # noqa: E731
 
-    def labels(actor):
-        return {o.label for o in by_actor.get(actor, [])}
+    def rel(kind):
+        return [(by_id[e.from_observation], by_id[e.to_observation])
+                for e in relations if e.relation is kind]
 
-    # attack_attack: both sides produce negativity within the same episode.
-    if labels(a) & NEGATIVE and labels(b) & NEGATIVE:
-        obs = [o for o in observations if o.label in NEGATIVE]
+    labels_present = {o.label for o in observations}
+    if labels_present & NEGATIVE:
+        opportunities |= {"attack_attack", "pursue_withdraw"}
+    if labels_present & (SOFTENING | ALIGNING):
+        opportunities |= {"repair_softening", "constructive_alignment"}
+
+    # attack_attack: a negative turn ANSWERED BY a negative turn from the other
+    # side. Two people merely being negative in the same episode is not a cycle.
+    escalations = rel(InteractionRelation.ESCALATES)
+    if escalations:
+        obs = [o for pair in escalations for o in pair]
         events.append(_event(f"{episode_id}:aa", "attack_attack", actors, episode_id,
                              obs, EvidenceStatus.SUPPORTING, ev(obs)))
 
-    # pursue_withdraw: asymmetric. Only ever claimed when the withdrawing side's
-    # non-uptake is POSITIVELY observable, i.e. they kept messaging about
-    # something else. Otherwise the slot is recorded as unfilled.
+    # pursue_withdraw: repeated pursuit by one side, and the OTHER side's
+    # response to a specific pursuit is non-uptake-with-presence.
     for pursuer, other in ((a, b), (b, a)):
-        pursuit = [o for o in by_actor.get(pursuer, []) if o.label in PURSUING]
+        pursuit = [o for o in observations if o.actor == pursuer and o.label in PURSUING]
         if len(pursuit) < 2:
             continue
-        non_uptake = [o for o in by_actor.get(other, []) if o.label in NON_UPTAKE_PRESENT]
-        uptake = [o for o in by_actor.get(other, []) if o.label in ON_TOPIC_UPTAKE]
         parts = (pursuer, other)
-        if uptake:
-            # The other side engaged on topic: this argues against the pattern.
+        answered = [(src, dst) for src, dst in rel(InteractionRelation.CONTINUES_TOPIC)
+                    if src.actor == pursuer and dst.label in UPTAKE]
+        not_taken = [(src, dst) for src, dst in rel(InteractionRelation.NON_UPTAKE)
+                     if src.actor == pursuer and src.label in PURSUING]
+        if answered:
+            obs = [o for pair in answered for o in pair]
             events.append(_event(f"{episode_id}:pw-counter:{pursuer}", "pursue_withdraw", parts,
-                                 episode_id, uptake, EvidenceStatus.COUNTER, counter=ev(uptake)))
-        elif non_uptake:
-            obs = pursuit + non_uptake
+                                 episode_id, obs, EvidenceStatus.COUNTER, counter=ev(obs)))
+        elif not_taken:
+            obs = [o for pair in not_taken for o in pair]
             events.append(_event(f"{episode_id}:pw:{pursuer}", "pursue_withdraw", parts,
                                  episode_id, obs, EvidenceStatus.SUPPORTING, ev(obs)))
         elif silence_after == other:
-            # Silence. Observable absence of messages is NOT observable withdrawal:
-            # three independent coding systems define withdrawal through a
-            # nonverbal channel text does not have. Recorded as ABSENT so it
-            # lowers coverage and advances nothing.
+            # Silence: observable absence of messages is NOT observable withdrawal.
             events.append(_event(f"{episode_id}:pw-absent:{pursuer}", "pursue_withdraw", parts,
                                  episode_id, pursuit, EvidenceStatus.ABSENT))
         else:
             events.append(_event(f"{episode_id}:pw-insuff:{pursuer}", "pursue_withdraw", parts,
                                  episode_id, pursuit, EvidenceStatus.INSUFFICIENT_OBSERVATION))
 
-    # repair_softening: a softening move followed by the partner producing no
-    # further negativity in this episode. "Followed by" is positional, not
-    # interpretive.
+    # repair_softening: a softening move plus the PARTNER'S OBSERVED RESPONSE.
+    # A softening move that nobody answered is ABSENT, not support: "I said sorry
+    # and nothing bad happened afterwards" is exactly the silence-as-evidence
+    # inference this model refuses everywhere else.
     for o in observations:
         if o.label not in SOFTENING:
             continue
-        idx = observations.index(o)
-        partner = b if o.actor == a else a
-        later_negative = [x for x in observations[idx + 1:]
-                          if x.actor == partner and x.label in NEGATIVE]
-        if later_negative:
+        response = next((dst for src, dst in rel(InteractionRelation.RESPONDS_TO)
+                         if src.observation_id == o.observation_id), None)
+        if response is None:
+            events.append(_event(f"{episode_id}:rs-absent:{o.observation_id}", "repair_softening",
+                                 actors, episode_id, [o], EvidenceStatus.ABSENT))
+        elif response.label in NEGATIVE:
             events.append(_event(f"{episode_id}:rs-counter:{o.observation_id}", "repair_softening",
-                                 actors, episode_id, later_negative, EvidenceStatus.COUNTER,
-                                 counter=ev(later_negative)))
-        else:
+                                 actors, episode_id, [o, response], EvidenceStatus.COUNTER,
+                                 counter=ev([response])))
+        elif response.label in UPTAKE | SOFTENING | ALIGNING:
             events.append(_event(f"{episode_id}:rs:{o.observation_id}", "repair_softening",
-                                 actors, episode_id, [o], EvidenceStatus.SUPPORTING, ev([o])))
+                                 actors, episode_id, [o, response], EvidenceStatus.SUPPORTING,
+                                 ev([o, response])))
+        else:
+            events.append(_event(f"{episode_id}:rs-insuff:{o.observation_id}", "repair_softening",
+                                 actors, episode_id, [o, response],
+                                 EvidenceStatus.INSUFFICIENT_OBSERVATION))
 
-    # constructive_alignment: both sides produce an aligning move.
-    if labels(a) & ALIGNING and labels(b) & ALIGNING:
-        obs = [o for o in observations if o.label in ALIGNING]
+    # constructive_alignment: an aligning move ANSWERED BY an aligning move.
+    aligned = [(src, dst) for src, dst in rel(InteractionRelation.RESPONDS_TO)
+               if src.label in ALIGNING and dst.label in ALIGNING]
+    if aligned:
+        obs = [o for pair in aligned for o in pair]
         events.append(_event(f"{episode_id}:ca", "constructive_alignment", actors, episode_id,
                              obs, EvidenceStatus.SUPPORTING, ev(obs)))
 
-    # mixed_transition: both a negative and a softening signal are live at once.
-    # RESCUE-Bench needed this label too; ambiguity is a state, not a failure.
-    if any(o.label in NEGATIVE for o in observations) and any(o.label in SOFTENING for o in observations):
-        obs = [o for o in observations if o.label in NEGATIVE | SOFTENING]
-        events.append(_event(f"{episode_id}:mx", "mixed_transition", actors, episode_id,
-                             obs, EvidenceStatus.SUPPORTING, ev(obs)))
+    # NOTE: no mixed_transition event. It is derived from which hypotheses are
+    # concurrently live (state.HypothesisLedger.is_mixed_transition).
 
     for o in observations:
         if o.label in SAFETY_RELEVANT:
             safety.append(_event(f"{episode_id}:safety:{o.observation_id}", "safety_relevant",
                                  (o.actor,), episode_id, [o], EvidenceStatus.SUPPORTING, ev([o])))
-    return events, safety
+    return events, safety, opportunities, relations
 
 
 # --- runner ------------------------------------------------------------------
@@ -176,7 +219,8 @@ def run(corpus_path: Path, out_path: Path) -> dict:
                 s.validate(texts[s.message_id])
             observations.append(BehaviorObservation(
                 observation_id=o["observation_id"], label=o["label"],
-                actor=o["actor"], message_id=o["message_id"], evidence=spans))
+                actor=o["actor"], message_id=o["message_id"], evidence=spans,
+                topic=o.get("topic")))
 
         # One case is one segmentation input; episodes carry the case id so a
         # multi-episode case still folds in order.
@@ -184,9 +228,9 @@ def run(corpus_path: Path, out_path: Path) -> dict:
             member = set(ep.member_message_ids)
             ep_obs = [o for o in observations if o.message_id in member]
             ep_id = f"{case['case_id']}/{ep.episode_id}"
-            events, safety_events = derive_events(
+            events, safety_events, opportunities, relations = derive_events(
                 ep_id, ep_obs, actors, case.get("silence_after"))
-            ledger.observe_episode(ep_id, events)
+            ledger.observe_episode(ep_id, events, opportunities)
             for se in safety_events:
                 safety_acc.add(ep_id, se)
             ctx = build_context(ep_id, ledger, safety_acc)
@@ -196,7 +240,10 @@ def run(corpus_path: Path, out_path: Path) -> dict:
                 "episode_id": ep_id,
                 "timing_available": ep.timing_available,
                 "n_observations": len(ep_obs),
+                "relations": [to_jsonable(r) for r in relations],
+                "opportunities": sorted(opportunities),
                 "events": [to_jsonable(e) for e in events],
+                "snapshot_is_mixed_transition": ledger.is_mixed_transition(),  # cumulative, not per-episode
                 "context": to_jsonable(ctx),
                 "decision": to_jsonable(decide(ctx)),
             })
@@ -206,7 +253,7 @@ def run(corpus_path: Path, out_path: Path) -> dict:
         "corpus_sha256": content_hash(corpus_path.read_text(encoding="utf-8")),
         "n_cases": len({e["case_id"] for e in per_episode}),
         "n_episodes": len(per_episode),
-        "final_hypotheses": [to_jsonable(h) for h in ledger.competing()],
+        "final_hypotheses": [to_jsonable(h) for h in ledger.concurrent()],
         "all_hypotheses": [to_jsonable(h) for h in ledger.hypotheses.values()],
         "transitions": ledger.transitions,
         "safety": safety_acc.as_flags(),
