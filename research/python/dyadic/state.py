@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from .model import (
-    ABSENT_IS_AN_OPPORTUNITY,
+    OBSERVED_ABSENCE_IS_AN_OPPORTUNITY,
     ConfidenceComponents,
     EvidenceStatus,
     HypothesisStatus,
@@ -77,7 +77,7 @@ class HypothesisLedger:
         order = list(HypothesisStatus)
         live = [h for h in self.hypotheses.values() if h.status is not HypothesisStatus.RETIRED]
         live = [h for h in live if order.index(h.status) >= order.index(min_status)]
-        return sorted(live, key=lambda h: (-h.components.support_count, h.hypothesis_id))
+        return sorted(live, key=lambda h: (-h.components.observed_support, h.hypothesis_id))
 
     # --- writing -------------------------------------------------------------
 
@@ -98,7 +98,8 @@ class HypothesisLedger:
 
         opportunities = set(opportunities or ())
         for event in events:
-            if ABSENT_IS_AN_OPPORTUNITY and event.status is EvidenceStatus.ABSENT:
+            if (OBSERVED_ABSENCE_IS_AN_OPPORTUNITY
+                    and event.status is EvidenceStatus.OBSERVED_ABSENCE):
                 opportunities.add(event.event_type)
             self._apply(episode_id, event)
 
@@ -147,8 +148,7 @@ class HypothesisLedger:
                 last_supported_episode=episode_id,
                 components=replace(
                     c,
-                    support_count=c.support_count + 1,
-                    observed_slots=c.observed_slots + 1,
+                    observed_support=c.observed_support + 1,
                     distinct_episodes=len(episodes),
                 ),
             )
@@ -158,13 +158,19 @@ class HypothesisLedger:
             h = replace(
                 h,
                 evidence_against=h.evidence_against + (event.event_id,),
-                components=replace(c, counter_count=c.counter_count + 1,
-                                   observed_slots=c.observed_slots + 1),
+                components=replace(c, observed_counter=c.observed_counter + 1),
             )
-        elif event.status in (EvidenceStatus.ABSENT, EvidenceStatus.INSUFFICIENT_OBSERVATION):
-            # THE load-bearing branch. Not-observed lowers coverage; it is never
-            # written into evidence_against and never advances the hypothesis.
-            h = replace(h, components=replace(c, unobservable_slots=c.unobservable_slots + 1))
+        elif event.status is EvidenceStatus.OBSERVED_ABSENCE:
+            # We looked, the window was open, the thing was not there. That IS an
+            # observation: it keeps coverage high and counts as an opportunity.
+            # Still never written into evidence_against, still advances nothing.
+            h = replace(h, components=replace(c, observed_absence=c.observed_absence + 1))
+        elif event.status in (EvidenceStatus.RIGHT_CENSORED,
+                              EvidenceStatus.INSUFFICIENT_OBSERVATION):
+            # We could not look: the record ended, or there was no window. Lowers
+            # coverage and must NOT age the hypothesis.
+            h = replace(h, components=replace(
+                c, insufficient_observation=c.insufficient_observation + 1))
         # NOT_APPLICABLE touches nothing at all: the slot did not apply here.
 
         self.hypotheses[hid] = h

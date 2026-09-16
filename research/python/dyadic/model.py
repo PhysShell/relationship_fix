@@ -37,11 +37,21 @@ class EvidenceStatus(str, Enum):
     `underpowered_not_estimable` ("looked, too little found").
     """
 
-    SUPPORTING = "supporting"                 # observed, supports the hypothesis
-    COUNTER = "counter"                       # observed, argues against it
-    ABSENT = "absent"                         # looked for in an observable window, not found
-    INSUFFICIENT_OBSERVATION = "insufficient" # could not look (window truncated, no timestamps)
-    NOT_APPLICABLE = "not_applicable"         # slot does not apply to this unit
+    SUPPORTING = "supporting"                  # observed, supports the hypothesis
+    COUNTER = "counter"                        # observed, argues against it
+    OBSERVED_ABSENCE = "observed_absence"      # the window WAS observable and the thing was not there
+    RIGHT_CENSORED = "right_censored"          # the record ended before the outcome could appear
+    INSUFFICIENT_OBSERVATION = "insufficient"  # could not look at all (no window, no timestamps)
+    NOT_APPLICABLE = "not_applicable"          # slot does not apply to this unit
+
+    @property
+    def is_observation(self) -> bool:
+        """OBSERVED_ABSENCE is an observation. We looked, the window was open, and
+        the thing was not there. Filing it as 'unobservable' — as the first version
+        did — quietly conflated 'we checked and it did not happen' with 'we could
+        not check', which are the two things this enum exists to keep apart."""
+        return self in (EvidenceStatus.SUPPORTING, EvidenceStatus.COUNTER,
+                        EvidenceStatus.OBSERVED_ABSENCE)
 
 
 class HypothesisStatus(str, Enum):
@@ -84,7 +94,8 @@ class BehaviorObservation:
     actor: str
     message_id: str
     evidence: tuple[EvidenceSpan, ...] = ()
-    topic: str | None = None   # supplied, never inferred here; see InteractionRelation
+    # topic lives on MessageNode, not here: it is a property of what was said, not
+    # of the behaviour someone coded on top of it.
 
     def __post_init__(self) -> None:
         if not self.evidence:
@@ -107,7 +118,46 @@ class RelationalEvent:
     supporting_evidence: tuple[EvidenceSpan, ...] = ()
     counterevidence: tuple[EvidenceSpan, ...] = ()
     status: EvidenceStatus = EvidenceStatus.SUPPORTING
+    basis: str = ""            # which rule fired, so a trace can be audited
     provenance: str = "deterministic_spike"
+
+
+class MessageRelation(str, Enum):
+    """L1.5 — raw conversation topology, computed over EVERY message.
+
+    This layer exists because the previous version built interaction topology over
+    BehaviorObservations, i.e. over the subset of the conversation the ontology
+    found interesting. An unlabelled message in between vanished from the
+    topology, so a topic shift two turns later became a direct answer to an
+    accusation; and two labels on one message made the topology depend on the
+    order observations happened to be listed in. That is selection bias: recover
+    conversation structure from raw messages first, attach behaviour afterwards.
+    """
+
+    NEXT_BY_OTHER_ACTOR = "next_by_other_actor"
+    EXPLICIT_REPLY_TO = "explicit_reply_to"
+    TOPIC_CONTINUITY = "topic_continuity"
+    TOPIC_DISCONTINUITY = "topic_discontinuity"
+
+
+@dataclass(frozen=True, slots=True)
+class MessageNode:
+    """A message as conversation structure, independent of any labelling."""
+
+    message_id: str
+    actor: str
+    order: int
+    timestamp: float | None = None
+    topic: str | None = None
+    reply_to: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MessageEdge:
+    from_message: str
+    to_message: str
+    relation: MessageRelation
+    basis: str
 
 
 class InteractionRelation(str, Enum):
@@ -126,22 +176,34 @@ class InteractionRelation(str, Enum):
     inside a predicate.
     """
 
-    RESPONDS_TO = "responds_to"        # next observation by the other actor
-    CONTINUES_TOPIC = "continues_topic"  # responds_to + same topic
-    NON_UPTAKE = "non_uptake"          # responds_to + different topic, i.e. present but not engaging
-    ESCALATES = "escalates"            # responds_to + negative answering negative
-    SOFTENS = "softens"                # responds_to + softening answering negative
+    RESPONDS_TO = "responds_to"                  # grounded in MessageRelation, not in label order
+    CONTINUES_TOPIC = "continues_topic"          # responds_to + same recorded topic
+    TOPIC_DISCONTINUITY = "topic_discontinuity"  # responds_to + different recorded topic
+    ESCALATES = "escalates"                      # responds_to + negative answering negative
+    SOFTENS = "softens"                          # responds_to + softening answering negative
+
+    # NOTE: there is deliberately no NON_UPTAKE primitive any more.
+    # "Different topic" is not the same claim as "present but not engaging": a
+    # reply can accept a topic and then widen it, or answer two topics at once,
+    # and `topic` is itself a supplied annotation rather than a raw property.
+    # Calling topic difference `non_uptake` hid a psychological inference inside a
+    # supposedly deterministic predicate. Non-uptake is now something the EVENT
+    # layer must argue for, with extra observable conditions.
 
 
 @dataclass(frozen=True, slots=True)
 class RelationEdge:
-    """A directed relation between two observations. This is what an event is
-    made of; `basis` records which rule fired so a trace can be audited."""
+    """L2.5 = a MessageRelation plus the observations sitting on its endpoints.
+
+    `via_message_relation` names the topology edge that grounds this one, so no
+    interaction relation can exist without a conversation-structure fact under it.
+    """
 
     from_observation: str
     to_observation: str
     relation: InteractionRelation
     basis: str
+    via_message_relation: MessageRelation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,22 +215,28 @@ class ConfidenceComponents:
     hypothesis. That is the structural form of "absence is not counterevidence".
     """
 
-    support_count: int = 0
-    counter_count: int = 0
+    observed_support: int = 0
+    observed_counter: int = 0
+    observed_absence: int = 0
+    insufficient_observation: int = 0
     distinct_episodes: int = 0
-    unobservable_slots: int = 0
-    observed_slots: int = 0
+
+    @property
+    def observable(self) -> int:
+        """Times we actually got to look. An observed absence counts here."""
+        return self.observed_support + self.observed_counter + self.observed_absence
 
     @property
     def observation_coverage(self) -> float | None:
-        total = self.observed_slots + self.unobservable_slots
-        return round(self.observed_slots / total, 4) if total else None
+        total = self.observable + self.insufficient_observation
+        return round(self.observable / total, 4) if total else None
 
     def _derived(self) -> dict:
         # Coverage is derived, but it must survive serialisation: a trace that
         # drops it lets a reader mistake "we could not look" for "we looked and
         # found nothing", which is the exact confusion this model exists to stop.
-        return {"observation_coverage": self.observation_coverage}
+        return {"observable": self.observable,
+                "observation_coverage": self.observation_coverage}
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,13 +265,14 @@ RECURRENCE_EPISODES = 2   # a pattern claimed from one episode is not a pattern
 STALENESS_OPPORTUNITIES = 3
 
 # Explicit methodological policy, not a side effect of episode numbering.
-# An ABSENT event means we looked inside an observable window and found nothing,
+# An OBSERVED_ABSENCE means we looked inside an observable window and found nothing,
 # so that episode WAS a chance for the pattern to show and did not take it.
-# INSUFFICIENT_OBSERVATION and NOT_APPLICABLE mean we could not look at all, so
+# RIGHT_CENSORED, INSUFFICIENT_OBSERVATION and NOT_APPLICABLE mean we could not
+# look at all (the record ended, or there was no window), so
 # they must never age a hypothesis — otherwise "we did not observe" quietly
 # becomes "the pattern weakened", which is the inference this whole model exists
 # to refuse.
-ABSENT_IS_AN_OPPORTUNITY = True
+OBSERVED_ABSENCE_IS_AN_OPPORTUNITY = True
 
 
 def derive_status(c: ConfidenceComponents, opportunities_since_support: int) -> HypothesisStatus:
@@ -216,15 +285,15 @@ def derive_status(c: ConfidenceComponents, opportunities_since_support: int) -> 
     elapsed episodes. An episode in which the pattern could not have shown itself
     is not evidence that it went away.
     """
-    if c.support_count == 0:
+    if c.observed_support == 0:
         return HypothesisStatus.CANDIDATE
-    if c.counter_count > c.support_count:
+    if c.observed_counter > c.observed_support:
         return HypothesisStatus.WEAKENED
     if opportunities_since_support >= STALENESS_OPPORTUNITIES:
         return HypothesisStatus.WEAKENED
     if c.distinct_episodes >= RECURRENCE_EPISODES:
         return HypothesisStatus.RECURRING
-    if c.support_count >= 2:
+    if c.observed_support >= 2:
         return HypothesisStatus.SUPPORTED
     return HypothesisStatus.CANDIDATE
 
