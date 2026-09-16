@@ -1,0 +1,32 @@
+{
+  "schema_version": "rf.spine-task.v1",
+  "task_id": "golden-contract-label",
+  "base_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "prompt": "Какой behavior label зашит в замороженные golden-фикстуры wire-контракта, и что произойдёт с этими тестами, если его переименовать в онтологии?",
+  "seeds": [
+    "label:B.BLAME_CRITICISM"
+  ],
+  "keywords": [
+    "golden",
+    "wire",
+    "canonical serialization",
+    "B.BLAME_CRITICISM"
+  ],
+  "oracle_files": [
+    "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
+    "data/ontology/behavior-v0.1.json"
+  ],
+  "expected_touched_area": "DataContracts golden fixtures",
+  "allowed_tools": [
+    "read",
+    "grep",
+    "edit"
+  ],
+  "max_context_tokens": 8000,
+  "timeout_seconds": 900,
+  "acceptance": {
+    "kind": "hidden_tests",
+    "status": "not_authored",
+    "note": "Phase 3: скрытые acceptance-тесты пишутся вместе с agent runner'ом. Пока задача измеряет только отбор контекста."
+  }
+}

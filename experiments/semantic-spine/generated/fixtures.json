@@ -1,0 +1,159 @@
+{
+  "schema_version": "rf.semantic-spine-fixtures.v1",
+  "spec_digest": "3011af117df566875e121b2e6115bab6c7f8b8adc7654f31a3bf59396ffda223",
+  "examples": [
+    {
+      "example_id": "blame-criticism-amb-ru-01",
+      "label_id": "B.BLAME_CRITICISM",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "ambiguous",
+      "text": "Опять ты со своими шуточками…",
+      "rationale": "может быть и упрёком, и игрой — решает контекст и просодические маркеры (эмодзи, история пары)"
+    },
+    {
+      "example_id": "blame-criticism-neg-en-01",
+      "label_id": "B.BLAME_CRITICISM",
+      "language": "en",
+      "unit": "utterance",
+      "verdict": "negative",
+      "text": "I hate that we missed the bus today.",
+      "rationale": "frustration about an event, not an attribution of blame to the partner"
+    },
+    {
+      "example_id": "blame-criticism-neg-ru-01",
+      "label_id": "B.BLAME_CRITICISM",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "negative",
+      "text": "ну ты дебил 😂❤️",
+      "rationale": "формально оскорбление, но маркеры юмора и привязанности; в паре с историей playful insults это не критика — канонический confusable-случай"
+    },
+    {
+      "example_id": "blame-criticism-pos-en-01",
+      "label_id": "B.BLAME_CRITICISM",
+      "language": "en",
+      "unit": "utterance",
+      "verdict": "positive",
+      "text": "You never listen to me.",
+      "rationale": "generalizing quantifier targeting the partner"
+    },
+    {
+      "example_id": "blame-criticism-pos-ru-01",
+      "label_id": "B.BLAME_CRITICISM",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "positive",
+      "text": "Ты всегда обо всём забываешь.",
+      "rationale": "генерализующий квантор + приписывание вины"
+    },
+    {
+      "example_id": "pressure-for-change-neg-en-01",
+      "label_id": "B.PRESSURE_FOR_CHANGE",
+      "language": "en",
+      "unit": "utterance",
+      "verdict": "negative",
+      "text": "Could you grab milk on the way home?",
+      "rationale": "ordinary request, no pressure"
+    },
+    {
+      "example_id": "pressure-for-change-neg-ru-01",
+      "label_id": "B.PRESSURE_FOR_CHANGE",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "negative",
+      "text": "Можешь завтра забрать посылку?",
+      "rationale": "нейтральная разовая просьба"
+    },
+    {
+      "example_id": "pressure-for-change-pos-en-01",
+      "label_id": "B.PRESSURE_FOR_CHANGE",
+      "language": "en",
+      "unit": "utterance",
+      "verdict": "positive",
+      "text": "I need you to actually start calling when you are late. Every time.",
+      "rationale": "insistent demand for behavior change"
+    },
+    {
+      "example_id": "pressure-for-change-pos-ru-01",
+      "label_id": "B.PRESSURE_FOR_CHANGE",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "positive",
+      "text": "Сколько можно повторять — убери за собой, я серьёзно.",
+      "rationale": "повторное требование с нажимом"
+    },
+    {
+      "example_id": "repair-attempt-neg-en-01",
+      "label_id": "B.REPAIR_ATTEMPT",
+      "language": "en",
+      "unit": "utterance",
+      "verdict": "negative",
+      "text": "Fine. Whatever you say.",
+      "rationale": "capitulation/withdrawal marker, not repair"
+    },
+    {
+      "example_id": "repair-attempt-neg-ru-01",
+      "label_id": "B.REPAIR_ATTEMPT",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "negative",
+      "text": "Извини конечно, но это ты всё начала.",
+      "rationale": "форма извинения, содержание — контратака"
+    },
+    {
+      "example_id": "repair-attempt-pos-en-01",
+      "label_id": "B.REPAIR_ATTEMPT",
+      "language": "en",
+      "unit": "utterance",
+      "verdict": "positive",
+      "text": "I'm sorry, that came out wrong — let me try again.",
+      "rationale": "apology + restart offer"
+    },
+    {
+      "example_id": "repair-attempt-pos-ru-01",
+      "label_id": "B.REPAIR_ATTEMPT",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "positive",
+      "text": "Прости, я правда затупил. Давай сначала?",
+      "rationale": "извинение + предложение перезапуска"
+    },
+    {
+      "example_id": "validation-neg-en-01",
+      "label_id": "B.VALIDATION",
+      "language": "en",
+      "unit": "utterance",
+      "verdict": "negative",
+      "text": "Ok noted.",
+      "rationale": "acknowledgement of information, not of experience"
+    },
+    {
+      "example_id": "validation-neg-ru-01",
+      "label_id": "B.VALIDATION",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "negative",
+      "text": "Понятно.",
+      "rationale": "формальный маркер без признания переживания"
+    },
+    {
+      "example_id": "validation-pos-en-01",
+      "label_id": "B.VALIDATION",
+      "language": "en",
+      "unit": "utterance",
+      "verdict": "positive",
+      "text": "I get why that hurt — it makes sense you were upset.",
+      "rationale": "explicit acknowledgement of the partner's emotion"
+    },
+    {
+      "example_id": "validation-pos-ru-01",
+      "label_id": "B.VALIDATION",
+      "language": "ru",
+      "unit": "utterance",
+      "verdict": "positive",
+      "text": "Понимаю, звучит обидно, я бы тоже разозлилась.",
+      "rationale": "признание эмоции + нормализация"
+    }
+  ]
+}

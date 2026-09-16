@@ -1,0 +1,33 @@
+{
+  "schema_version": "rf.spine-task.v1",
+  "task_id": "pressure-missing-implementation",
+  "base_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "prompt": "Rule-stub аннотатор назначает три label'а из четырёх активных. Выясни, какой label он не умеет назначать вообще, и объясни, что именно сломается в vertical slice из-за этой дыры.",
+  "seeds": [
+    "label:B.PRESSURE_FOR_CHANGE"
+  ],
+  "keywords": [
+    "B.PRESSURE_FOR_CHANGE",
+    "RuleStubAnnotator",
+    "pressure for change",
+    "keyword"
+  ],
+  "oracle_files": [
+    "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs",
+    "data/ontology/behavior-v0.1.json",
+    "src/annotation-web/src/Domain.hs"
+  ],
+  "expected_touched_area": "Evaluation slice annotator",
+  "allowed_tools": [
+    "read",
+    "grep",
+    "edit"
+  ],
+  "max_context_tokens": 8000,
+  "timeout_seconds": 900,
+  "acceptance": {
+    "kind": "hidden_tests",
+    "status": "not_authored",
+    "note": "Phase 3: скрытые acceptance-тесты пишутся вместе с agent runner'ом. Пока задача измеряет только отбор контекста."
+  }
+}

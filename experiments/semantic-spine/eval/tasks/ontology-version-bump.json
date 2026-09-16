@@ -1,0 +1,33 @@
+{
+  "schema_version": "rf.spine-task.v1",
+  "task_id": "ontology-version-bump",
+  "base_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "prompt": "behavior-v0.2-candidate объявляет себя преемником behavior-v0.1. Что обязано произойти, прежде чем пилот начнёт гоняться на v0.2, и что именно сейчас удерживает пилот на v0.1?",
+  "seeds": [
+    "ontology:behavior-v0.2-candidate"
+  ],
+  "keywords": [
+    "behavior-v0.2-candidate",
+    "supersedes",
+    "ontology_sha256",
+    "pilot-manifest"
+  ],
+  "oracle_files": [
+    "data/ontology/behavior-v0.2-candidate.json",
+    "data/ontology/behavior-v0.1.json",
+    "data/pilot/v0.1/pilot-manifest.json"
+  ],
+  "expected_touched_area": "ontology artifacts + pilot manifest",
+  "allowed_tools": [
+    "read",
+    "grep",
+    "edit"
+  ],
+  "max_context_tokens": 8000,
+  "timeout_seconds": 900,
+  "acceptance": {
+    "kind": "hidden_tests",
+    "status": "not_authored",
+    "note": "Phase 3: скрытые acceptance-тесты пишутся вместе с agent runner'ом. Пока задача измеряет только отбор контекста."
+  }
+}

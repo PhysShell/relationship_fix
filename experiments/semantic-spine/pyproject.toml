@@ -1,0 +1,9 @@
+[project]
+name = "rf-semantic-spine"
+version = "0.1.0"
+description = "Изолированный research harness: literate spec -> typed graph -> fail-closed verifier -> selective context. Не source of truth, не часть продукта."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false

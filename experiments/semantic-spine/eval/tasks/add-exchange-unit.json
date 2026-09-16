@@ -1,0 +1,34 @@
+{
+  "schema_version": "rf.spine-task.v1",
+  "task_id": "add-exchange-unit",
+  "base_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "prompt": "Добавь 'exchange' в allowed_units для B.REPAIR_ATTEMPT. Перечисли всё, что обязано поменяться вместе с этим, включая проверки, которые обязаны упасть, если поменять только JSON.",
+  "seeds": [
+    "label:B.REPAIR_ATTEMPT",
+    "unit:exchange"
+  ],
+  "keywords": [
+    "allowed_units",
+    "exchange",
+    "UnitOfAnalysis",
+    "B.REPAIR_ATTEMPT"
+  ],
+  "oracle_files": [
+    "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs",
+    "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
+    "data/ontology/behavior-v0.1.json"
+  ],
+  "expected_touched_area": "Domain smart enum + ontology validator",
+  "allowed_tools": [
+    "read",
+    "grep",
+    "edit"
+  ],
+  "max_context_tokens": 8000,
+  "timeout_seconds": 900,
+  "acceptance": {
+    "kind": "hidden_tests",
+    "status": "not_authored",
+    "note": "Phase 3: скрытые acceptance-тесты пишутся вместе с agent runner'ом. Пока задача измеряет только отбор контекста."
+  }
+}

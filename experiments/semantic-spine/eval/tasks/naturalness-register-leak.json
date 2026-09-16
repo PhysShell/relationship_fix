@@ -1,0 +1,35 @@
+{
+  "schema_version": "rf.spine-task.v1",
+  "task_id": "naturalness-register-leak",
+  "base_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "prompt": "Критик утверждает, что stimulus-корпус звучит как терапевтическая методичка, и что регистр унаследован из самой онтологии. Найди основание этого утверждения и назови, какие именно label'ы названы источником.",
+  "seeds": [
+    "label:B.VALIDATION",
+    "label:B.PRESSURE_FOR_CHANGE"
+  ],
+  "keywords": [
+    "naturalness",
+    "регистр",
+    "unnatural",
+    "stimulus",
+    "rubric"
+  ],
+  "oracle_files": [
+    "docs/research/dialogue-naturalness-gate.md",
+    "data/ontology/behavior-v0.1.json",
+    "docs/item-authoring-v0.1.md"
+  ],
+  "expected_touched_area": "naturalness gate + ontology examples",
+  "allowed_tools": [
+    "read",
+    "grep",
+    "edit"
+  ],
+  "max_context_tokens": 8000,
+  "timeout_seconds": 900,
+  "acceptance": {
+    "kind": "hidden_tests",
+    "status": "not_authored",
+    "note": "Phase 3: скрытые acceptance-тесты пишутся вместе с agent runner'ом. Пока задача измеряет только отбор контекста."
+  }
+}

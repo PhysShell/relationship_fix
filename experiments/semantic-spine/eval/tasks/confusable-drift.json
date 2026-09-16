@@ -1,0 +1,34 @@
+{
+  "schema_version": "rf.spine-task.v1",
+  "task_id": "confusable-drift",
+  "base_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "prompt": "B.VALIDATION начал путаться с B.REPAIR_ATTEMPT: разметчики расходятся именно на этой паре. Ужесточи границу между конструктами так, чтобы решение было воспроизводимо, и не трогай сами definitions без явного основания.",
+  "seeds": [
+    "label:B.VALIDATION"
+  ],
+  "keywords": [
+    "B.VALIDATION",
+    "B.REPAIR_ATTEMPT",
+    "confusable_with",
+    "validation",
+    "repair attempt"
+  ],
+  "oracle_files": [
+    "data/ontology/behavior-v0.1.json",
+    "docs/annotation-protocol-v0.md",
+    "docs/research/dialogue-naturalness-gate.md"
+  ],
+  "expected_touched_area": "ontology label definitions + annotation protocol",
+  "allowed_tools": [
+    "read",
+    "grep",
+    "edit"
+  ],
+  "max_context_tokens": 8000,
+  "timeout_seconds": 900,
+  "acceptance": {
+    "kind": "hidden_tests",
+    "status": "not_authored",
+    "note": "Phase 3: скрытые acceptance-тесты пишутся вместе с agent runner'ом. Пока задача измеряет только отбор контекста."
+  }
+}

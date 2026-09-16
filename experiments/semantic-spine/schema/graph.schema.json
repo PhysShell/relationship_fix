@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "rf.semantic-spine-graph.v1",
+  "description": "generated/graph.json — сущности и типизированные рёбра с обратными ссылками в исходник.",
+  "definitions": {
+    "source": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["file", "line_start", "line_end"],
+      "properties": {
+        "file": { "type": "string" },
+        "line_start": { "type": "integer" },
+        "line_end": { "type": "integer" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "spec_digest", "spec_files", "entities", "edges"],
+  "properties": {
+    "schema_version": { "const": "rf.semantic-spine-graph.v1" },
+    "spec_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "spec_files": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "entities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "source", "attributes"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z]+:" },
+          "kind": { "type": "string", "enum": ["label", "example", "unit", "doc", "code", "test", "data", "ontology", "generated"] },
+          "source": { "$ref": "#/definitions/source" },
+          "attributes": { "type": "object" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "relation", "to", "attributes", "source"],
+        "properties": {
+          "from": { "type": "string", "pattern": "^[a-z]+:" },
+          "relation": { "type": "string", "enum": ["confusable_with", "implements", "specified_by", "tested_by", "evidenced_by", "depends_on", "supersedes", "generated_from", "exemplifies", "materialized_in"] },
+          "to": { "type": "string", "pattern": "^[a-z]+:" },
+          "attributes": { "type": "object" },
+          "source": { "$ref": "#/definitions/source" }
+        }
+      }
+    }
+  }
+}

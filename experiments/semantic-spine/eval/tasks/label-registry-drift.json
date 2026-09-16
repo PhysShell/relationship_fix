@@ -1,0 +1,33 @@
+{
+  "schema_version": "rf.spine-task.v1",
+  "task_id": "label-registry-drift",
+  "base_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "prompt": "Что сломается в инструменте разметки, если в онтологию добавить новый behavior label, но больше ничего не тронуть?",
+  "seeds": [
+    "label:B.REPAIR_ATTEMPT"
+  ],
+  "keywords": [
+    "labelCode",
+    "parseBehaviorLabel",
+    "activeLabels",
+    "BehaviorLabel"
+  ],
+  "oracle_files": [
+    "src/annotation-web/src/Domain.hs",
+    "src/annotation-web/test/PilotSpec.hs",
+    "data/ontology/behavior-v0.1.json"
+  ],
+  "expected_touched_area": "annotation-web domain + pilot spec",
+  "allowed_tools": [
+    "read",
+    "grep",
+    "edit"
+  ],
+  "max_context_tokens": 8000,
+  "timeout_seconds": 900,
+  "acceptance": {
+    "kind": "hidden_tests",
+    "status": "not_authored",
+    "note": "Phase 3: скрытые acceptance-тесты пишутся вместе с agent runner'ом. Пока задача измеряет только отбор контекста."
+  }
+}

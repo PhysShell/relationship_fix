@@ -1,0 +1,32 @@
+{
+  "schema_version": "rf.spine-task.v1",
+  "task_id": "evidence-required-enforcement",
+  "base_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "prompt": "Где именно enforced требование evidence span для label'ов с evidence_required, и что произойдёт, если разметчик отдаст assigned без спана?",
+  "seeds": [
+    "label:B.BLAME_CRITICISM"
+  ],
+  "keywords": [
+    "evidence_required",
+    "EvidenceSpan",
+    "assigned",
+    "abstained"
+  ],
+  "oracle_files": [
+    "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
+    "docs/annotation-protocol-v0.md"
+  ],
+  "expected_touched_area": "ontology validator + protocol §3",
+  "allowed_tools": [
+    "read",
+    "grep",
+    "edit"
+  ],
+  "max_context_tokens": 8000,
+  "timeout_seconds": 900,
+  "acceptance": {
+    "kind": "hidden_tests",
+    "status": "not_authored",
+    "note": "Phase 3: скрытые acceptance-тесты пишутся вместе с agent runner'ом. Пока задача измеряет только отбор контекста."
+  }
+}

@@ -112,6 +112,11 @@ data/pilot/naturalness-ab/        blinded human A/B по 13 flagged items: candi
                                   per-rater пакеты, scoring
 data/pilot/naturalness-audit/     слепой аудит всех 46 items: стерильный Pass A, Pass B после заморозки,
                                   critic-1 triage (facilitator-only); contamination-ledger.json рядом
+experiments/semantic-spine/       изолированный research harness (не source of truth, не часть продукта):
+                                  literate spec 4 label'ов → типизированный граф → fail-closed verifier
+                                  (16 проверок, 19 мутаций) → selective context; доказанное равенство
+                                  compile(spec) == behavior-v0.1 subset и измеренный отбор контекста
+                                  против raw/docs/lexical/symbol-graph/oracle baseline'ов
 research/python/                  uv-проект (stdlib-only): agreement (α, CI, positive agreement, confusion pairs,
                                   estimability, unnatural_example × disagreement), validate_items (+ lineage
                                   rf.pilot-item.v2), presentation, naturalness_ab, naturalness_audit, materialize (build/verify/

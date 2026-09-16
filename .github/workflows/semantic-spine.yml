@@ -1,0 +1,90 @@
+name: semantic-spine
+
+# Экспериментальный harness (experiments/semantic-spine). Он не участвует в
+# сборке продукта и ничего не деплоит, но у него есть право падать, и это его
+# основная работа.
+#
+# Триггеры шире самого каталога намеренно. Spine объявляет рёбра в настоящие
+# файлы репозитория: заголовок протокола, символ в C#/Haskell, хэш замороженного
+# пилотного артефакта. Если такой файл переименовали, а ребро осталось — ссылка
+# умерла, и узнать об этом должен CI, а не будущий агент, который прочитает
+# оборванную ссылку и уверенно соврёт.
+#
+# Красный job на «безобидной» правке документации — это НЕ ложное срабатывание.
+# Он называет ровно ту ссылку, которая перестала разрешаться. Лечится либо
+# правкой ссылки в spec/, либо удалением ребра, если связь действительно умерла.
+on:
+  push:
+    paths:
+      - 'experiments/semantic-spine/**'
+      - 'data/ontology/**'
+      - 'data/pilot/v0.1/**'
+      - 'docs/annotation-protocol-v0.md'
+      - 'docs/item-authoring-v0.1.md'
+      - 'docs/research/dialogue-naturalness-gate.md'
+      - 'src/RelationshipFix.Domain/Ontology/**'
+      - 'src/RelationshipFix.Evaluation/Ontology/**'
+      - 'src/RelationshipFix.Evaluation/Slice/**'
+      - 'src/annotation-web/src/Domain.hs'
+      - 'src/annotation-web/test/PilotSpec.hs'
+      - 'tests/RelationshipFix.DataContracts.Tests/**'
+      - '.github/workflows/semantic-spine.yml'
+  pull_request:
+    paths:
+      - 'experiments/semantic-spine/**'
+      - 'data/ontology/**'
+      - 'data/pilot/v0.1/**'
+      - 'docs/annotation-protocol-v0.md'
+      - 'docs/item-authoring-v0.1.md'
+      - 'docs/research/dialogue-naturalness-gate.md'
+      - 'src/RelationshipFix.Domain/Ontology/**'
+      - 'src/RelationshipFix.Evaluation/Ontology/**'
+      - 'src/RelationshipFix.Evaluation/Slice/**'
+      - 'src/annotation-web/src/Domain.hs'
+      - 'src/annotation-web/test/PilotSpec.hs'
+      - 'tests/RelationshipFix.DataContracts.Tests/**'
+      - '.github/workflows/semantic-spine.yml'
+
+jobs:
+  semantic-spine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: experiments/semantic-spine
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      # Сгенерированные артефакты закоммичены. Если они разошлись со spec,
+      # значит кто-то правил JSON руками или забыл перекомпилировать.
+      - name: Generated artifacts are current
+        run: uv run --no-project python -m spine compile --check
+
+      # Fail-closed проверки против настоящего репозитория.
+      - name: Verify the spine
+        run: uv run --no-project python -m spine verify
+
+      # Пока spec не source of truth, единственное, что делает эксперимент
+      # осмысленным, — доказуемое равенство с production-онтологией.
+      - name: compile(spec) == behavior-v0.1 subset
+        run: uv run --no-project python -m spine equivalence
+
+      # Включая мутационный набор: каждая проверка обязана кусаться.
+      - name: Harness tests
+        run: uv run --no-project python -m unittest discover -t . -s tests -v
+
+      # Снимок чисел обновляется, но в CI защищаются не цифры, а выводы:
+      # raw/docs/lexical читают весь репозиторий, поэтому числа поедут от любого
+      # нового файла. Ordering-утверждения README живут в tests/test_claims.py и
+      # уже прогнаны шагом выше; здесь только проверяем, что снимок пересчитывается.
+      - name: Selection results recompute
+        run: |
+          uv run --no-project python eval/score.py --budget 4000 --out /tmp/s4000.json
+          uv run --no-project python eval/score.py --budget 8000 --out /tmp/s8000.json

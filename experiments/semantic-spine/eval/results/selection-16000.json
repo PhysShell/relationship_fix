@@ -1,0 +1,1339 @@
+{
+  "schema_version": "rf.spine-selection-result.v1",
+  "budget_tokens": 16000,
+  "fill_policy": "prefix",
+  "repo_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+  "token_counter": "spine.budget.approx_tokens (deterministic proxy, not a BPE tokenizer)",
+  "note": "Selection only. No agent was run; resolved/tests_passed are not measured here.",
+  "summary": [
+    {
+      "strategy": "semantic-spine",
+      "tasks": 8,
+      "mean_localization_recall": 0.9167,
+      "mean_context_precision": 0.0655,
+      "mean_context_tokens": 15788.1,
+      "tasks_with_full_recall": 6
+    },
+    {
+      "strategy": "semantic-spine/-rationale",
+      "tasks": 8,
+      "mean_localization_recall": 0.9167,
+      "mean_context_precision": 0.0655,
+      "mean_context_tokens": 15785.4,
+      "tasks_with_full_recall": 6
+    },
+    {
+      "strategy": "semantic-spine/-typed-edges",
+      "tasks": 8,
+      "mean_localization_recall": 0.875,
+      "mean_context_precision": 0.0592,
+      "mean_context_tokens": 15848.8,
+      "tasks_with_full_recall": 5
+    },
+    {
+      "strategy": "oracle",
+      "tasks": 8,
+      "mean_localization_recall": 0.8333,
+      "mean_context_precision": 1.0,
+      "mean_context_tokens": 8755.1,
+      "tasks_with_full_recall": 5
+    },
+    {
+      "strategy": "raw+oracle-file-list",
+      "tasks": 8,
+      "mean_localization_recall": 0.8333,
+      "mean_context_precision": 0.6579,
+      "mean_context_tokens": 14013.4,
+      "tasks_with_full_recall": 5
+    },
+    {
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "tasks": 8,
+      "mean_localization_recall": 0.8333,
+      "mean_context_precision": 0.1226,
+      "mean_context_tokens": 7098.5,
+      "tasks_with_full_recall": 4
+    },
+    {
+      "strategy": "lexical",
+      "tasks": 8,
+      "mean_localization_recall": 0.6458,
+      "mean_context_precision": 0.1395,
+      "mean_context_tokens": 15348.8,
+      "tasks_with_full_recall": 2
+    },
+    {
+      "strategy": "symbol-graph",
+      "tasks": 8,
+      "mean_localization_recall": 0.4583,
+      "mean_context_precision": 0.13,
+      "mean_context_tokens": 13811.1,
+      "tasks_with_full_recall": 2
+    },
+    {
+      "strategy": "docs",
+      "tasks": 8,
+      "mean_localization_recall": 0.0,
+      "mean_context_precision": 0.0,
+      "mean_context_tokens": 14070.0,
+      "tasks_with_full_recall": 0
+    },
+    {
+      "strategy": "raw",
+      "tasks": 8,
+      "mean_localization_recall": 0.0,
+      "mean_context_precision": 0.0,
+      "mean_context_tokens": 12453.0,
+      "tasks_with_full_recall": 0
+    }
+  ],
+  "rows": [
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "raw",
+      "budget_tokens": 16000,
+      "context_tokens": 12453,
+      "chunks": 19,
+      "files": 19,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs",
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "docs",
+      "budget_tokens": 16000,
+      "context_tokens": 14070,
+      "chunks": 5,
+      "files": 5,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs",
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "lexical",
+      "budget_tokens": 16000,
+      "context_tokens": 15667,
+      "chunks": 21,
+      "files": 16,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.1697,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "symbol-graph",
+      "budget_tokens": 16000,
+      "context_tokens": 15520,
+      "chunks": 16,
+      "files": 16,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0981,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs"
+      ]
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "semantic-spine",
+      "budget_tokens": 16000,
+      "context_tokens": 15575,
+      "chunks": 21,
+      "files": 12,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0539,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs"
+      ]
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "semantic-spine/-rationale",
+      "budget_tokens": 16000,
+      "context_tokens": 15925,
+      "chunks": 22,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0527,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs"
+      ]
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "semantic-spine/-typed-edges",
+      "budget_tokens": 16000,
+      "context_tokens": 15976,
+      "chunks": 22,
+      "files": 14,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0525,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs"
+      ]
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "budget_tokens": 16000,
+      "context_tokens": 6857,
+      "chunks": 15,
+      "files": 10,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.1224,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs"
+      ]
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "raw+oracle-file-list",
+      "budget_tokens": 16000,
+      "context_tokens": 15956,
+      "chunks": 10,
+      "files": 10,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.325,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "oracle",
+      "budget_tokens": 16000,
+      "context_tokens": 5186,
+      "chunks": 3,
+      "files": 3,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 1.0,
+      "truncated": false,
+      "missed": []
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "raw",
+      "budget_tokens": 16000,
+      "context_tokens": 12453,
+      "chunks": 19,
+      "files": 19,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json",
+        "docs/annotation-protocol-v0.md",
+        "docs/research/dialogue-naturalness-gate.md"
+      ]
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "docs",
+      "budget_tokens": 16000,
+      "context_tokens": 14070,
+      "chunks": 5,
+      "files": 5,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json",
+        "docs/annotation-protocol-v0.md",
+        "docs/research/dialogue-naturalness-gate.md"
+      ]
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "lexical",
+      "budget_tokens": 16000,
+      "context_tokens": 15701,
+      "chunks": 19,
+      "files": 16,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.123,
+      "truncated": true,
+      "missed": [
+        "docs/research/dialogue-naturalness-gate.md"
+      ]
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "symbol-graph",
+      "budget_tokens": 16000,
+      "context_tokens": 14190,
+      "chunks": 8,
+      "files": 8,
+      "oracle_total": 3,
+      "oracle_found": 1,
+      "localization_recall": 0.3333,
+      "context_precision": 0.0985,
+      "truncated": true,
+      "missed": [
+        "docs/annotation-protocol-v0.md",
+        "docs/research/dialogue-naturalness-gate.md"
+      ]
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "semantic-spine",
+      "budget_tokens": 16000,
+      "context_tokens": 15832,
+      "chunks": 21,
+      "files": 12,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0857,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "semantic-spine/-rationale",
+      "budget_tokens": 16000,
+      "context_tokens": 15925,
+      "chunks": 22,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0852,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "semantic-spine/-typed-edges",
+      "budget_tokens": 16000,
+      "context_tokens": 15948,
+      "chunks": 18,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0851,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "budget_tokens": 16000,
+      "context_tokens": 7113,
+      "chunks": 15,
+      "files": 10,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.1908,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "raw+oracle-file-list",
+      "budget_tokens": 16000,
+      "context_tokens": 6658,
+      "chunks": 2,
+      "files": 2,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 1.0,
+      "truncated": true,
+      "missed": [
+        "docs/research/dialogue-naturalness-gate.md"
+      ]
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "oracle",
+      "budget_tokens": 16000,
+      "context_tokens": 6658,
+      "chunks": 2,
+      "files": 2,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 1.0,
+      "truncated": true,
+      "missed": [
+        "docs/research/dialogue-naturalness-gate.md"
+      ]
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "raw",
+      "budget_tokens": 16000,
+      "context_tokens": 12453,
+      "chunks": 19,
+      "files": 19,
+      "oracle_total": 2,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
+        "docs/annotation-protocol-v0.md"
+      ]
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "docs",
+      "budget_tokens": 16000,
+      "context_tokens": 14070,
+      "chunks": 5,
+      "files": 5,
+      "oracle_total": 2,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
+        "docs/annotation-protocol-v0.md"
+      ]
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "lexical",
+      "budget_tokens": 16000,
+      "context_tokens": 15609,
+      "chunks": 24,
+      "files": 18,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.1869,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "symbol-graph",
+      "budget_tokens": 16000,
+      "context_tokens": 14023,
+      "chunks": 14,
+      "files": 14,
+      "oracle_total": 2,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
+        "docs/annotation-protocol-v0.md"
+      ]
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "semantic-spine",
+      "budget_tokens": 16000,
+      "context_tokens": 15955,
+      "chunks": 22,
+      "files": 12,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.0978,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "semantic-spine/-rationale",
+      "budget_tokens": 16000,
+      "context_tokens": 15755,
+      "chunks": 22,
+      "files": 12,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.0991,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "semantic-spine/-typed-edges",
+      "budget_tokens": 16000,
+      "context_tokens": 15809,
+      "chunks": 18,
+      "files": 12,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.0987,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "budget_tokens": 16000,
+      "context_tokens": 7230,
+      "chunks": 16,
+      "files": 10,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.2159,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "raw+oracle-file-list",
+      "budget_tokens": 16000,
+      "context_tokens": 15712,
+      "chunks": 20,
+      "files": 20,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.2525,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "oracle",
+      "budget_tokens": 16000,
+      "context_tokens": 3967,
+      "chunks": 2,
+      "files": 2,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 1.0,
+      "truncated": false,
+      "missed": []
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "raw",
+      "budget_tokens": 16000,
+      "context_tokens": 12453,
+      "chunks": 19,
+      "files": 19,
+      "oracle_total": 2,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "docs",
+      "budget_tokens": 16000,
+      "context_tokens": 14070,
+      "chunks": 5,
+      "files": 5,
+      "oracle_total": 2,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "lexical",
+      "budget_tokens": 16000,
+      "context_tokens": 15519,
+      "chunks": 18,
+      "files": 13,
+      "oracle_total": 2,
+      "oracle_found": 1,
+      "localization_recall": 0.5,
+      "context_precision": 0.0312,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "symbol-graph",
+      "budget_tokens": 16000,
+      "context_tokens": 15020,
+      "chunks": 8,
+      "files": 8,
+      "oracle_total": 2,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "semantic-spine",
+      "budget_tokens": 16000,
+      "context_tokens": 15955,
+      "chunks": 22,
+      "files": 12,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.0347,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "semantic-spine/-rationale",
+      "budget_tokens": 16000,
+      "context_tokens": 15755,
+      "chunks": 22,
+      "files": 12,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.0351,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "semantic-spine/-typed-edges",
+      "budget_tokens": 16000,
+      "context_tokens": 15809,
+      "chunks": 18,
+      "files": 12,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.035,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "budget_tokens": 16000,
+      "context_tokens": 7230,
+      "chunks": 16,
+      "files": 10,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.0765,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "raw+oracle-file-list",
+      "budget_tokens": 16000,
+      "context_tokens": 13671,
+      "chunks": 7,
+      "files": 7,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 0.5233,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "oracle",
+      "budget_tokens": 16000,
+      "context_tokens": 7154,
+      "chunks": 2,
+      "files": 2,
+      "oracle_total": 2,
+      "oracle_found": 2,
+      "localization_recall": 1.0,
+      "context_precision": 1.0,
+      "truncated": false,
+      "missed": []
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "raw",
+      "budget_tokens": 16000,
+      "context_tokens": 12453,
+      "chunks": 19,
+      "files": 19,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/annotation-web/src/Domain.hs",
+        "src/annotation-web/test/PilotSpec.hs",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "docs",
+      "budget_tokens": 16000,
+      "context_tokens": 14070,
+      "chunks": 5,
+      "files": 5,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/annotation-web/src/Domain.hs",
+        "src/annotation-web/test/PilotSpec.hs",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "lexical",
+      "budget_tokens": 16000,
+      "context_tokens": 13150,
+      "chunks": 14,
+      "files": 10,
+      "oracle_total": 3,
+      "oracle_found": 1,
+      "localization_recall": 0.3333,
+      "context_precision": 0.0822,
+      "truncated": true,
+      "missed": [
+        "src/annotation-web/test/PilotSpec.hs",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "symbol-graph",
+      "budget_tokens": 16000,
+      "context_tokens": 12395,
+      "chunks": 14,
+      "files": 14,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.2123,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "semantic-spine",
+      "budget_tokens": 16000,
+      "context_tokens": 15575,
+      "chunks": 21,
+      "files": 12,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0831,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "semantic-spine/-rationale",
+      "budget_tokens": 16000,
+      "context_tokens": 15925,
+      "chunks": 22,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0813,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "semantic-spine/-typed-edges",
+      "budget_tokens": 16000,
+      "context_tokens": 15976,
+      "chunks": 22,
+      "files": 14,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.081,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "budget_tokens": 16000,
+      "context_tokens": 6857,
+      "chunks": 15,
+      "files": 10,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.1887,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "raw+oracle-file-list",
+      "budget_tokens": 16000,
+      "context_tokens": 14817,
+      "chunks": 2,
+      "files": 2,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 1.0,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "oracle",
+      "budget_tokens": 16000,
+      "context_tokens": 14817,
+      "chunks": 2,
+      "files": 2,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 1.0,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "raw",
+      "budget_tokens": 16000,
+      "context_tokens": 12453,
+      "chunks": 19,
+      "files": 19,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "docs/research/dialogue-naturalness-gate.md",
+        "data/ontology/behavior-v0.1.json",
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "docs",
+      "budget_tokens": 16000,
+      "context_tokens": 14070,
+      "chunks": 5,
+      "files": 5,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "docs/research/dialogue-naturalness-gate.md",
+        "data/ontology/behavior-v0.1.json",
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "lexical",
+      "budget_tokens": 16000,
+      "context_tokens": 15967,
+      "chunks": 14,
+      "files": 10,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.3886,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "symbol-graph",
+      "budget_tokens": 16000,
+      "context_tokens": 8650,
+      "chunks": 4,
+      "files": 4,
+      "oracle_total": 3,
+      "oracle_found": 1,
+      "localization_recall": 0.3333,
+      "context_precision": 0.3289,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json",
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "semantic-spine",
+      "budget_tokens": 16000,
+      "context_tokens": 15873,
+      "chunks": 18,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0352,
+      "truncated": true,
+      "missed": [
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "semantic-spine/-rationale",
+      "budget_tokens": 16000,
+      "context_tokens": 15802,
+      "chunks": 18,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0353,
+      "truncated": true,
+      "missed": [
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "semantic-spine/-typed-edges",
+      "budget_tokens": 16000,
+      "context_tokens": 15981,
+      "chunks": 21,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0349,
+      "truncated": true,
+      "missed": [
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "budget_tokens": 16000,
+      "context_tokens": 7294,
+      "chunks": 16,
+      "files": 11,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0765,
+      "truncated": true,
+      "missed": [
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "raw+oracle-file-list",
+      "budget_tokens": 16000,
+      "context_tokens": 14137,
+      "chunks": 1,
+      "files": 1,
+      "oracle_total": 3,
+      "oracle_found": 1,
+      "localization_recall": 0.3333,
+      "context_precision": 1.0,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json",
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "oracle",
+      "budget_tokens": 16000,
+      "context_tokens": 14137,
+      "chunks": 1,
+      "files": 1,
+      "oracle_total": 3,
+      "oracle_found": 1,
+      "localization_recall": 0.3333,
+      "context_precision": 1.0,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json",
+        "docs/item-authoring-v0.1.md"
+      ]
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "raw",
+      "budget_tokens": 16000,
+      "context_tokens": 12453,
+      "chunks": 19,
+      "files": 19,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.2-candidate.json",
+        "data/ontology/behavior-v0.1.json",
+        "data/pilot/v0.1/pilot-manifest.json"
+      ]
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "docs",
+      "budget_tokens": 16000,
+      "context_tokens": 14070,
+      "chunks": 5,
+      "files": 5,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.2-candidate.json",
+        "data/ontology/behavior-v0.1.json",
+        "data/pilot/v0.1/pilot-manifest.json"
+      ]
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "lexical",
+      "budget_tokens": 16000,
+      "context_tokens": 15733,
+      "chunks": 23,
+      "files": 14,
+      "oracle_total": 3,
+      "oracle_found": 1,
+      "localization_recall": 0.3333,
+      "context_precision": 0.0351,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.2-candidate.json",
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "symbol-graph",
+      "budget_tokens": 16000,
+      "context_tokens": 14841,
+      "chunks": 12,
+      "files": 12,
+      "oracle_total": 3,
+      "oracle_found": 1,
+      "localization_recall": 0.3333,
+      "context_precision": 0.0776,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json",
+        "data/pilot/v0.1/pilot-manifest.json"
+      ]
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "semantic-spine",
+      "budget_tokens": 16000,
+      "context_tokens": 15580,
+      "chunks": 20,
+      "files": 14,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0553,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "semantic-spine/-rationale",
+      "budget_tokens": 16000,
+      "context_tokens": 15436,
+      "chunks": 20,
+      "files": 14,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0558,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "semantic-spine/-typed-edges",
+      "budget_tokens": 16000,
+      "context_tokens": 15907,
+      "chunks": 20,
+      "files": 14,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0542,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "budget_tokens": 16000,
+      "context_tokens": 7804,
+      "chunks": 19,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0319,
+      "truncated": true,
+      "missed": [
+        "data/pilot/v0.1/pilot-manifest.json"
+      ]
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "raw+oracle-file-list",
+      "budget_tokens": 16000,
+      "context_tokens": 15981,
+      "chunks": 8,
+      "files": 8,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.5922,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "oracle",
+      "budget_tokens": 16000,
+      "context_tokens": 9464,
+      "chunks": 3,
+      "files": 3,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 1.0,
+      "truncated": false,
+      "missed": []
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "raw",
+      "budget_tokens": 16000,
+      "context_tokens": 12453,
+      "chunks": 19,
+      "files": 19,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs",
+        "data/ontology/behavior-v0.1.json",
+        "src/annotation-web/src/Domain.hs"
+      ]
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "docs",
+      "budget_tokens": 16000,
+      "context_tokens": 14070,
+      "chunks": 5,
+      "files": 5,
+      "oracle_total": 3,
+      "oracle_found": 0,
+      "localization_recall": 0.0,
+      "context_precision": 0.0,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs",
+        "data/ontology/behavior-v0.1.json",
+        "src/annotation-web/src/Domain.hs"
+      ]
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "lexical",
+      "budget_tokens": 16000,
+      "context_tokens": 15444,
+      "chunks": 18,
+      "files": 15,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0991,
+      "truncated": true,
+      "missed": [
+        "data/ontology/behavior-v0.1.json"
+      ]
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "symbol-graph",
+      "budget_tokens": 16000,
+      "context_tokens": 15850,
+      "chunks": 15,
+      "files": 15,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.225,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "semantic-spine",
+      "budget_tokens": 16000,
+      "context_tokens": 15960,
+      "chunks": 22,
+      "files": 12,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0784,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "semantic-spine/-rationale",
+      "budget_tokens": 16000,
+      "context_tokens": 15760,
+      "chunks": 22,
+      "files": 12,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.0794,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "semantic-spine/-typed-edges",
+      "budget_tokens": 16000,
+      "context_tokens": 15384,
+      "chunks": 18,
+      "files": 13,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0325,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs"
+      ]
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "semantic-spine/+irrelevant-docs",
+      "budget_tokens": 16000,
+      "context_tokens": 6403,
+      "chunks": 14,
+      "files": 9,
+      "oracle_total": 3,
+      "oracle_found": 2,
+      "localization_recall": 0.6667,
+      "context_precision": 0.0781,
+      "truncated": true,
+      "missed": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs"
+      ]
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "raw+oracle-file-list",
+      "budget_tokens": 16000,
+      "context_tokens": 15175,
+      "chunks": 8,
+      "files": 8,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 0.5705,
+      "truncated": true,
+      "missed": []
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "oracle",
+      "budget_tokens": 16000,
+      "context_tokens": 8658,
+      "chunks": 3,
+      "files": 3,
+      "oracle_total": 3,
+      "oracle_found": 3,
+      "localization_recall": 1.0,
+      "context_precision": 1.0,
+      "truncated": false,
+      "missed": []
+    }
+  ]
+}

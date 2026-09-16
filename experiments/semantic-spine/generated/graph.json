@@ -1,0 +1,1362 @@
+{
+  "schema_version": "rf.semantic-spine-graph.v1",
+  "spec_digest": "3011af117df566875e121b2e6115bab6c7f8b8adc7654f31a3bf59396ffda223",
+  "spec_files": [
+    "spec/B.BLAME_CRITICISM.md",
+    "spec/B.PRESSURE_FOR_CHANGE.md",
+    "spec/B.REPAIR_ATTEMPT.md",
+    "spec/B.VALIDATION.md",
+    "spec/_ontology-versions.md"
+  ],
+  "entities": [
+    {
+      "id": "example:blame-criticism-amb-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 75,
+        "line_end": 82
+      },
+      "attributes": {
+        "id": "blame-criticism-amb-ru-01",
+        "language": "ru",
+        "text": "Опять ты со своими шуточками…",
+        "unit": "utterance",
+        "verdict": "ambiguous",
+        "rationale": "может быть и упрёком, и игрой — решает контекст и просодические маркеры (эмодзи, история пары)"
+      }
+    },
+    {
+      "id": "example:blame-criticism-neg-en-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 66,
+        "line_end": 73
+      },
+      "attributes": {
+        "id": "blame-criticism-neg-en-01",
+        "language": "en",
+        "text": "I hate that we missed the bus today.",
+        "unit": "utterance",
+        "verdict": "negative",
+        "rationale": "frustration about an event, not an attribution of blame to the partner"
+      }
+    },
+    {
+      "id": "example:blame-criticism-neg-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 48,
+        "line_end": 55
+      },
+      "attributes": {
+        "id": "blame-criticism-neg-ru-01",
+        "language": "ru",
+        "text": "ну ты дебил 😂❤️",
+        "unit": "utterance",
+        "verdict": "negative",
+        "rationale": "формально оскорбление, но маркеры юмора и привязанности; в паре с историей playful insults это не критика — канонический confusable-случай"
+      }
+    },
+    {
+      "id": "example:blame-criticism-pos-en-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 57,
+        "line_end": 64
+      },
+      "attributes": {
+        "id": "blame-criticism-pos-en-01",
+        "language": "en",
+        "text": "You never listen to me.",
+        "unit": "utterance",
+        "verdict": "positive",
+        "rationale": "generalizing quantifier targeting the partner"
+      }
+    },
+    {
+      "id": "example:blame-criticism-pos-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 39,
+        "line_end": 46
+      },
+      "attributes": {
+        "id": "blame-criticism-pos-ru-01",
+        "language": "ru",
+        "text": "Ты всегда обо всём забываешь.",
+        "unit": "utterance",
+        "verdict": "positive",
+        "rationale": "генерализующий квантор + приписывание вины"
+      }
+    },
+    {
+      "id": "example:pressure-for-change-neg-en-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 64,
+        "line_end": 71
+      },
+      "attributes": {
+        "id": "pressure-for-change-neg-en-01",
+        "language": "en",
+        "text": "Could you grab milk on the way home?",
+        "unit": "utterance",
+        "verdict": "negative",
+        "rationale": "ordinary request, no pressure"
+      }
+    },
+    {
+      "id": "example:pressure-for-change-neg-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 46,
+        "line_end": 53
+      },
+      "attributes": {
+        "id": "pressure-for-change-neg-ru-01",
+        "language": "ru",
+        "text": "Можешь завтра забрать посылку?",
+        "unit": "utterance",
+        "verdict": "negative",
+        "rationale": "нейтральная разовая просьба"
+      }
+    },
+    {
+      "id": "example:pressure-for-change-pos-en-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 55,
+        "line_end": 62
+      },
+      "attributes": {
+        "id": "pressure-for-change-pos-en-01",
+        "language": "en",
+        "text": "I need you to actually start calling when you are late. Every time.",
+        "unit": "utterance",
+        "verdict": "positive",
+        "rationale": "insistent demand for behavior change"
+      }
+    },
+    {
+      "id": "example:pressure-for-change-pos-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 37,
+        "line_end": 44
+      },
+      "attributes": {
+        "id": "pressure-for-change-pos-ru-01",
+        "language": "ru",
+        "text": "Сколько можно повторять — убери за собой, я серьёзно.",
+        "unit": "utterance",
+        "verdict": "positive",
+        "rationale": "повторное требование с нажимом"
+      }
+    },
+    {
+      "id": "example:repair-attempt-neg-en-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 64,
+        "line_end": 71
+      },
+      "attributes": {
+        "id": "repair-attempt-neg-en-01",
+        "language": "en",
+        "text": "Fine. Whatever you say.",
+        "unit": "utterance",
+        "verdict": "negative",
+        "rationale": "capitulation/withdrawal marker, not repair"
+      }
+    },
+    {
+      "id": "example:repair-attempt-neg-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 46,
+        "line_end": 53
+      },
+      "attributes": {
+        "id": "repair-attempt-neg-ru-01",
+        "language": "ru",
+        "text": "Извини конечно, но это ты всё начала.",
+        "unit": "utterance",
+        "verdict": "negative",
+        "rationale": "форма извинения, содержание — контратака"
+      }
+    },
+    {
+      "id": "example:repair-attempt-pos-en-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 55,
+        "line_end": 62
+      },
+      "attributes": {
+        "id": "repair-attempt-pos-en-01",
+        "language": "en",
+        "text": "I'm sorry, that came out wrong — let me try again.",
+        "unit": "utterance",
+        "verdict": "positive",
+        "rationale": "apology + restart offer"
+      }
+    },
+    {
+      "id": "example:repair-attempt-pos-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 37,
+        "line_end": 44
+      },
+      "attributes": {
+        "id": "repair-attempt-pos-ru-01",
+        "language": "ru",
+        "text": "Прости, я правда затупил. Давай сначала?",
+        "unit": "utterance",
+        "verdict": "positive",
+        "rationale": "извинение + предложение перезапуска"
+      }
+    },
+    {
+      "id": "example:validation-neg-en-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 65,
+        "line_end": 72
+      },
+      "attributes": {
+        "id": "validation-neg-en-01",
+        "language": "en",
+        "text": "Ok noted.",
+        "unit": "utterance",
+        "verdict": "negative",
+        "rationale": "acknowledgement of information, not of experience"
+      }
+    },
+    {
+      "id": "example:validation-neg-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 47,
+        "line_end": 54
+      },
+      "attributes": {
+        "id": "validation-neg-ru-01",
+        "language": "ru",
+        "text": "Понятно.",
+        "unit": "utterance",
+        "verdict": "negative",
+        "rationale": "формальный маркер без признания переживания"
+      }
+    },
+    {
+      "id": "example:validation-pos-en-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 56,
+        "line_end": 63
+      },
+      "attributes": {
+        "id": "validation-pos-en-01",
+        "language": "en",
+        "text": "I get why that hurt — it makes sense you were upset.",
+        "unit": "utterance",
+        "verdict": "positive",
+        "rationale": "explicit acknowledgement of the partner's emotion"
+      }
+    },
+    {
+      "id": "example:validation-pos-ru-01",
+      "kind": "example",
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 38,
+        "line_end": 45
+      },
+      "attributes": {
+        "id": "validation-pos-ru-01",
+        "language": "ru",
+        "text": "Понимаю, звучит обидно, я бы тоже разозлилась.",
+        "unit": "utterance",
+        "verdict": "positive",
+        "rationale": "признание эмоции + нормализация"
+      }
+    },
+    {
+      "id": "generated:experiments/semantic-spine/generated/ontology.json",
+      "kind": "generated",
+      "source": {
+        "file": "spine/compiler.py",
+        "line_start": 0,
+        "line_end": 0
+      },
+      "attributes": {
+        "spec_digest": "3011af117df566875e121b2e6115bab6c7f8b8adc7654f31a3bf59396ffda223"
+      }
+    },
+    {
+      "id": "label:B.BLAME_CRITICISM",
+      "kind": "label",
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 3,
+        "line_end": 19
+      },
+      "attributes": {
+        "id": "B.BLAME_CRITICISM",
+        "canonical_name": "Blame / criticism",
+        "plain_language_name_en": "Blaming or criticizing the partner",
+        "plain_language_name_ru": "Обвинение или критика партнёра",
+        "operational_definition": "Высказывание приписывает партнёру вину или негативно характеризует его личность/паттерн поведения в целом (генерализация), а не описывает конкретный эпизод и его эффект. Маркеры: генерализующие кванторы (всегда/никогда), оценка личности вместо поведения, сарказм с враждебной окраской.",
+        "allowed_units": [
+          "utterance",
+          "turn"
+        ],
+        "directionality": "other_directed",
+        "inclusion_criteria": [
+          "генерализация поведения партнёра (всегда/никогда/опять ты)",
+          "негативная характеристика личности, а не конкретного действия",
+          "приписывание вины за состояние/событие"
+        ],
+        "exclusion_criteria": [
+          "жалоба на конкретный эпизод без генерализации (это может быть B.PRESSURE_FOR_CHANGE или ничего)",
+          "игровое оскорбление с явными маркерами юмора/привязанности в контексте пары",
+          "самокритика"
+        ],
+        "confusable_with": [
+          "B.PRESSURE_FOR_CHANGE"
+        ],
+        "evidence_required": true,
+        "source_frameworks": [
+          "CIRS (blame)",
+          "SPAFF (criticism)"
+        ],
+        "status": "draft"
+      }
+    },
+    {
+      "id": "label:B.PRESSURE_FOR_CHANGE",
+      "kind": "label",
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 3,
+        "line_end": 18
+      },
+      "attributes": {
+        "id": "B.PRESSURE_FOR_CHANGE",
+        "canonical_name": "Pressure for change",
+        "plain_language_name_en": "Pressuring the partner to change",
+        "plain_language_name_ru": "Давление с требованием измениться",
+        "operational_definition": "Высказывание требует, настаивает или повторно добивается изменения поведения партнёра (просьба с нажимом, ультиматум, повторение требования), без негативной характеристики личности.",
+        "allowed_units": [
+          "utterance",
+          "turn"
+        ],
+        "directionality": "other_directed",
+        "inclusion_criteria": [
+          "явное требование/настаивание на изменении поведения",
+          "повторение просьбы с эскалацией нажима",
+          "условия/ультиматумы"
+        ],
+        "exclusion_criteria": [
+          "однократная нейтральная просьба без нажима",
+          "критика личности без требования (это B.BLAME_CRITICISM)"
+        ],
+        "confusable_with": [
+          "B.BLAME_CRITICISM"
+        ],
+        "evidence_required": true,
+        "source_frameworks": [
+          "CIRS (pressure for change)"
+        ],
+        "status": "draft"
+      }
+    },
+    {
+      "id": "label:B.REPAIR_ATTEMPT",
+      "kind": "label",
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 3,
+        "line_end": 18
+      },
+      "attributes": {
+        "id": "B.REPAIR_ATTEMPT",
+        "canonical_name": "Repair attempt",
+        "plain_language_name_en": "Attempt to de-escalate / repair",
+        "plain_language_name_ru": "Попытка снизить накал / починить контакт",
+        "operational_definition": "Действие, направленное на прекращение негативной петли: извинение, принятие части ответственности, юмор-разрядка, явное предложение перезапустить разговор. Успешность repair — свойство ПЕРЕХОДА (T.*), не этого label: здесь кодируется только попытка.",
+        "allowed_units": [
+          "utterance",
+          "turn"
+        ],
+        "directionality": "interaction_directed",
+        "inclusion_criteria": [
+          "извинение или принятие части ответственности",
+          "явное предложение остановиться/начать заново",
+          "разряжающий юмор, адресованный напряжению (не партнёру)"
+        ],
+        "exclusion_criteria": [
+          "«извини, но…» с немедленной контратакой",
+          "уступка под давлением без признания ('ладно, как скажешь')"
+        ],
+        "confusable_with": [
+          "B.VALIDATION"
+        ],
+        "evidence_required": true,
+        "source_frameworks": [
+          "Gottman/Driver (repair attempts)"
+        ],
+        "status": "draft"
+      }
+    },
+    {
+      "id": "label:B.VALIDATION",
+      "kind": "label",
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 3,
+        "line_end": 19
+      },
+      "attributes": {
+        "id": "B.VALIDATION",
+        "canonical_name": "Validation",
+        "plain_language_name_en": "Acknowledging the partner's experience",
+        "plain_language_name_ru": "Признание переживания партнёра",
+        "operational_definition": "Высказывание явно признаёт переживание/точку зрения партнёра как понятную или значимую (не обязательно соглашаясь с выводами). Маркеры: называние эмоции партнёра, «понимаю/вижу/слышу», подтверждение права на реакцию.",
+        "allowed_units": [
+          "utterance",
+          "turn"
+        ],
+        "directionality": "other_directed",
+        "inclusion_criteria": [
+          "явное признание эмоции или позиции партнёра",
+          "перефразирование переживания партнёра без обесценивания"
+        ],
+        "exclusion_criteria": [
+          "формальное «понятно» без содержания признания",
+          "согласие с фактом без отклика на переживание",
+          "сарказм («ну конечно, тебе виднее»)"
+        ],
+        "confusable_with": [
+          "B.REPAIR_ATTEMPT"
+        ],
+        "evidence_required": true,
+        "source_frameworks": [
+          "ESConv (affirmation/reflection)",
+          "BOLT (reflection)"
+        ],
+        "status": "draft"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "code:src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+      "relation": "implements",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {
+        "note": "структурные инварианты label'а проверяются здесь"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 117,
+        "line_end": 121
+      }
+    },
+    {
+      "from": "code:src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+      "relation": "implements",
+      "to": "label:B.PRESSURE_FOR_CHANGE",
+      "attributes": {
+        "note": "структурные инварианты label'а проверяются здесь"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 106,
+        "line_end": 110
+      }
+    },
+    {
+      "from": "code:src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+      "relation": "implements",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {
+        "note": "структурные инварианты label'а проверяются здесь"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 106,
+        "line_end": 110
+      }
+    },
+    {
+      "from": "code:src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+      "relation": "implements",
+      "to": "label:B.VALIDATION",
+      "attributes": {
+        "note": "структурные инварианты label'а проверяются здесь"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 107,
+        "line_end": 111
+      }
+    },
+    {
+      "from": "code:src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#RuleStubAnnotator",
+      "relation": "implements",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {
+        "note": "keyword-стаб покрывает всегда/никогда/always/never"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 129,
+        "line_end": 133
+      }
+    },
+    {
+      "from": "code:src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#RuleStubAnnotator",
+      "relation": "implements",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {
+        "note": "keyword-стаб покрывает прости/извини/sorry"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 118,
+        "line_end": 122
+      }
+    },
+    {
+      "from": "code:src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#RuleStubAnnotator",
+      "relation": "implements",
+      "to": "label:B.VALIDATION",
+      "attributes": {
+        "note": "keyword-стаб покрывает понимаю/understand"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 119,
+        "line_end": 123
+      }
+    },
+    {
+      "from": "code:src/annotation-web/src/Domain.hs#labelCode",
+      "relation": "implements",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {
+        "note": "инструмент разметки знает этот label как закрытый конструктор"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 111,
+        "line_end": 115
+      }
+    },
+    {
+      "from": "code:src/annotation-web/src/Domain.hs#labelCode",
+      "relation": "implements",
+      "to": "label:B.PRESSURE_FOR_CHANGE",
+      "attributes": {
+        "note": "инструмент разметки знает этот label как закрытый конструктор"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 100,
+        "line_end": 104
+      }
+    },
+    {
+      "from": "code:src/annotation-web/src/Domain.hs#labelCode",
+      "relation": "implements",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {
+        "note": "инструмент разметки знает этот label как закрытый конструктор"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 100,
+        "line_end": 104
+      }
+    },
+    {
+      "from": "code:src/annotation-web/src/Domain.hs#labelCode",
+      "relation": "implements",
+      "to": "label:B.VALIDATION",
+      "attributes": {
+        "note": "инструмент разметки знает этот label как закрытый конструктор"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 101,
+        "line_end": 105
+      }
+    },
+    {
+      "from": "example:blame-criticism-amb-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 75,
+        "line_end": 82
+      }
+    },
+    {
+      "from": "example:blame-criticism-neg-en-01",
+      "relation": "exemplifies",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 66,
+        "line_end": 73
+      }
+    },
+    {
+      "from": "example:blame-criticism-neg-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 48,
+        "line_end": 55
+      }
+    },
+    {
+      "from": "example:blame-criticism-pos-en-01",
+      "relation": "exemplifies",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 57,
+        "line_end": 64
+      }
+    },
+    {
+      "from": "example:blame-criticism-pos-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 39,
+        "line_end": 46
+      }
+    },
+    {
+      "from": "example:pressure-for-change-neg-en-01",
+      "relation": "exemplifies",
+      "to": "label:B.PRESSURE_FOR_CHANGE",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 64,
+        "line_end": 71
+      }
+    },
+    {
+      "from": "example:pressure-for-change-neg-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.PRESSURE_FOR_CHANGE",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 46,
+        "line_end": 53
+      }
+    },
+    {
+      "from": "example:pressure-for-change-pos-en-01",
+      "relation": "exemplifies",
+      "to": "label:B.PRESSURE_FOR_CHANGE",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 55,
+        "line_end": 62
+      }
+    },
+    {
+      "from": "example:pressure-for-change-pos-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.PRESSURE_FOR_CHANGE",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 37,
+        "line_end": 44
+      }
+    },
+    {
+      "from": "example:repair-attempt-neg-en-01",
+      "relation": "exemplifies",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 64,
+        "line_end": 71
+      }
+    },
+    {
+      "from": "example:repair-attempt-neg-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 46,
+        "line_end": 53
+      }
+    },
+    {
+      "from": "example:repair-attempt-pos-en-01",
+      "relation": "exemplifies",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 55,
+        "line_end": 62
+      }
+    },
+    {
+      "from": "example:repair-attempt-pos-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 37,
+        "line_end": 44
+      }
+    },
+    {
+      "from": "example:validation-neg-en-01",
+      "relation": "exemplifies",
+      "to": "label:B.VALIDATION",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 65,
+        "line_end": 72
+      }
+    },
+    {
+      "from": "example:validation-neg-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.VALIDATION",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 47,
+        "line_end": 54
+      }
+    },
+    {
+      "from": "example:validation-pos-en-01",
+      "relation": "exemplifies",
+      "to": "label:B.VALIDATION",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 56,
+        "line_end": 63
+      }
+    },
+    {
+      "from": "example:validation-pos-ru-01",
+      "relation": "exemplifies",
+      "to": "label:B.VALIDATION",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 38,
+        "line_end": 45
+      }
+    },
+    {
+      "from": "generated:experiments/semantic-spine/generated/ontology.json",
+      "relation": "generated_from",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {},
+      "source": {
+        "file": "spine/compiler.py",
+        "line_start": 0,
+        "line_end": 0
+      }
+    },
+    {
+      "from": "generated:experiments/semantic-spine/generated/ontology.json",
+      "relation": "generated_from",
+      "to": "label:B.PRESSURE_FOR_CHANGE",
+      "attributes": {},
+      "source": {
+        "file": "spine/compiler.py",
+        "line_start": 0,
+        "line_end": 0
+      }
+    },
+    {
+      "from": "generated:experiments/semantic-spine/generated/ontology.json",
+      "relation": "generated_from",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {},
+      "source": {
+        "file": "spine/compiler.py",
+        "line_start": 0,
+        "line_end": 0
+      }
+    },
+    {
+      "from": "generated:experiments/semantic-spine/generated/ontology.json",
+      "relation": "generated_from",
+      "to": "label:B.VALIDATION",
+      "attributes": {},
+      "source": {
+        "file": "spine/compiler.py",
+        "line_start": 0,
+        "line_end": 0
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "confusable_with",
+      "to": "label:B.PRESSURE_FOR_CHANGE",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 3,
+        "line_end": 19
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "depends_on",
+      "to": "unit:turn",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 3,
+        "line_end": 19
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "depends_on",
+      "to": "unit:utterance",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 3,
+        "line_end": 19
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "evidenced_by",
+      "to": "data:data/pilot/v0.1/items.jsonl",
+      "attributes": {
+        "sha256": "c100db894cef93cdc7b9dd69860dc805e1acdeabf7b8a58fd6dd9a651d8271d9",
+        "note": "40 items пилота v0.1; хэш ловит подмену evidence после заморозки"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 141,
+        "line_end": 146
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "evidenced_by",
+      "to": "data:data/pilot/v0.1/pilot-manifest.json",
+      "attributes": {
+        "sha256": "e5d5754ca8ef48feb6b0b453fc45c3548dafe322dc5465160840f8e2efb20222",
+        "note": "манифест пилота объявляет этот label активным и пинит хэш онтологии"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 92,
+        "line_end": 97
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "materialized_in",
+      "to": "ontology:behavior-v0.1",
+      "attributes": {
+        "note": "сегодня label живёт здесь; spec — эксперимент, не source of truth"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 86,
+        "line_end": 90
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "specified_by",
+      "to": "doc:docs/annotation-protocol-v0.md#2. Единицы, цели и контекст",
+      "attributes": {
+        "note": "единица и контекстное окно фиксированы протоколом, не автором label'а"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 99,
+        "line_end": 103
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "specified_by",
+      "to": "doc:docs/annotation-protocol-v0.md#3. Решения разметчика",
+      "attributes": {
+        "note": "assigned/none_observed/abstained и требование evidence span"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 105,
+        "line_end": 109
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "tested_by",
+      "to": "test:src/annotation-web/test/PilotSpec.hs#activeLabels",
+      "attributes": {
+        "note": "активный набор пилота v0.1 закреплён тестом"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 123,
+        "line_end": 127
+      }
+    },
+    {
+      "from": "label:B.BLAME_CRITICISM",
+      "relation": "tested_by",
+      "to": "test:tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
+      "attributes": {
+        "note": "замороженные байты wire-контракта используют именно этот label"
+      },
+      "source": {
+        "file": "spec/B.BLAME_CRITICISM.md",
+        "line_start": 135,
+        "line_end": 139
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "confusable_with",
+      "to": "label:B.BLAME_CRITICISM",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 3,
+        "line_end": 18
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "depends_on",
+      "to": "unit:turn",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 3,
+        "line_end": 18
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "depends_on",
+      "to": "unit:utterance",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 3,
+        "line_end": 18
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "evidenced_by",
+      "to": "data:data/pilot/v0.1/items.jsonl",
+      "attributes": {
+        "sha256": "c100db894cef93cdc7b9dd69860dc805e1acdeabf7b8a58fd6dd9a651d8271d9",
+        "note": "40 items пилота v0.1; хэш ловит подмену evidence после заморозки"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 124,
+        "line_end": 129
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "evidenced_by",
+      "to": "data:data/pilot/v0.1/pilot-manifest.json",
+      "attributes": {
+        "sha256": "e5d5754ca8ef48feb6b0b453fc45c3548dafe322dc5465160840f8e2efb20222",
+        "note": "манифест пилота объявляет этот label активным и пинит хэш онтологии"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 81,
+        "line_end": 86
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "materialized_in",
+      "to": "ontology:behavior-v0.1",
+      "attributes": {
+        "note": "сегодня label живёт здесь; spec — эксперимент, не source of truth"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 75,
+        "line_end": 79
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "specified_by",
+      "to": "doc:docs/annotation-protocol-v0.md#2. Единицы, цели и контекст",
+      "attributes": {
+        "note": "единица и контекстное окно фиксированы протоколом, не автором label'а"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 88,
+        "line_end": 92
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "specified_by",
+      "to": "doc:docs/annotation-protocol-v0.md#3. Решения разметчика",
+      "attributes": {
+        "note": "assigned/none_observed/abstained и требование evidence span"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 94,
+        "line_end": 98
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "specified_by",
+      "to": "doc:docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+      "attributes": {
+        "note": "EN-пример этого label'а назван источником терапевтического регистра корпуса"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 118,
+        "line_end": 122
+      }
+    },
+    {
+      "from": "label:B.PRESSURE_FOR_CHANGE",
+      "relation": "tested_by",
+      "to": "test:src/annotation-web/test/PilotSpec.hs#activeLabels",
+      "attributes": {
+        "note": "активный набор пилота v0.1 закреплён тестом"
+      },
+      "source": {
+        "file": "spec/B.PRESSURE_FOR_CHANGE.md",
+        "line_start": 112,
+        "line_end": 116
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "confusable_with",
+      "to": "label:B.VALIDATION",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 3,
+        "line_end": 18
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "depends_on",
+      "to": "unit:turn",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 3,
+        "line_end": 18
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "depends_on",
+      "to": "unit:utterance",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 3,
+        "line_end": 18
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "evidenced_by",
+      "to": "data:data/pilot/v0.1/items.jsonl",
+      "attributes": {
+        "sha256": "c100db894cef93cdc7b9dd69860dc805e1acdeabf7b8a58fd6dd9a651d8271d9",
+        "note": "40 items пилота v0.1; хэш ловит подмену evidence после заморозки"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 130,
+        "line_end": 135
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "evidenced_by",
+      "to": "data:data/pilot/v0.1/pilot-manifest.json",
+      "attributes": {
+        "sha256": "e5d5754ca8ef48feb6b0b453fc45c3548dafe322dc5465160840f8e2efb20222",
+        "note": "манифест пилота объявляет этот label активным и пинит хэш онтологии"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 81,
+        "line_end": 86
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "materialized_in",
+      "to": "ontology:behavior-v0.1",
+      "attributes": {
+        "note": "сегодня label живёт здесь; spec — эксперимент, не source of truth"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 75,
+        "line_end": 79
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "specified_by",
+      "to": "doc:docs/annotation-protocol-v0.md#2. Единицы, цели и контекст",
+      "attributes": {
+        "note": "единица и контекстное окно фиксированы протоколом, не автором label'а"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 88,
+        "line_end": 92
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "specified_by",
+      "to": "doc:docs/annotation-protocol-v0.md#3. Решения разметчика",
+      "attributes": {
+        "note": "assigned/none_observed/abstained и требование evidence span"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 94,
+        "line_end": 98
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "specified_by",
+      "to": "doc:docs/item-authoring-v0.1.md#Главное правило",
+      "attributes": {
+        "note": "item проверяет construct, а не формулировку — критично для confusable-пары"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 124,
+        "line_end": 128
+      }
+    },
+    {
+      "from": "label:B.REPAIR_ATTEMPT",
+      "relation": "tested_by",
+      "to": "test:src/annotation-web/test/PilotSpec.hs#activeLabels",
+      "attributes": {
+        "note": "активный набор пилота v0.1 закреплён тестом"
+      },
+      "source": {
+        "file": "spec/B.REPAIR_ATTEMPT.md",
+        "line_start": 112,
+        "line_end": 116
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "confusable_with",
+      "to": "label:B.REPAIR_ATTEMPT",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 3,
+        "line_end": 19
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "depends_on",
+      "to": "unit:turn",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 3,
+        "line_end": 19
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "depends_on",
+      "to": "unit:utterance",
+      "attributes": {},
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 3,
+        "line_end": 19
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "evidenced_by",
+      "to": "data:data/pilot/v0.1/items.jsonl",
+      "attributes": {
+        "sha256": "c100db894cef93cdc7b9dd69860dc805e1acdeabf7b8a58fd6dd9a651d8271d9",
+        "note": "40 items пилота v0.1; хэш ловит подмену evidence после заморозки"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 131,
+        "line_end": 136
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "evidenced_by",
+      "to": "data:data/pilot/v0.1/pilot-manifest.json",
+      "attributes": {
+        "sha256": "e5d5754ca8ef48feb6b0b453fc45c3548dafe322dc5465160840f8e2efb20222",
+        "note": "манифест пилота объявляет этот label активным и пинит хэш онтологии"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 82,
+        "line_end": 87
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "materialized_in",
+      "to": "ontology:behavior-v0.1",
+      "attributes": {
+        "note": "сегодня label живёт здесь; spec — эксперимент, не source of truth"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 76,
+        "line_end": 80
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "specified_by",
+      "to": "doc:docs/annotation-protocol-v0.md#2. Единицы, цели и контекст",
+      "attributes": {
+        "note": "единица и контекстное окно фиксированы протоколом, не автором label'а"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 89,
+        "line_end": 93
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "specified_by",
+      "to": "doc:docs/annotation-protocol-v0.md#3. Решения разметчика",
+      "attributes": {
+        "note": "assigned/none_observed/abstained и требование evidence span"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 95,
+        "line_end": 99
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "specified_by",
+      "to": "doc:docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+      "attributes": {
+        "note": "маркеры из operational_definition просочились в регистр stimulus-корпуса"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 125,
+        "line_end": 129
+      }
+    },
+    {
+      "from": "label:B.VALIDATION",
+      "relation": "tested_by",
+      "to": "test:src/annotation-web/test/PilotSpec.hs#activeLabels",
+      "attributes": {
+        "note": "активный набор пилота v0.1 закреплён тестом"
+      },
+      "source": {
+        "file": "spec/B.VALIDATION.md",
+        "line_start": 113,
+        "line_end": 117
+      }
+    },
+    {
+      "from": "ontology:behavior-v0.2-candidate",
+      "relation": "supersedes",
+      "to": "ontology:behavior-v0.1",
+      "attributes": {
+        "note": "candidate_not_frozen; пилот v0.1 продолжает гоняться на v0.1"
+      },
+      "source": {
+        "file": "spec/_ontology-versions.md",
+        "line_start": 14,
+        "line_end": 19
+      }
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "rf.semantic-spine-block.v1",
+  "description": "Поля typed fenced blocks в spec/*.md. Синтаксис тела блока — не YAML, а строгое подмножество (spine/blocks.py); эта схема описывает результат разбора.",
+  "definitions": {
+    "rf-label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "canonical_name", "plain_language_name_en", "plain_language_name_ru", "allowed_units", "directionality", "evidence_required", "source_frameworks", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^B\\.[A-Z_]+$" },
+        "canonical_name": { "type": "string" },
+        "plain_language_name_en": { "type": "string" },
+        "plain_language_name_ru": { "type": "string" },
+        "allowed_units": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["utterance", "turn", "exchange", "episode"] } },
+        "directionality": { "type": "string", "enum": ["other_directed", "self_directed", "interaction_directed"] },
+        "evidence_required": { "type": "boolean" },
+        "source_frameworks": { "type": "array", "items": { "type": "string" } },
+        "confusable_with": { "type": "array", "items": { "type": "string", "pattern": "^B\\.[A-Z_]+$" } },
+        "status": { "type": "string", "enum": ["draft", "active", "retired"] }
+      }
+    },
+    "rf-example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "language", "unit", "verdict", "text", "rationale"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "language": { "type": "string", "enum": ["ru", "en"] },
+        "unit": { "type": "string", "enum": ["utterance", "turn", "exchange", "episode"] },
+        "verdict": { "type": "string", "enum": ["positive", "negative", "ambiguous"] },
+        "text": { "type": "string" },
+        "rationale": { "type": "string" }
+      }
+    },
+    "rf-edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relation", "to"],
+      "properties": {
+        "from": { "type": "string", "pattern": "^[a-z]+:" },
+        "relation": { "type": "string", "enum": ["confusable_with", "implements", "specified_by", "tested_by", "evidenced_by", "depends_on", "supersedes", "generated_from", "exemplifies", "materialized_in"] },
+        "to": { "type": "string", "pattern": "^[a-z]+:" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "note": { "type": "string" }
+      }
+    }
+  },
+  "type": "object",
+  "properties": {
+    "rf-label": { "$ref": "#/definitions/rf-label" },
+    "rf-example": { "$ref": "#/definitions/rf-example" },
+    "rf-edge": { "$ref": "#/definitions/rf-edge" }
+  }
+}
