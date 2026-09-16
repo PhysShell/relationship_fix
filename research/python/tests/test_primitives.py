@@ -14,12 +14,18 @@ from metrics.agreement import krippendorff_alpha_binary
 from metrics.primitives import (
     ANNOTATORS,
     BOUNDARY_TOLERANCE,
+    MIN_PAIRABLE_UNITS,
+    PRIMITIVE_NAMES,
+    SUPER_STRATA,
     bootstrap_ci,
+    cluster_bootstrap_ci,
     boundary_stats,
     krippendorff_alpha_nominal,
     materialize,
+    match_boundaries,
     opaque_id,
     pairwise_confusion,
+    preview,
     primitive_stats,
     raw_agreement,
     report,
@@ -221,3 +227,152 @@ class ReportGuardTests(unittest.TestCase):
     def test_report_refuses_without_two_layers(self):
         """No responses exist yet; the report must refuse rather than invent one."""
         self.assertEqual(report(CORPUS), 2)
+
+
+class ClusterBootstrapTests(unittest.TestCase):
+    """Positions inside a chain are not independent; the resampling unit must be
+    the chain, or the interval pretends we have more data than we do."""
+
+    def _chains(self, n_chains=8, per_chain=7):
+        """Half the chains agree, half do not — what real segmentation data looks
+        like. Homogeneous chains hide the difference entirely, which is itself
+        worth knowing: clustering matters exactly when chains differ in quality."""
+        out = []
+        for i in range(n_chains):
+            agree = i < n_chains // 2
+            out.append([
+                ["BOUNDARY", "BOUNDARY"] if agree and j % 3 == 0
+                else ["BOUNDARY", "NO_BOUNDARY"] if j % 3 == 0
+                else ["NO_BOUNDARY", "NO_BOUNDARY"]
+                for j in range(per_chain)])
+        return out
+
+    def test_cluster_bootstrap_is_wider_than_position_bootstrap(self):
+        clusters = self._chains()
+        naive = bootstrap_ci([u for c in clusters for u in c])
+        clustered = cluster_bootstrap_ci(clusters)
+        self.assertIsNotNone(naive)
+        self.assertIsNotNone(clustered)
+        self.assertGreater(clustered[1] - clustered[0], (naive[1] - naive[0]) * 1.5,
+                           "resampling positions understates uncertainty substantially")
+
+    def test_cluster_bootstrap_is_deterministic(self):
+        clusters = self._chains(8, 7)
+        self.assertEqual(cluster_bootstrap_ci(clusters), cluster_bootstrap_ci(clusters))
+
+    def test_report_uses_the_clustered_interval(self):
+        per_chain = {f"c{i}": {f"m{j}|m{j+1}": ["BOUNDARY", "NO_BOUNDARY"]
+                               for j in range(6)} for i in range(8)}
+        stats = boundary_stats(per_chain)
+        self.assertIn("strict_position_cluster_bootstrap_ci_95", stats)
+        self.assertNotIn("strict_position_bootstrap_ci_95", stats)
+        self.assertIn("n_chains is the real limit", stats["note"])
+
+
+class OneToOneBoundaryMatchingTests(unittest.TestCase):
+    def test_two_boundaries_cannot_both_match_one(self):
+        """A marks {4,5}, B marks {4}. Any-within-tolerance scored this near
+        perfect even though they disagreed about how many boundaries exist."""
+        self.assertEqual(match_boundaries({4, 5}, {4}, 1), 1)
+
+    def test_matching_is_nearest_first(self):
+        self.assertEqual(match_boundaries({4, 6}, {4, 6}, 1), 2)
+        self.assertEqual(match_boundaries({4, 8}, {5}, 1), 1)
+
+    def test_f1_penalises_the_extra_boundary(self):
+        a = ["NO_BOUNDARY"] * 8
+        b = list(a)
+        a[4] = a[5] = "BOUNDARY"
+        b[4] = "BOUNDARY"
+        stats = boundary_stats({"c1": {f"m{i}|m{i+1}": [a[i], b[i]] for i in range(8)}})
+        self.assertLess(stats["tolerant_f1_mean"], 0.7,
+                        "one-to-one matching must not reward a spurious extra boundary")
+
+    def test_exact_agreement_still_scores_one(self):
+        flat = ["NO_BOUNDARY"] * 6
+        flat[2] = "BOUNDARY"
+        stats = boundary_stats({"c1": {f"m{i}|m{i+1}": [flat[i], flat[i]] for i in range(6)}})
+        self.assertEqual(stats["tolerant_f1_mean"], 1.0)
+        self.assertEqual(stats["exact_match_f1_mean"], 1.0)
+
+
+class SubstantiveAlphaTests(unittest.TestCase):
+    """Reproducibility of the "don't know" button is not a licence to build the
+    next floor."""
+
+    CATS = ("YES", "NO", "INSUFFICIENT")
+
+    def test_unanimous_abstention_gives_high_decision_alpha_but_no_substantive_layer(self):
+        units = [["INSUFFICIENT"] * 3] * 25 + [["YES"] * 3] * 6
+        stats = primitive_stats(units, self.CATS)
+        self.assertGreater(stats["decision"]["alpha"], 0.9)
+        self.assertEqual(stats["decision"]["estimability_status"], "passed")
+        self.assertEqual(stats["n_substantive_units"], 6)
+        self.assertEqual(stats["substantive"]["estimability_status"],
+                         "underpowered_not_estimable",
+                         "six substantive units cannot license the next stage")
+
+    def test_substantive_layer_ignores_abstentions_not_units(self):
+        units = [["YES", "INSUFFICIENT", "YES"]] * 12
+        stats = primitive_stats(units, self.CATS)
+        self.assertEqual(stats["n_substantive_units"], 12,
+                         "a unit keeps counting if two people were substantive")
+
+    def test_both_layers_are_reported(self):
+        stats = primitive_stats([["YES", "NO"]] * 12, self.CATS)
+        for layer in ("decision", "substantive"):
+            self.assertIn("alpha", stats[layer])
+            self.assertIn("estimability_status", stats[layer])
+
+    def test_top_level_alpha_mirrors_decision_only(self):
+        """Nothing may read a single `alpha` and skip the second question."""
+        stats = primitive_stats([["YES", "NO"]] * 12, self.CATS)
+        self.assertEqual(stats["alpha"], stats["decision"]["alpha"])
+        self.assertNotEqual(stats.get("substantive_alpha"), stats["substantive"]["alpha"])
+
+
+class SuperStrataTests(unittest.TestCase):
+    def test_super_strata_reach_the_estimability_floor(self):
+        rel = [json.loads(l) for l in (CORPUS / "relation-items.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        for name, members in SUPER_STRATA.items():
+            n = sum(1 for it in rel if it["stratum"] in members)
+            with self.subTest(super_stratum=name):
+                self.assertGreaterEqual(n, MIN_PAIRABLE_UNITS,
+                                        f"{name} must clear our own estimability gate")
+
+    def test_individual_strata_are_below_the_floor_hence_descriptive(self):
+        rel = [json.loads(l) for l in (CORPUS / "relation-items.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        for stratum in {it["stratum"] for it in rel}:
+            self.assertLess(sum(1 for it in rel if it["stratum"] == stratum),
+                            MIN_PAIRABLE_UNITS)
+
+
+class ConstructNamingTests(unittest.TestCase):
+    def test_p3_is_named_for_what_it_measures(self):
+        """P1 is answered independently, so `P1=NO, P3=YES` is legal: B does not
+        answer A but is negative on its own. P3 is therefore atomic, and the
+        relational construct is a composition of P1 and P3."""
+        self.assertEqual(PRIMITIVE_NAMES["P3"], "NEGATIVE_IN_B")
+        self.assertNotIn("RESPONSE", PRIMITIVE_NAMES["P3"])
+
+    def test_p1_and_p3_are_independently_valid_together(self):
+        item = {"item_id": "rp-01", "anchor_kind": "negative",
+                "applicable_primitives": ["P1", "P2", "P3"]}
+        resp = {"schema_version": "rf.primitives-response.v1", "item_id": "rp-01",
+                "p1": "NO", "p2": "DIFFERENT", "p3": "YES", "p4": None}
+        self.assertEqual(validate_responses([item], [resp], "a1"), [])
+
+
+class PreviewTests(unittest.TestCase):
+    def test_preview_renders_the_explicit_reply_relation(self):
+        """C1 only tests reply metadata if the surface draws it. A JSON file that
+        carries reply_to is not the same thing as a human seeing an arrow."""
+        self.assertEqual(preview(CORPUS), 0)
+        text = (CORPUS / "preview" / "annotator-1-relation.txt").read_text(encoding="utf-8")
+        self.assertIn("в ответ на", text)
+        self.assertEqual(text.count("в ответ на"), 5)
+
+    def test_preview_marks_anchor_and_target(self):
+        text = (CORPUS / "preview" / "annotator-1-relation.txt").read_text(encoding="utf-8")
+        self.assertIn("[A]", text)
+        self.assertIn("[B]", text)

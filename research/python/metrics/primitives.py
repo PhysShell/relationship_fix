@@ -40,6 +40,34 @@ BOOTSTRAP_SEED = 42
 # looking at the data would turn a preregistered metric into a tuned one.
 BOUNDARY_TOLERANCE = 1
 
+# Construct names. P3's human question is "is there negativity in B?", which is
+# ATOMIC: because P1 is answered independently, `P1=NO, P3=YES` is a perfectly
+# legal result — B does not answer A, but B is negative on its own. So P3 measures
+# NEGATIVE_IN_B, not a relation, and the relational construct is a COMPOSITION:
+#     P1 responds_to = YES  AND  P3 negative_in_B = YES  ->  candidate negative_response
+# That decomposition is the point of the whole layered exercise, so the variable is
+# named for what it actually measures.
+PRIMITIVE_NAMES = {
+    "P1": "SEMANTIC_RESPONSE",
+    "P2": "TOPIC_RELATION",
+    "P3": "NEGATIVE_IN_B",
+    "P4": "SOFTENING_UPTAKE_IN_B",
+    "P5": "EPISODE_BOUNDARY",
+}
+
+# Preregistered groupings for C2/C3. Individual strata hold 5 items, below
+# MIN_PAIRABLE_UNITS, so a per-stratum comparison would sit under our own
+# estimability gate; "five is where a breakdown stops being an anecdote" is a
+# statement of taste, not of power. Per-stratum numbers are still reported, but
+# only as DESCRIPTIVE.
+SUPER_STRATA = {
+    "easy": ("easy_positive", "easy_negative"),
+    "challenge": ("adjacency_trap", "explicit_reply_trap", "intervening_neutral_turn",
+                  "multi_topic", "multi_target", "insufficient_context"),
+    "single_signal": ("easy_positive", "easy_negative"),
+    "multi_signal": ("multi_topic", "multi_target"),
+}
+
 ANSWERS = {
     "P1": ("YES", "NO", "INSUFFICIENT"),
     "P2": ("SAME", "DIFFERENT", "MIXED", "INSUFFICIENT"),
@@ -133,36 +161,123 @@ def pairwise_confusion(units: list[list[str]]) -> dict[str, int]:
     return dict(out.most_common())
 
 
-def estimability(units: list[list[str]], alpha: float | None,
-                 substantive: set[str]) -> str:
+def estimability(units: list[list[str]], alpha: float | None) -> str:
     pairable = [u for u in units if len([v for v in u if v is not None]) >= 2]
-    decided = [u for u in pairable
-               if any(v in substantive for v in u if v is not None)]
-    if len(pairable) < MIN_PAIRABLE_UNITS or len(decided) < MIN_CATEGORY_UNION or alpha is None:
+    if len(pairable) < MIN_PAIRABLE_UNITS or alpha is None:
         return "underpowered_not_estimable"
     return "passed" if alpha >= ALPHA_FAIL else "failed"
 
 
+def _layer(units: list[list[str]]) -> dict:
+    pairable = [u for u in units if len([v for v in u if v is not None]) >= 2]
+    alpha = krippendorff_alpha_nominal(pairable)
+    return {
+        "n_units": len(pairable),
+        "alpha": round(alpha, 4) if alpha is not None else None,
+        "bootstrap_ci_95": bootstrap_ci(pairable),
+        "raw_agreement": raw_agreement(pairable),
+        "confusion": pairwise_confusion(pairable),
+        "estimability_status": estimability(pairable, alpha),
+        "meets_target": alpha is not None and alpha >= ALPHA_TARGET,
+    }
+
+
 def primitive_stats(units: list[list[str]], categories: tuple[str, ...]) -> dict:
+    """TWO alphas, reported side by side and never collapsed.
+
+        decision     INSUFFICIENT is a full category
+                     = do people agree about what to do with the task at all
+        substantive  INSUFFICIENT -> missing; only units with >=2 substantive
+                     ratings survive
+                     = do people agree about the relation WHEN they think it is
+                       observable
+
+    Both are needed because either alone is gameable. Keeping INSUFFICIENT in is
+    right — agreeing that a task is undecidable is itself informative — but on its
+    own it lets an excellent alpha arise from everyone reliably pressing "don't
+    know", and an estimability guard that only counts units where SOMEBODY was
+    substantive does not stop that. Reproducibility of the "don't know" button is
+    not a licence to build the next floor.
+    """
     pairable = [u for u in units if len([v for v in u if v is not None]) >= 2]
     flat = [v for u in pairable for v in u if v is not None]
-    alpha = krippendorff_alpha_nominal(pairable)
-    substantive = {c for c in categories if c != ABSTENTION}
+
+    masked = [[None if v == ABSTENTION else v for v in u] for u in pairable]
+    substantive_units = [u for u in masked if len([v for v in u if v is not None]) >= 2]
+
+    decision = _layer(pairable)
+    substantive = _layer(substantive_units)
+    if len(substantive_units) < MIN_PAIRABLE_UNITS:
+        substantive["estimability_status"] = "underpowered_not_estimable"
+
     return {
         "n_units": len(pairable),
         "n_ratings": len(flat),
         "distribution": {c: flat.count(c) for c in categories},
         "abstention_rate": round(flat.count(ABSTENTION) / len(flat), 4) if flat else None,
-        "alpha": round(alpha, 4) if alpha is not None else None,
-        "bootstrap_ci_95": bootstrap_ci(pairable),
-        "raw_agreement": raw_agreement(pairable),
-        "confusion": pairwise_confusion(pairable),
-        "estimability_status": estimability(pairable, alpha, substantive),
-        "meets_target": alpha is not None and alpha >= ALPHA_TARGET,
+        "n_substantive_units": len(substantive_units),
+        "decision": decision,
+        "substantive": substantive,
+        # Convenience mirrors of the decision layer; `substantive` is never mirrored
+        # here, so nothing can read a single `alpha` and skip the second question.
+        "alpha": decision["alpha"],
+        "bootstrap_ci_95": decision["bootstrap_ci_95"],
+        "confusion": decision["confusion"],
+        "estimability_status": decision["estimability_status"],
     }
 
 
 # --- boundary metrics (prereg §8) --------------------------------------------
+
+def cluster_bootstrap_ci(clusters: list[list[list[str]]],
+                         iterations: int = BOOTSTRAP_ITERATIONS) -> tuple[float, float] | None:
+    """Resample WHOLE CHAINS, not individual positions.
+
+    Boundary positions inside a chain are not independent — a coder who moves one
+    boundary by a message changes two positions — so resampling positions treats
+    56 correlated observations as 56 independent ones and returns an interval that
+    is cheerfully narrower than the data supports. Statistics is always happy to
+    pretend we have more data than we do; the unit of resampling has to be the
+    unit of independence, which here is the chain.
+    """
+    if len(clusters) < 2:
+        return None
+    rng = random.Random(BOOTSTRAP_SEED)
+    samples = []
+    for _ in range(iterations):
+        picked = [clusters[rng.randrange(len(clusters))] for _ in clusters]
+        a = krippendorff_alpha_nominal([u for cluster in picked for u in cluster])
+        if a is not None:
+            samples.append(a)
+    if len(samples) < 2:
+        return None
+    samples.sort()
+    return (round(samples[int(0.025 * (len(samples) - 1))], 4),
+            round(samples[int(0.975 * (len(samples) - 1))], 4))
+
+
+def match_boundaries(a: set[int], b: set[int], tol: int) -> int:
+    """ONE-TO-ONE greedy matching by distance; each boundary is used at most once.
+
+    "Is there any boundary of the other coder within tolerance" allows many-to-one
+    matches: A marking {4, 5} against B marking {4} would score near-perfect at
+    tolerance 1, even though the two disagreed about how many boundaries exist.
+    Greedy nearest-first over all admissible pairs is the standard fix and is
+    deterministic given the tie-break on position.
+    """
+    pairs = sorted(((abs(x - y), x, y) for x in sorted(a) for y in sorted(b)
+                    if abs(x - y) <= tol))
+    used_a: set[int] = set()
+    used_b: set[int] = set()
+    matched = 0
+    for _, x, y in pairs:
+        if x in used_a or y in used_b:
+            continue
+        used_a.add(x)
+        used_b.add(y)
+        matched += 1
+    return matched
+
 
 def boundary_stats(per_chain: dict[str, dict[str, list[str]]]) -> dict:
     """per_chain: {chain_id: {boundary_key: [value per coder]}}.
@@ -174,11 +289,13 @@ def boundary_stats(per_chain: dict[str, dict[str, list[str]]]) -> dict:
     Both are preregistered; neither is the single headline.
     """
     strict_units, per_coder_sets, chain_lengths = [], defaultdict(dict), {}
+    clusters: list[list[list[str]]] = []
     for chain_id, positions in per_chain.items():
         keys = list(positions)
         chain_lengths[chain_id] = len(keys)
-        for key in keys:
-            strict_units.append(positions[key])
+        cluster = [positions[key] for key in keys]
+        clusters.append(cluster)
+        strict_units.extend(cluster)
         n_coders = max((len(v) for v in positions.values()), default=0)
         for coder in range(n_coders):
             per_coder_sets[coder][chain_id] = {
@@ -189,10 +306,9 @@ def boundary_stats(per_chain: dict[str, dict[str, list[str]]]) -> dict:
     def f1(a: set[int], b: set[int], tol: int) -> float | None:
         if not a and not b:
             return None                   # nobody marked a boundary: undefined, not perfect
-        tp_a = sum(1 for x in a if any(abs(x - y) <= tol for y in b))
-        tp_b = sum(1 for y in b if any(abs(x - y) <= tol for x in a))
-        precision = tp_a / len(a) if a else 0.0
-        recall = tp_b / len(b) if b else 0.0
+        matched = match_boundaries(a, b, tol)
+        precision = matched / len(a) if a else 0.0
+        recall = matched / len(b) if b else 0.0
         return round(2 * precision * recall / (precision + recall), 4) if precision + recall else 0.0
 
     tolerant, exact = [], []
@@ -213,16 +329,17 @@ def boundary_stats(per_chain: dict[str, dict[str, list[str]]]) -> dict:
         "n_candidate_positions": len(strict_units),
         "n_chains": len(chain_lengths),
         "strict_position_alpha": round(alpha, 4) if alpha is not None else None,
-        "strict_position_bootstrap_ci_95": bootstrap_ci(strict_units),
+        "strict_position_cluster_bootstrap_ci_95": cluster_bootstrap_ci(clusters),
         "strict_position_raw_agreement": raw_agreement(strict_units),
         "exact_match_f1_mean": round(sum(exact) / len(exact), 4) if exact else None,
         "tolerant_f1_mean": round(sum(tolerant) / len(tolerant), 4) if tolerant else None,
         "tolerance_messages": BOUNDARY_TOLERANCE,
         "confusion": pairwise_confusion(strict_units),
-        "estimability_status": estimability(strict_units, alpha,
-                                            {"BOUNDARY", "NO_BOUNDARY"}),
-        "note": ("positions inside a chain are NOT independent; strict alpha "
-                 "under-states and tolerant F1 over-states segmentation agreement"),
+        "estimability_status": estimability(strict_units, alpha),
+        "note": ("positions inside a chain are NOT independent: the CI is a cluster "
+                 "bootstrap over CHAINS, strict alpha under-states and tolerant F1 "
+                 "over-states segmentation agreement, and n_chains is the real "
+                 "limit on power, not n_candidate_positions"),
     }
 
 
@@ -456,14 +573,22 @@ def report(corpus_dir: Path) -> int:
     per_primitive = {}
     for prim, categories in ANSWERS.items():
         applicable = [it for it in relation if prim in it["applicable_primitives"]]
-        per_primitive[prim] = {"all": primitive_stats(units_for(prim, applicable), categories)}
+        per_primitive[prim] = {
+            "construct_name": PRIMITIVE_NAMES[prim],
+            "all": primitive_stats(units_for(prim, applicable), categories),
+        }
+        for name, members in SUPER_STRATA.items():
+            subset = [it for it in applicable if it["stratum"] in members]
+            per_primitive[prim][f"super_stratum:{name}"] = primitive_stats(
+                units_for(prim, subset), categories)
+        # DESCRIPTIVE ONLY below: n=5 per stratum, n=12 for en.
         for stratum in sorted({it["stratum"] for it in applicable}):
             subset = [it for it in applicable if it["stratum"] == stratum]
-            per_primitive[prim][f"stratum:{stratum}"] = primitive_stats(
+            per_primitive[prim][f"descriptive_stratum:{stratum}"] = primitive_stats(
                 units_for(prim, subset), categories)
         for lang in sorted({it["language"] for it in applicable}):
             subset = [it for it in applicable if it["language"] == lang]
-            per_primitive[prim][f"language:{lang}"] = primitive_stats(
+            per_primitive[prim][f"descriptive_language:{lang}"] = primitive_stats(
                 units_for(prim, subset), categories)
 
     per_chain: dict[str, dict[str, list[str]]] = {}
@@ -492,11 +617,15 @@ def report(corpus_dir: Path) -> int:
                        "min_pairable_units": MIN_PAIRABLE_UNITS,
                        "min_category_union": MIN_CATEGORY_UNION,
                        "boundary_tolerance": BOUNDARY_TOLERANCE},
+        "construct_names": PRIMITIVE_NAMES,
+        "super_strata": {k: list(v) for k, v in SUPER_STRATA.items()},
         "per_primitive": per_primitive,
         "boundaries": boundary_stats(per_chain),
         "item_feedback": dict(feedback.most_common()),
         "note": ("Analyses not listed in the prereg document are POST_HOC and must "
-                 "be reported as such."),
+                 "be reported as such. Keys prefixed `descriptive_` are DESCRIPTIVE "
+                 "ONLY and never gate a decision; SUPPORTED_FOR_NEXT_STAGE additionally "
+                 "requires the `substantive` layer to be estimable."),
     }
     out_dir = corpus_dir / "report"
     out_dir.mkdir(exist_ok=True)
@@ -506,13 +635,55 @@ def report(corpus_dir: Path) -> int:
     return 0
 
 
+def preview(corpus_dir: Path, annotator: str = "annotator-1") -> int:
+    """Render one presentation layer the way a human must see it.
+
+    Exists because C1 only tests explicit-reply metadata if the SURFACE actually
+    draws the reply relation. A linear list of three messages turns
+    `explicit_reply_trap` into a content-only judgement and quietly voids the
+    comparison. A JSON file that carries `reply_to` and is very proud of itself is
+    not the same thing as a human seeing an arrow.
+    """
+    path = corpus_dir / "presentation" / f"{annotator}-relation.jsonl"
+    rows = load_jsonl(path)
+    lines = [f"# {annotator} — relation task preview ({len(rows)} items)", ""]
+    with_reply = 0
+    for row in rows:
+        lines.append(f"## {row['item_id']} [{row['language']}]  "
+                     f"вопросы: {', '.join(row['applicable_primitives'])}")
+        by_id = {m["message_id"]: m for m in row["messages"]}
+        for m in row["messages"]:
+            marks = []
+            if m["message_id"] == row["anchor_message_id"]:
+                marks.append("A")
+            if m["message_id"] == row["target_message_id"]:
+                marks.append("B")
+            tag = f"[{'/'.join(marks)}]" if marks else "[ ]"
+            if m.get("reply_to"):
+                with_reply += 1
+                quoted = by_id[m["reply_to"]]["text"]
+                lines.append(f"  {tag} {m['author']}: ↳ в ответ на «{quoted[:40]}»")
+                lines.append(f"      {m['text']}")
+            else:
+                lines.append(f"  {tag} {m['author']}: {m['text']}")
+        lines.append("")
+    out = corpus_dir / "preview" / f"{annotator}-relation.txt"
+    out.parent.mkdir(exist_ok=True)
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"OK: preview -> {out} ({with_reply} message(s) rendered with an explicit "
+          f"reply relation)")
+    return 0 if with_reply else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("command", choices=("materialize", "validate", "report"))
+    ap.add_argument("command", choices=("materialize", "validate", "report", "preview"))
     ap.add_argument("--corpus-dir", type=Path, required=True)
     args = ap.parse_args()
     if args.command == "materialize":
         return materialize(args.corpus_dir)
+    if args.command == "preview":
+        return preview(args.corpus_dir)
     if args.command == "validate":
         issues = validate_corpus(args.corpus_dir)
         for i in issues:
