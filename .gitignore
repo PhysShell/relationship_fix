@@ -25,3 +25,7 @@ experiments/wasm-component/*.wasm
 # nix build output symlinks
 /result
 /result-*
+
+# dyadic-state spike: derived trace, regenerate with
+#   cd research/python && uv run python -m dyadic.spike --corpus ../../data/research/dyadic-spike/episodes.jsonl
+data/research/dyadic-spike/trace.json
