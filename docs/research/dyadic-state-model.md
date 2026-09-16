@@ -241,6 +241,8 @@ is_mixed_transition = (живёт установленная негативна�
 | `COUNTER` | наблюдали, противоречит | +counter, **не удаляет support** |
 | `OBSERVED_ABSENCE` | **окно было открыто, вещи там не было** | +observed_absence; **coverage не падает**; **является opportunity** |
 | `RIGHT_CENSORED` | **запись кончилась раньше исхода** | −coverage; **не старит** |
+
+> **`RIGHT_CENSORED` — структурная метадата доступности наблюдения, а не human-annotated interaction primitive.** Она выводится из L1/L1.5 (`trigger message + record ends`), и человеку в ней нечего согласованно видеть. Pilot B это проверил на себе: первая версия его корпуса содержала страту `right_censored`, где A и B оказались одним сообщением, и людям задавался вопрос «является ли B ответом на A?». Страта удалена как концепт ([interaction-primitives-v0-prereg.md](interaction-primitives-v0-prereg.md) §2). Сущность переезжала вниз по архитектуре трижды — психологический исход → evidence status → свойство доступности записи — и каждый переезд делал систему менее мистической.
 | `INSUFFICIENT_OBSERVATION` | не могли смотреть (нет окна, нет timestamps) | −coverage; **не старит** |
 | `NOT_APPLICABLE` | слот неприменим к этой единице | **ничего** |
 

@@ -63,7 +63,8 @@ PRIMITIVE_NAMES = {
 SUPER_STRATA = {
     "easy": ("easy_positive", "easy_negative"),
     "challenge": ("adjacency_trap", "explicit_reply_trap", "intervening_neutral_turn",
-                  "multi_topic", "multi_target", "insufficient_context"),
+                  "multi_topic", "multi_target", "minimal_acknowledgement",
+                  "insufficient_context"),
     "single_signal": ("easy_positive", "easy_negative"),
     "multi_signal": ("multi_topic", "multi_target"),
 }
@@ -432,11 +433,29 @@ def validate_corpus(corpus_dir: Path) -> list[str]:
         if iid in seen:
             issues.append(f"{iid}: duplicate item_id")
         seen.add(iid)
-        ids = {m["message_id"] for m in it["messages"]}
-        if it["anchor_message_id"] not in ids:
+        order = [m["message_id"] for m in it["messages"]]
+        ids = set(order)
+        author = {m["message_id"]: m["author"] for m in it["messages"]}
+        anchor, target = it["anchor_message_id"], it["target_message_id"]
+        if anchor not in ids:
             issues.append(f"{iid}: anchor_message_id not among messages")
-        if it["target_message_id"] not in ids:
+        if target not in ids:
             issues.append(f"{iid}: target_message_id not among messages")
+
+        # Three invariants that make (A, B) a measurable unit at all. The first
+        # version shipped a `right_censored` stratum where A and B were the SAME
+        # message, so "is B a reply to A?" was put to people as a question about a
+        # message answering itself. That is not a hard adversarial case, it is an
+        # invalid unit of measurement, and the preview renderer is what caught it.
+        if anchor in ids and target in ids:
+            if anchor == target:
+                issues.append(f"{iid}: anchor and target must be different messages")
+            elif order.index(target) <= order.index(anchor):
+                issues.append(f"{iid}: target must come after anchor")
+            if author[anchor] == author[target]:
+                issues.append(f"{iid}: anchor and target must have different authors "
+                              f"— this pilot measures dyadic response structure, "
+                              f"not self-follow-up")
         for m in it["messages"]:
             if m.get("reply_to") and m["reply_to"] not in ids:
                 issues.append(f"{iid}: reply_to points outside the item")

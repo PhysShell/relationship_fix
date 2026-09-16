@@ -376,3 +376,80 @@ class PreviewTests(unittest.TestCase):
         text = (CORPUS / "preview" / "annotator-1-relation.txt").read_text(encoding="utf-8")
         self.assertIn("[A]", text)
         self.assertIn("[B]", text)
+
+
+class RelationItemInvariantTests(unittest.TestCase):
+    """The first corpus shipped items where A and B were the same message, so
+    people would have been asked whether a message replies to itself. The preview
+    renderer caught it; these invariants stop it recurring."""
+
+    def _corpus(self, tmp, **overrides):
+        d = Path(tmp)
+        item = {
+            "schema_version": "rf.primitives-item.v1", "item_id": "rp-x", "language": "ru",
+            "stratum": "easy_positive", "anchor_kind": "neutral",
+            "messages": [
+                {"message_id": "rp-x-m1", "author": "a", "text": "x", "timestamp": 1},
+                {"message_id": "rp-x-m2", "author": "b", "text": "y", "timestamp": 2},
+            ],
+            "anchor_message_id": "rp-x-m1", "target_message_id": "rp-x-m2",
+            "applicable_primitives": ["P1", "P2"],
+        }
+        item.update(overrides)
+        (d / "relation-items.jsonl").write_text(json.dumps(item, ensure_ascii=False) + "\n",
+                                                encoding="utf-8")
+        (d / "segmentation-items.jsonl").write_text("", encoding="utf-8")
+        return validate_corpus(d)
+
+    def test_baseline_item_is_valid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self._corpus(tmp), [])
+
+    def test_anchor_and_target_must_differ(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            issues = self._corpus(tmp, target_message_id="rp-x-m1")
+            self.assertTrue(any("different messages" in i for i in issues))
+
+    def test_target_must_come_after_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            issues = self._corpus(tmp, anchor_message_id="rp-x-m2",
+                                  target_message_id="rp-x-m1")
+            self.assertTrue(any("after anchor" in i for i in issues))
+
+    def test_anchor_and_target_must_have_different_authors(self):
+        """Mandatory here: Pilot B measures dyadic response structure, and a
+        self-follow-up is a different question we are not asking."""
+        with tempfile.TemporaryDirectory() as tmp:
+            issues = self._corpus(tmp, messages=[
+                {"message_id": "rp-x-m1", "author": "a", "text": "x", "timestamp": 1},
+                {"message_id": "rp-x-m2", "author": "a", "text": "y", "timestamp": 2}])
+            self.assertTrue(any("different authors" in i for i in issues))
+
+    def test_shipped_corpus_satisfies_all_three(self):
+        rel = [json.loads(l) for l in (CORPUS / "relation-items.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        for it in rel:
+            order = [m["message_id"] for m in it["messages"]]
+            author = {m["message_id"]: m["author"] for m in it["messages"]}
+            a, t = it["anchor_message_id"], it["target_message_id"]
+            with self.subTest(item=it["item_id"]):
+                self.assertNotEqual(a, t)
+                self.assertGreater(order.index(t), order.index(a))
+                self.assertNotEqual(author[a], author[t])
+
+    def test_right_censored_is_not_a_human_stratum(self):
+        """Right censoring is structural observability metadata derived at L1/L1.5.
+        There is nothing for a person to see, so it has no business being a human
+        annotation task."""
+        rel = [json.loads(l) for l in (CORPUS / "relation-items.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        self.assertNotIn("right_censored", {it["stratum"] for it in rel})
+        self.assertIn("minimal_acknowledgement", {it["stratum"] for it in rel})
+
+    def test_conditional_primitive_counts_survived_the_swap(self):
+        rel = [json.loads(l) for l in (CORPUS / "relation-items.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        self.assertEqual(sum("P3" in it["applicable_primitives"] for it in rel), 23)
+        self.assertEqual(sum("P4" in it["applicable_primitives"] for it in rel), 20)
+
+    def test_preview_shows_no_self_referential_unit(self):
+        preview(CORPUS)
+        text = (CORPUS / "preview" / "annotator-1-relation.txt").read_text(encoding="utf-8")
+        self.assertNotIn("[A/B]", text, "a message cannot be both the anchor and the target")
