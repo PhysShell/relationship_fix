@@ -176,19 +176,33 @@ class InteractionRelation(str, Enum):
     inside a predicate.
     """
 
-    RESPONDS_TO = "responds_to"                  # grounded in MessageRelation, not in label order
-    CONTINUES_TOPIC = "continues_topic"          # responds_to + same recorded topic
-    TOPIC_DISCONTINUITY = "topic_discontinuity"  # responds_to + different recorded topic
-    ESCALATES = "escalates"                      # responds_to + negative answering negative
-    SOFTENS = "softens"                          # responds_to + softening answering negative
+    # DETERMINISTIC — computable from the log, safe to assert.
+    ADJACENT_CROSS_ACTOR_TURN = "adjacent_cross_actor_turn"  # the next turn by someone else
+    EXPLICIT_REPLY = "explicit_reply"                        # the log itself says what it answers
+    TOPIC_CONTINUITY = "topic_continuity"                    # same RECORDED topic
+    TOPIC_DISCONTINUITY = "topic_discontinuity"              # different RECORDED topic
+    NEGATIVE_RESPONSE = "negative_response"                  # negative turn adjacent to a negative turn
+    SOFTENING_RESPONSE = "softening_response"                # softening turn adjacent to a negative turn
 
-    # NOTE: there is deliberately no NON_UPTAKE primitive any more.
-    # "Different topic" is not the same claim as "present but not engaging": a
-    # reply can accept a topic and then widen it, or answer two topics at once,
-    # and `topic` is itself a supplied annotation rather than a raw property.
-    # Calling topic difference `non_uptake` hid a psychological inference inside a
-    # supposedly deterministic predicate. Non-uptake is now something the EVENT
-    # layer must argue for, with extra observable conditions.
+    # DELIBERATELY ABSENT, and this is the point of the enum:
+    #
+    # RESPONDS_TO. "The next turn by the other person" licenses only
+    #   `adjacent_cross_actor_turn`. It may be an answer, or a new message, or a
+    #   parallel thread, or a reaction to something much older. Deriving
+    #   RESPONDS_TO from adjacency asserted the very thing we want people to
+    #   judge, so it is an EMPIRICAL relation for the primitives pilot, not a
+    #   deterministic one. Only EXPLICIT_REPLY is asserted, because there the log
+    #   says so.
+    #
+    # NON_UPTAKE. "Different topic" is not "present but not engaging": a reply can
+    #   accept a topic and then widen it. Argued at the event layer with extra
+    #   observable conditions.
+    #
+    # ESCALATES. A negative answered by a negative is NEGATIVE_RESPONSE.
+    #   Escalation implies conflict sustained or intensified over time, which a
+    #   single adjacent pair cannot show: "you ruined it" answered by "it was
+    #   unpleasant for me too" is negative-negative and need not be escalation.
+    #   Escalation stays an L3 candidate, not a primitive anyone is asked to see.
 
 
 @dataclass(frozen=True, slots=True)

@@ -81,22 +81,20 @@ class HypothesisLedger:
 
     # --- writing -------------------------------------------------------------
 
-    def observe_episode(
-        self,
-        episode_id: str,
-        events: list[RelationalEvent],
-        opportunities: set[str] | None = None,
-    ) -> None:
+    def observe_episode(self, episode_id: str, events: list[RelationalEvent]) -> None:
         """Fold one episode's events into the ledger.
 
-        `opportunities` is the set of PATTERNS that could have shown themselves in
-        this episode. Only those age; an episode of ordinary logistics is not
-        evidence that a conflict pattern went away.
+        EVENTS ARE THE ONLY INPUT. There is no parallel `opportunities` channel,
+        and nothing is inferred from an event's absence. A hypothesis ages only
+        when an event explicitly says OBSERVED_ABSENCE for that pattern — i.e.
+        only when a response was resolved, was inside the coding frame, and did
+        not carry the outcome. That makes "absence is not counterevidence" a
+        property of this method rather than an agreement between two functions.
         """
         if episode_id not in self.episode_order:
             self.episode_order.append(episode_id)
 
-        opportunities = set(opportunities or ())
+        opportunities: set[str] = set()
         for event in events:
             if (OBSERVED_ABSENCE_IS_AN_OPPORTUNITY
                     and event.status is EvidenceStatus.OBSERVED_ABSENCE):

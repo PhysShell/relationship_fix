@@ -35,13 +35,18 @@
 | `multiple_labels_on_one_message_must_not_reshape_topology` | 1 | три label на одной реплике не меняют форму графа |
 | `log_truncated_after_softening__right_censored_not_absence` | 1 | запись кончилась → `RIGHT_CENSORED`, не «не ответил» |
 | `reply_accepts_topic_then_widens__must_not_be_non_uptake` | 1 | «Понимаю. И хочу объяснить…» → не non-uptake |
-| `partner_replied_with_nothing_codable__observed_absence` | 1 | ответил «ок» → `OBSERVED_ABSENCE`, не censoring |
+| `partner_reply_outside_coding_frame__insufficient_not_absence` | 1 | ответил «ок», но реплика не в coding frame → `INSUFFICIENT` |
+| `explicit_reply_to_beats_adjacency` | 1 | `reply_to` через сообщение побеждает смежное «купи молоко» |
+| `declared_coding_frame__reviewed_reply_yields_observed_absence` | 1 | frame объявлен → `OBSERVED_ABSENCE` |
+| `undeclared_coding_frame__same_shape_yields_insufficient` | 1 | **те же сообщения**, frame не объявлен → `INSUFFICIENT` |
 
 Наблюдения (L2) подаются **напрямую**, детекция не моделируется: провал спайка должен быть провалом представления, а не классификатора.
 
 **`topic` подаётся так же и по той же причине — но на СООБЩЕНИИ, а не на наблюдении.** Тема есть свойство того, что было сказано; пока она жила на наблюдении, неразмеченная реплика не имела темы и выпадала из топологии. Тематическая связность не решается детерминированно из сырого текста: если бы предикат её угадывал, внутри него прятался бы классификатор. Без темы топиковые отношения не порождаются вовсе.
 
-`reply_to` на сообщении поддержан и необязателен.
+`reply_to` на сообщении поддержан и необязателен; когда он есть, это более сильное основание, чем смежность.
+
+**`coded_messages`** — необязательное поле кейса, объявляющее, какие сообщения реально просматривались. Без него используется прокси «есть наблюдение = закодировано». Разница между `OBSERVED_ABSENCE` и `INSUFFICIENT_OBSERVATION` держится именно на нём.
 
 ## Запуск
 

@@ -35,7 +35,7 @@ from .model import (
     content_hash,
     to_jsonable,
 )
-from .topology import build_nodes, build_topology, response_message, window_is_observable
+from .topology import build_nodes, build_topology, resolve_response
 from .segmentation import Message, segment
 from .state import HypothesisLedger, SafetyAccumulator
 
@@ -80,23 +80,31 @@ def derive_relations(nodes: list[MessageNode], observations: list[BehaviorObserv
         for src in obs_by_message.get(edge.from_message, []):
             for dst in obs_by_message.get(edge.to_message, []):
                 edges.append(RelationEdge(src.observation_id, dst.observation_id,
-                                          InteractionRelation.RESPONDS_TO, edge.basis, edge.relation))
+                                          (InteractionRelation.EXPLICIT_REPLY
+                     if edge.relation is MessageRelation.EXPLICIT_REPLY_TO
+                     else InteractionRelation.ADJACENT_CROSS_ACTOR_TURN),
+                    edge.basis, edge.relation))
                 if topic_known:
                     edges.append(RelationEdge(
                         src.observation_id, dst.observation_id,
-                        InteractionRelation.CONTINUES_TOPIC if same_topic
+                        InteractionRelation.TOPIC_CONTINUITY if same_topic
                         else InteractionRelation.TOPIC_DISCONTINUITY,
                         f"recorded topic {'==' if same_topic else '!='}"
                         f" ({src_node.topic} -> {dst_node.topic})", edge.relation))
                 if src.label in NEGATIVE and dst.label in NEGATIVE:
                     edges.append(RelationEdge(src.observation_id, dst.observation_id,
-                                              InteractionRelation.ESCALATES,
-                                              "negative answered by negative", edge.relation))
+                                              InteractionRelation.NEGATIVE_RESPONSE,
+                                              "negative turn adjacent to a negative turn", edge.relation))
                 if src.label in NEGATIVE and dst.label in SOFTENING:
                     edges.append(RelationEdge(src.observation_id, dst.observation_id,
-                                              InteractionRelation.SOFTENS,
-                                              "negative answered by softening", edge.relation))
+                                              InteractionRelation.SOFTENING_RESPONSE,
+                                              "softening turn adjacent to a negative turn", edge.relation))
     return edges
+
+
+def _adjacent_or_reply(rel):
+    """Both deterministic response relations, explicit reply first."""
+    return rel(InteractionRelation.EXPLICIT_REPLY) + rel(InteractionRelation.ADJACENT_CROSS_ACTOR_TURN)
 
 
 def _event(eid, etype, parts, episode_id, obs, status, evidence=(), counter=(), basis=""):
@@ -108,40 +116,42 @@ def _event(eid, etype, parts, episode_id, obs, status, evidence=(), counter=(), 
     )
 
 
-def pattern_opportunities(nodes: list[MessageNode],
-                          observations: list[BehaviorObservation],
-                          actors: tuple[str, ...]) -> set[str]:
-    """Which patterns COULD have shown themselves here.
+def _outcome(nodes, coded: set[str], obs_by_message, anchor_message: str,
+             wanted: set[str], unwanted: set[str] = frozenset()):
+    """The one response-resolution ladder every pattern goes through.
 
-    Pattern-specific, not "any negative move opens everything". The previous
-    version let a single negative turn count as a chance for both attack_attack
-    and pursue_withdraw, so a hypothesis could age on episodes whose structural
-    preconditions never existed.
+    Returns (status, reply_observations, basis). The ladder exists so that an
+    opportunity can never be asserted without an event carrying its outcome:
 
-    Every clause requires an OBSERVABLE RESPONSE WINDOW: a trigger with no later
-    message by the other actor is right-censored, not a missed chance.
+        no response at all            -> RIGHT_CENSORED      (record ended)
+        response outside coding frame -> INSUFFICIENT        (we cannot tell
+                                         "checked, nothing" from "not coded")
+        response carries `unwanted`   -> COUNTER
+        response carries `wanted`     -> SUPPORTING
+        response coded, neither       -> OBSERVED_ABSENCE    (we looked, the frame
+                                         applied, it was not there)
+
+    The third rung is the one that matters. A label missing from a message means
+    either "coded and absent" or "never coded here", and only an explicit coding
+    frame can tell those apart. Inferring absence from an empty label list was
+    how "not observed" used to become "pattern weakened".
     """
-    out: set[str] = set()
-    a, b = actors
-
-    def triggered(labels: set[str], min_count: int = 1) -> list[BehaviorObservation]:
-        return [o for o in observations if o.label in labels][:] if min_count == 1 else []
-
-    def window(o: BehaviorObservation) -> bool:
-        return window_is_observable(nodes, o.message_id)
-
-    if any(o.label in NEGATIVE and window(o) for o in observations):
-        out.add("attack_attack")
-    for pursuer in (a, b):
-        pursuit = [o for o in observations if o.actor == pursuer and o.label in PURSUING]
-        partner_present = any(n.actor != pursuer for n in nodes)
-        if len(pursuit) >= 2 and partner_present and any(window(o) for o in pursuit):
-            out.add("pursue_withdraw")
-    if any(o.label in SOFTENING and window(o) for o in observations):
-        out.add("repair_softening")
-    if any(o.label in ALIGNING and window(o) for o in observations):
-        out.add("constructive_alignment")
-    return out
+    candidate = resolve_response(nodes, anchor_message)
+    if candidate is None:
+        return EvidenceStatus.RIGHT_CENSORED, [], "record ends before a response could appear"
+    reply_id = candidate.node.message_id
+    if reply_id not in coded:
+        return (EvidenceStatus.INSUFFICIENT_OBSERVATION, [],
+                f"response {reply_id} is outside the coding frame")
+    replies = obs_by_message.get(reply_id, [])
+    via = f"via {candidate.basis.value}"
+    hit_bad = [r for r in replies if r.label in unwanted]
+    if hit_bad:
+        return EvidenceStatus.COUNTER, hit_bad, f"response carries {sorted({r.label for r in hit_bad})} ({via})"
+    hit_good = [r for r in replies if r.label in wanted]
+    if hit_good:
+        return EvidenceStatus.SUPPORTING, hit_good, f"response carries {sorted({r.label for r in hit_good})} ({via})"
+    return EvidenceStatus.OBSERVED_ABSENCE, replies, f"response coded, neither outcome present ({via})"
 
 
 def derive_events(
@@ -149,9 +159,16 @@ def derive_events(
     nodes: list[MessageNode],
     observations: list[BehaviorObservation],
     actors: tuple[str, ...],
-) -> tuple[list[RelationalEvent], list[RelationalEvent], set[str], list[RelationEdge]]:
-    """L2.5 -> L3. Predicates are statements about relations, never about labels
-    co-occurring somewhere in the episode."""
+    coded_messages: set[str] | None = None,
+) -> tuple[list[RelationalEvent], list[RelationalEvent], list[RelationEdge]]:
+    """L2.5 -> L3. One event per triggered pattern, always carrying an outcome.
+
+    There is no separate `opportunities` channel any more. A pattern that had a
+    chance to show itself produces an event saying what happened; the ledger reads
+    only events and never infers anything from their absence. That turns
+    "absence is not counterevidence" from an agreement between two functions into
+    an algebraic property of the ledger.
+    """
     events: list[RelationalEvent] = []
     safety: list[RelationalEvent] = []
     relations = derive_relations(nodes, observations)
@@ -159,6 +176,7 @@ def derive_events(
     obs_by_message: dict[str, list[BehaviorObservation]] = {}
     for o in observations:
         obs_by_message.setdefault(o.message_id, []).append(o)
+    coded = coded_messages if coded_messages is not None else set(obs_by_message)
     a, b = actors
     ev = lambda os: tuple(sp for o in os for sp in o.evidence)  # noqa: E731
 
@@ -166,102 +184,66 @@ def derive_events(
         return [(by_id[e.from_observation], by_id[e.to_observation])
                 for e in relations if e.relation is kind]
 
-    opportunities = pattern_opportunities(nodes, observations, actors)
+    def emit(pattern, parts, anchor_obs, wanted, unwanted=frozenset(), suffix=""):
+        status, replies, basis = _outcome(nodes, coded, obs_by_message,
+                                          anchor_obs.message_id, wanted, unwanted)
+        obs = [anchor_obs] + list(replies)
+        events.append(_event(
+            f"{episode_id}:{pattern}{suffix}:{anchor_obs.observation_id}", pattern, parts,
+            episode_id, obs, status,
+            evidence=ev(obs) if status is EvidenceStatus.SUPPORTING else (),
+            counter=ev(replies) if status is EvidenceStatus.COUNTER else (),
+            basis=basis))
 
-    # attack_attack: negative ANSWERED BY negative.
-    escalations = rel(InteractionRelation.ESCALATES)
-    if escalations:
-        obs = [o for pair in escalations for o in pair]
-        events.append(_event(f"{episode_id}:aa", "attack_attack", actors, episode_id,
-                             obs, EvidenceStatus.SUPPORTING, ev(obs),
-                             basis="negative answered by negative"))
+    # attack_attack: a negative move, and whatever the partner's response was.
+    # NOTE: NEGATIVE_RESPONSE, not "escalation" — a single adjacent negative pair
+    # cannot show conflict sustained over time.
+    for o in observations:
+        if o.label in NEGATIVE:
+            emit("attack_attack", actors, o, wanted=NEGATIVE)
 
-    # pursue_withdraw. NON-UPTAKE IS ARGUED FOR, NOT ASSUMED: topic discontinuity
-    # alone is not enough, the responding message must also carry no uptake
-    # observation. Topic difference by itself can be "yes, and also...".
+    # pursue_withdraw: triggered only by REPEATED pursuit from one side.
     for pursuer, other in ((a, b), (b, a)):
         pursuit = [o for o in observations if o.actor == pursuer and o.label in PURSUING]
         if len(pursuit) < 2:
             continue
-        parts = (pursuer, other)
-        answered = [(src, dst) for src, dst in rel(InteractionRelation.CONTINUES_TOPIC)
-                    if src.actor == pursuer and dst.label in UPTAKE]
-        non_uptake = []
-        for src, dst in rel(InteractionRelation.TOPIC_DISCONTINUITY):
-            if src.actor != pursuer or src.label not in PURSUING:
-                continue
-            siblings = obs_by_message.get(dst.message_id, [])
-            if any(sib.label in UPTAKE for sib in siblings):
-                continue   # the same message did take the topic up elsewhere
-            non_uptake.append((src, dst))
-        censored = [o for o in pursuit if not window_is_observable(nodes, o.message_id)]
+        anchor = pursuit[-1]
+        status, replies, basis = _outcome(nodes, coded, obs_by_message, anchor.message_id,
+                                          wanted=set(), unwanted=UPTAKE)
+        if status is EvidenceStatus.OBSERVED_ABSENCE:
+            # Coded reply with no uptake. Non-uptake still has to be ARGUED: the
+            # recorded topic must also have diverged.
+            diverged = any(src.observation_id == anchor.observation_id
+                           for src, _ in rel(InteractionRelation.TOPIC_DISCONTINUITY))
+            if diverged:
+                status, basis = EvidenceStatus.SUPPORTING, "topic diverged AND reply carries no uptake"
+            else:
+                basis = "reply carries no uptake, but the topic did not diverge"
+        obs = [anchor] + list(replies)
+        events.append(_event(f"{episode_id}:pursue_withdraw:{pursuer}", "pursue_withdraw",
+                             (pursuer, other), episode_id, obs, status,
+                             evidence=ev(obs) if status is EvidenceStatus.SUPPORTING else (),
+                             counter=ev(replies) if status is EvidenceStatus.COUNTER else (),
+                             basis=basis))
 
-        if answered:
-            obs = [o for pair in answered for o in pair]
-            events.append(_event(f"{episode_id}:pw-counter:{pursuer}", "pursue_withdraw", parts,
-                                 episode_id, obs, EvidenceStatus.COUNTER, counter=ev(obs),
-                                 basis="pursuit taken up on topic"))
-        elif non_uptake:
-            obs = [o for pair in non_uptake for o in pair]
-            events.append(_event(f"{episode_id}:pw:{pursuer}", "pursue_withdraw", parts,
-                                 episode_id, obs, EvidenceStatus.SUPPORTING, ev(obs),
-                                 basis="topic discontinuity AND no uptake anywhere in the reply"))
-        elif censored:
-            events.append(_event(f"{episode_id}:pw-censored:{pursuer}", "pursue_withdraw", parts,
-                                 episode_id, pursuit, EvidenceStatus.RIGHT_CENSORED,
-                                 basis="record ends before a response could appear"))
-        else:
-            events.append(_event(f"{episode_id}:pw-insuff:{pursuer}", "pursue_withdraw", parts,
-                                 episode_id, pursuit, EvidenceStatus.INSUFFICIENT_OBSERVATION,
-                                 basis="no topic recorded, or no codable response"))
-
-    # repair_softening: softening + the partner's OBSERVED response.
+    # repair_softening: a softening move + the partner's observed response.
     for o in observations:
-        if o.label not in SOFTENING:
-            continue
-        reply_node = response_message(nodes, o.message_id)
-        if reply_node is None:
-            events.append(_event(f"{episode_id}:rs-censored:{o.observation_id}", "repair_softening",
-                                 actors, episode_id, [o], EvidenceStatus.RIGHT_CENSORED,
-                                 basis="record ends right after the softening move"))
-            continue
-        replies = obs_by_message.get(reply_node.message_id, [])
-        if not replies:
-            # They DID reply; nothing codable came back. Observed, not censored.
-            events.append(_event(f"{episode_id}:rs-absence:{o.observation_id}", "repair_softening",
-                                 actors, episode_id, [o], EvidenceStatus.OBSERVED_ABSENCE,
-                                 basis="partner replied but no codable uptake"))
-        elif any(r.label in NEGATIVE for r in replies):
-            neg = [r for r in replies if r.label in NEGATIVE]
-            events.append(_event(f"{episode_id}:rs-counter:{o.observation_id}", "repair_softening",
-                                 actors, episode_id, [o] + neg, EvidenceStatus.COUNTER,
-                                 counter=ev(neg), basis="softening answered by renewed negativity"))
-        elif any(r.label in UPTAKE | SOFTENING | ALIGNING for r in replies):
-            good = [r for r in replies if r.label in UPTAKE | SOFTENING | ALIGNING]
-            events.append(_event(f"{episode_id}:rs:{o.observation_id}", "repair_softening",
-                                 actors, episode_id, [o] + good, EvidenceStatus.SUPPORTING,
-                                 ev([o] + good), basis="softening answered by observed uptake"))
-        else:
-            events.append(_event(f"{episode_id}:rs-absence:{o.observation_id}", "repair_softening",
-                                 actors, episode_id, [o] + replies, EvidenceStatus.OBSERVED_ABSENCE,
-                                 basis="partner replied with neither uptake nor negativity"))
+        if o.label in SOFTENING:
+            emit("repair_softening", actors, o,
+                 wanted=UPTAKE | SOFTENING | ALIGNING, unwanted=NEGATIVE)
 
-    # constructive_alignment: aligning ANSWERED BY aligning.
-    aligned = [(src, dst) for src, dst in rel(InteractionRelation.RESPONDS_TO)
-               if src.label in ALIGNING and dst.label in ALIGNING]
-    if aligned:
-        obs = [o for pair in aligned for o in pair]
-        events.append(_event(f"{episode_id}:ca", "constructive_alignment", actors, episode_id,
-                             obs, EvidenceStatus.SUPPORTING, ev(obs),
-                             basis="aligning move answered by aligning move"))
+    # constructive_alignment: an aligning move + the partner's response.
+    for o in observations:
+        if o.label in ALIGNING:
+            emit("constructive_alignment", actors, o, wanted=ALIGNING)
 
-    # No mixed_transition event: it is derived from which hypotheses are live.
+    # No mixed_transition event: derived from which hypotheses are live.
 
     for o in observations:
         if o.label in SAFETY_RELEVANT:
             safety.append(_event(f"{episode_id}:safety:{o.observation_id}", "safety_relevant",
                                  (o.actor,), episode_id, [o], EvidenceStatus.SUPPORTING, ev([o])))
-    return events, safety, opportunities, relations
+    return events, safety, relations
 
 
 # --- runner ------------------------------------------------------------------
@@ -301,9 +283,11 @@ def run(corpus_path: Path, out_path: Path) -> dict:
             ep_id = f"{case['case_id']}/{ep.episode_id}"
             ep_messages = [m for m in messages if m.message_id in member]
             nodes = build_nodes(ep_messages, topics, replies)
-            events, safety_events, opportunities, relations = derive_events(
-                ep_id, nodes, ep_obs, actors)
-            ledger.observe_episode(ep_id, events, opportunities)
+            declared = case.get("coded_messages")
+            coded = set(declared) & member if declared is not None else None
+            events, safety_events, relations = derive_events(
+                ep_id, nodes, ep_obs, actors, coded)
+            ledger.observe_episode(ep_id, events)
             for se in safety_events:
                 safety_acc.add(ep_id, se)
             ctx = build_context(ep_id, ledger, safety_acc)
@@ -315,7 +299,6 @@ def run(corpus_path: Path, out_path: Path) -> dict:
                 "n_observations": len(ep_obs),
                 "topology": [to_jsonable(e) for e in build_topology(nodes)],
                 "relations": [to_jsonable(r) for r in relations],
-                "opportunities": sorted(opportunities),
                 "events": [to_jsonable(e) for e in events],
                 "snapshot_is_mixed_transition": ledger.is_mixed_transition(),  # cumulative, not per-episode
                 "context": to_jsonable(ctx),

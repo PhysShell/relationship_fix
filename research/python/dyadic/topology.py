@@ -10,6 +10,8 @@ Nothing here knows what a behaviour is.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .model import MessageEdge, MessageNode, MessageRelation
 from .segmentation import Message
 
@@ -56,13 +58,46 @@ def build_topology(nodes: list[MessageNode]) -> list[MessageEdge]:
     return edges
 
 
-def response_message(nodes: list[MessageNode], message_id: str) -> MessageNode | None:
-    """The message that structurally answers `message_id`, or None if the record
-    ends first. None here means RIGHT CENSORING, never 'they did not reply'."""
+@dataclass(frozen=True, slots=True)
+class ResponseCandidate:
+    """One possible answer to a message, with the reason it is a candidate.
+
+    Returned as a LIST rather than a single winner: L1.5 already knows a strong
+    signal (explicit reply_to) and a weak one (adjacency), and an evaluator that
+    silently takes the adjacent turn throws the strong one away. No probabilities;
+    just the basis, so the caller decides in the open.
+    """
+
+    node: MessageNode
+    basis: MessageRelation
+
+
+def response_candidates(nodes: list[MessageNode], message_id: str) -> list[ResponseCandidate]:
+    """Canonical response-resolution policy: explicit reply first, adjacency after.
+
+    Both are returned when both exist, explicit first, so a caller that takes
+    `[0]` gets the strong signal and a caller that wants the full picture can see
+    that they disagreed.
+    """
     idx = next((i for i, n in enumerate(nodes) if n.message_id == message_id), None)
     if idx is None:
-        return None
-    return next((n for n in nodes[idx + 1:] if n.actor != nodes[idx].actor), None)
+        return []
+    src = nodes[idx]
+    out: list[ResponseCandidate] = []
+
+    explicit = [n for n in nodes[idx + 1:] if n.reply_to == message_id and n.actor != src.actor]
+    out.extend(ResponseCandidate(n, MessageRelation.EXPLICIT_REPLY_TO) for n in explicit)
+
+    adjacent = next((n for n in nodes[idx + 1:] if n.actor != src.actor), None)
+    if adjacent is not None and all(c.node.message_id != adjacent.message_id for c in out):
+        out.append(ResponseCandidate(adjacent, MessageRelation.NEXT_BY_OTHER_ACTOR))
+    return out
+
+
+def resolve_response(nodes: list[MessageNode], message_id: str) -> ResponseCandidate | None:
+    """The single best candidate under the canonical policy, or None if censored."""
+    candidates = response_candidates(nodes, message_id)
+    return candidates[0] if candidates else None
 
 
 def window_is_observable(nodes: list[MessageNode], message_id: str) -> bool:
@@ -70,7 +105,6 @@ def window_is_observable(nodes: list[MessageNode], message_id: str) -> bool:
 
     True iff the other actor sent at least one message afterwards inside this
     episode. If not, the outcome is right-censored: we know the record ended, not
-    that the partner stayed silent. Without this distinction OBSERVED_ABSENCE —
-    which now ages a hypothesis — would fire every time a log happened to stop.
+    that the partner stayed silent.
     """
-    return response_message(nodes, message_id) is not None
+    return bool(response_candidates(nodes, message_id))

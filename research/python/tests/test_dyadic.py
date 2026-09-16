@@ -25,8 +25,14 @@ from dyadic.model import (
     retire,
 )
 from dyadic.segmentation import DEFAULT_GAP_SECONDS, Message, episode_identity, segment
-from dyadic.topology import build_nodes, build_topology, window_is_observable
-from dyadic.spike import derive_events, derive_relations, pattern_opportunities, run
+from dyadic.topology import (
+    build_nodes,
+    build_topology,
+    resolve_response,
+    response_candidates,
+    window_is_observable,
+)
+from dyadic.spike import derive_events, derive_relations, run
 from dyadic.state import (
     PATTERNS,
     SPIKE_ONLY_SAFETY_MIN_EPISODES,
@@ -95,7 +101,7 @@ class AbsenceIsNotCounterevidenceTests(unittest.TestCase):
         led = HypothesisLedger()
         for i in range(2):
             led.observe_episode(f"ep{i}", [ev(f"e{i}", "attack_attack", EvidenceStatus.SUPPORTING,
-                                              episode=f"ep{i}")], {"attack_attack"})
+                                              episode=f"ep{i}")])
         for i in range(2, 8):
             led.observe_episode(f"ep{i}", [ev(f"c{i}", "attack_attack", EvidenceStatus.RIGHT_CENSORED,
                                               episode=f"ep{i}")])
@@ -168,23 +174,24 @@ class RecurrenceAndDecayTests(unittest.TestCase):
         led.observe_episode("ep1", [ev("e1", "attack_attack", EvidenceStatus.SUPPORTING)])
         self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.CANDIDATE)
 
-    def test_decay_needs_eligible_opportunities_not_elapsed_episodes(self):
-        """Quiet episodes must NOT age a hypothesis. Counting raw episodes was a
-        hidden form of "not observed -> weakened", the very inference this model
-        refuses everywhere else."""
+    def test_decay_needs_explicit_observed_absence(self):
+        """Quiet episodes must NOT age a hypothesis, and neither must episodes that
+        simply produced no event. Only an explicit OBSERVED_ABSENCE — a resolved
+        response, inside the coding frame, without the outcome — ages anything."""
         led = HypothesisLedger()
         for i in range(2):
             led.observe_episode(f"ep{i}", [ev(f"e{i}", "attack_attack", EvidenceStatus.SUPPORTING,
-                                              episode=f"ep{i}")], {"attack_attack"})
+                                              episode=f"ep{i}")])
         self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.RECURRING)
 
-        for i in range(2, 8):                      # six episodes with no chance to show
-            led.observe_episode(f"ep{i}", [], set())
+        for i in range(2, 8):
+            led.observe_episode(f"ep{i}", [])
         self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.RECURRING,
-                         "episodes where the pattern could not appear must not weaken it")
+                         "no event means no information")
 
-        for i in range(8, 11):                     # three real opportunities, no support
-            led.observe_episode(f"ep{i}", [], {"attack_attack"})
+        for i in range(8, 11):
+            led.observe_episode(f"ep{i}", [ev(f"x{i}", "attack_attack",
+                                              EvidenceStatus.OBSERVED_ABSENCE, episode=f"ep{i}")])
         self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.WEAKENED)
 
     def test_retire_keeps_the_record(self):
@@ -356,17 +363,29 @@ class SpikeDeterminismTests(unittest.TestCase):
             trace = run(CORPUS, Path(tmp) / "t.json")
         by_case = {e["case_id"]: e for e in trace["per_episode"]}
 
-        self.assertEqual(by_case["adv-unlabelled-01"]["events"], [],
-                         "an unlabelled reply must break the chain end-to-end")
-        self.assertEqual({e["status"] for e in by_case["adv-truncated-01"]["events"]},
-                         {"right_censored"})
+        unlabelled = by_case["adv-unlabelled-01"]["events"]
+        self.assertNotIn("supporting", {e["status"] for e in unlabelled},
+                         "an unlabelled reply must never ground a supported link")
+        self.assertIn("insufficient", {e["status"] for e in unlabelled})
+
+        self.assertIn("right_censored",
+                      {e["status"] for e in by_case["adv-truncated-01"]["events"]})
         self.assertEqual({e["status"] for e in by_case["adv-noncodable-01"]["events"]},
-                         {"observed_absence"})
+                         {"insufficient"}, "uncoded reply is not an observed absence")
+
         widened = by_case["adv-multitopic-01"]["events"]
         self.assertNotIn("pursue_withdraw", {e["event_type"] for e in widened})
 
+        frame_in = [e for e in by_case["adv-frame-01"]["events"] if e["event_type"] == "repair_softening"]
+        frame_out = [e for e in by_case["adv-frame-02"]["events"] if e["event_type"] == "repair_softening"]
+        self.assertEqual([e["status"] for e in frame_in], ["observed_absence"])
+        self.assertEqual([e["status"] for e in frame_out], ["insufficient"])
 
-def convo(*turns):
+        reply_to = [e for e in by_case["adv-replyto-01"]["events"] if e["status"] == "supporting"]
+        self.assertTrue(any("explicit_reply_to" in e["basis"] for e in reply_to))
+
+
+def convo(*turns, replies=None):
     """(message_id, actor, topic, [labels...]) -> (nodes, observations).
 
     Messages come first and exist whether or not anything was coded on them. That
@@ -380,7 +399,7 @@ def convo(*turns):
             obs.append(BehaviorObservation(f"{mid}-o{j}", label, actor, mid,
                                            (EvidenceSpan(mid, "x"),)))
     topics = {mid: topic for mid, _, topic, _ in turns if topic}
-    return build_nodes(msgs, topics), obs
+    return build_nodes(msgs, topics, replies or {}), obs
 
 
 class ConversationTopologyTests(unittest.TestCase):
@@ -396,6 +415,19 @@ class ConversationTopologyTests(unittest.TestCase):
             ("m3", "b", "cat", ["TOPIC_SHIFT"]))
         rels = derive_relations(nodes, observations)
         self.assertEqual(rels, [], "m3 does not answer m1; m2 stands between them")
+
+    def test_explicit_reply_beats_the_adjacent_turn(self):
+        """L1.5 knew the strong signal; the repair evaluator used to ignore it and
+        grab whatever came next."""
+        nodes, _ = convo(("m1", "a", "sorry", ["APOLOGY"]),
+                         ("m2", "b", "groceries", ["NEUTRAL_REQUEST"]),
+                         ("m3", "b", "sorry", ["VALIDATION"]),
+                         replies={"m3": "m1"})
+        best = resolve_response(nodes, "m1")
+        self.assertEqual(best.node.message_id, "m3")
+        self.assertEqual(best.basis, MessageRelation.EXPLICIT_REPLY_TO)
+        self.assertEqual([c.node.message_id for c in response_candidates(nodes, "m1")],
+                         ["m3", "m2"], "both kept, explicit first")
 
     def test_topology_exists_for_unlabelled_messages(self):
         nodes, _ = convo(("m1", "a", "t", []), ("m2", "b", "t", []))
@@ -433,7 +465,7 @@ class InteractionRelationTests(unittest.TestCase):
                                        ("m2", "b", "money", ["ON_TOPIC_REPLY"])))
         diff = derive_relations(*convo(("m1", "a", "money", ["RAISE_TOPIC"]),
                                        ("m2", "b", "weather", ["TOPIC_SHIFT"])))
-        self.assertIn(InteractionRelation.CONTINUES_TOPIC, {r.relation for r in same})
+        self.assertIn(InteractionRelation.TOPIC_CONTINUITY, {r.relation for r in same})
         self.assertIn(InteractionRelation.TOPIC_DISCONTINUITY, {r.relation for r in diff})
 
     def test_missing_topic_yields_no_topic_relation(self):
@@ -442,7 +474,7 @@ class InteractionRelationTests(unittest.TestCase):
                                        ("m2", "b", None, ["TOPIC_SHIFT"])))
         kinds = {r.relation for r in rels}
         self.assertNotIn(InteractionRelation.TOPIC_DISCONTINUITY, kinds)
-        self.assertNotIn(InteractionRelation.CONTINUES_TOPIC, kinds)
+        self.assertNotIn(InteractionRelation.TOPIC_CONTINUITY, kinds)
 
     def test_every_interaction_relation_is_grounded_in_a_message_relation(self):
         rels = derive_relations(*convo(("m1", "a", "t", ["BLAME_CRITICISM"]),
@@ -455,17 +487,29 @@ class InteractionRelationTests(unittest.TestCase):
 class RelationAwarePredicateTests(unittest.TestCase):
     """Regressions for defects previous spikes shipped."""
 
-    def _events(self, *turns):
-        nodes, observations = convo(*turns)
-        events, _, opportunities, _ = derive_events("ep1", nodes, observations, ("a", "b"))
-        return events, opportunities
+    def _events(self, *turns, coded=None, replies=None):
+        nodes, observations = convo(*turns, replies=replies)
+        events, _, _ = derive_events("ep1", nodes, observations, ("a", "b"), coded)
+        return [e for e in events], None
 
-    def test_softening_the_partner_answered_with_nothing_codable_is_observed_absence(self):
+    def test_uncoded_reply_is_insufficient_not_observed_absence(self):
+        """A label missing from a message means either "coded and absent" or
+        "never coded here". Only an explicit coding frame tells them apart, so an
+        uncoded reply must not age anything."""
         events, _ = self._events(("m1", "a", "t", ["APOLOGY"]),
                                  ("m2", "b", "t", []),
                                  ("m3", "a", "t", []))
         repair = [e for e in events if e.event_type == "repair_softening"]
-        self.assertEqual([e.status for e in repair], [EvidenceStatus.OBSERVED_ABSENCE])
+        self.assertEqual([e.status for e in repair], [EvidenceStatus.INSUFFICIENT_OBSERVATION])
+
+    def test_same_shape_flips_on_the_declared_coding_frame(self):
+        turns = (("m1", "a", "t", ["APOLOGY"]), ("m2", "b", "t2", []))
+        in_frame, _ = self._events(*turns, coded={"m1", "m2"})
+        out_frame, _ = self._events(*turns, coded={"m1"})
+        self.assertEqual([e.status for e in in_frame if e.event_type == "repair_softening"],
+                         [EvidenceStatus.OBSERVED_ABSENCE])
+        self.assertEqual([e.status for e in out_frame if e.event_type == "repair_softening"],
+                         [EvidenceStatus.INSUFFICIENT_OBSERVATION])
 
     def test_softening_at_the_end_of_the_log_is_right_censored_not_absence(self):
         """We know the record stopped, not that the partner stayed silent. The
@@ -488,11 +532,13 @@ class RelationAwarePredicateTests(unittest.TestCase):
         repair = [e for e in events if e.event_type == "repair_softening"]
         self.assertEqual([e.status for e in repair], [EvidenceStatus.COUNTER])
 
-    def test_negatives_that_do_not_answer_each_other_are_not_attack_attack(self):
+    def test_negatives_that_do_not_answer_each_other_do_not_support_attack_attack(self):
         events, _ = self._events(("m1", "a", "t1", ["BLAME_CRITICISM"]),
                                  ("m2", "a", "t2", ["BLAME_CRITICISM"]),
                                  ("m3", "b", "t2", ["ON_TOPIC_REPLY"]))
-        self.assertNotIn("attack_attack", {e.event_type for e in events})
+        attack = [e for e in events if e.event_type == "attack_attack"]
+        self.assertTrue(attack, "the pattern was triggered and must report an outcome")
+        self.assertNotIn(EvidenceStatus.SUPPORTING, [e.status for e in attack])
 
     def test_negative_answering_negative_is_attack_attack(self):
         events, _ = self._events(("m1", "a", "t", ["BLAME_CRITICISM"]),
@@ -518,33 +564,65 @@ class RelationAwarePredicateTests(unittest.TestCase):
         self.assertIn(EvidenceStatus.SUPPORTING, [e.status for e in pw])
 
 
-class PatternSpecificOpportunityTests(unittest.TestCase):
-    """A single negative move used to open the window for every pattern at once,
-    so hypotheses aged on episodes whose preconditions never existed."""
+class EveryOpportunityMaterialisesAsAnEventTests(unittest.TestCase):
+    """The parallel `opportunities` channel is gone.
 
-    def test_one_negative_move_is_not_an_opportunity_for_pursue_withdraw(self):
-        nodes, observations = convo(("m1", "a", "t", ["BLAME_CRITICISM"]),
-                                    ("m2", "b", "t", ["ON_TOPIC_REPLY"]))
-        opportunities = pattern_opportunities(nodes, observations, ("a", "b"))
-        self.assertIn("attack_attack", opportunities)
-        self.assertNotIn("pursue_withdraw", opportunities)
+    It used to let the ledger age a hypothesis on an episode that produced NO
+    event at all, which silently asserted "a response was observable and no
+    SUPPORTING event appeared, therefore the pattern was absent" — true only if
+    the coding frame was exhaustive for that pattern, which observations never
+    claim.
+    """
 
-    def test_repeated_pursuit_with_a_window_is_an_opportunity(self):
-        nodes, observations = convo(("m1", "a", "t", ["RAISE_TOPIC"]),
-                                    ("m2", "a", "t", ["PRESSURE_FOR_CHANGE"]),
-                                    ("m3", "b", "t", ["ON_TOPIC_REPLY"]))
-        self.assertIn("pursue_withdraw", pattern_opportunities(nodes, observations, ("a", "b")))
+    def _events(self, *turns, coded=None):
+        nodes, observations = convo(*turns)
+        events, _, _ = derive_events("ep1", nodes, observations, ("a", "b"), coded)
+        return events
 
-    def test_trigger_at_the_end_of_the_log_is_not_an_opportunity(self):
-        nodes, observations = convo(("m1", "b", "t", ["ON_TOPIC_REPLY"]),
-                                    ("m2", "a", "t", ["BLAME_CRITICISM"]))
-        self.assertNotIn("attack_attack", pattern_opportunities(nodes, observations, ("a", "b")),
-                         "no later message by the partner: right-censored, not a missed chance")
+    def test_a_triggered_pattern_always_emits_an_outcome(self):
+        events = self._events(("m1", "a", "t", ["BLAME_CRITICISM"]),
+                              ("m2", "b", "t", ["ON_TOPIC_REPLY"]))
+        attack = [e for e in events if e.event_type == "attack_attack"]
+        self.assertEqual(len(attack), 1)
+        self.assertEqual(attack[0].status, EvidenceStatus.OBSERVED_ABSENCE)
+        self.assertTrue(attack[0].basis)
 
-    def test_quiet_episode_offers_no_opportunity(self):
-        nodes, observations = convo(("m1", "a", "t", ["NEUTRAL_REQUEST"]),
-                                    ("m2", "b", "t", ["ON_TOPIC_REPLY"]))
-        self.assertEqual(pattern_opportunities(nodes, observations, ("a", "b")), set())
+    def test_one_negative_move_does_not_trigger_pursue_withdraw(self):
+        events = self._events(("m1", "a", "t", ["BLAME_CRITICISM"]),
+                              ("m2", "b", "t", ["ON_TOPIC_REPLY"]))
+        self.assertNotIn("pursue_withdraw", {e.event_type for e in events})
+
+    def test_repeated_pursuit_triggers_pursue_withdraw(self):
+        events = self._events(("m1", "a", "t", ["RAISE_TOPIC"]),
+                              ("m2", "a", "t", ["PRESSURE_FOR_CHANGE"]),
+                              ("m3", "b", "t", ["ON_TOPIC_REPLY"]))
+        self.assertIn("pursue_withdraw", {e.event_type for e in events})
+
+    def test_trigger_at_the_end_of_the_log_is_right_censored(self):
+        events = self._events(("m1", "b", "t", ["ON_TOPIC_REPLY"]),
+                              ("m2", "a", "t", ["BLAME_CRITICISM"]))
+        attack = [e for e in events if e.event_type == "attack_attack"]
+        self.assertEqual([e.status for e in attack], [EvidenceStatus.RIGHT_CENSORED])
+
+    def test_quiet_episode_emits_nothing(self):
+        self.assertEqual(self._events(("m1", "a", "t", ["NEUTRAL_REQUEST"]),
+                                      ("m2", "b", "t", ["ON_TOPIC_REPLY"])), [])
+
+    def test_ledger_ages_only_on_explicit_observed_absence(self):
+        """An episode with no events at all must never age anything."""
+        led = HypothesisLedger()
+        for i in range(2):
+            led.observe_episode(f"ep{i}", [ev(f"e{i}", "attack_attack", EvidenceStatus.SUPPORTING,
+                                              episode=f"ep{i}")])
+        self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.RECURRING)
+        for i in range(2, 9):
+            led.observe_episode(f"ep{i}", [])
+        self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.RECURRING,
+                         "no event means no information, not evidence of absence")
+        for i in range(9, 12):
+            led.observe_episode(f"ep{i}", [ev(f"x{i}", "attack_attack",
+                                              EvidenceStatus.OBSERVED_ABSENCE, episode=f"ep{i}")])
+        self.assertEqual(led.hypotheses["attack_attack:a+b"].status, HypothesisStatus.WEAKENED)
 
 
 class MixedTransitionIsDerivedTests(unittest.TestCase):
@@ -556,11 +634,11 @@ class MixedTransitionIsDerivedTests(unittest.TestCase):
         self.assertFalse(led.is_mixed_transition())
         for i in range(2):
             led.observe_episode(f"n{i}", [ev(f"a{i}", "attack_attack", EvidenceStatus.SUPPORTING,
-                                             episode=f"n{i}")], {"attack_attack"})
+                                             episode=f"n{i}")])
         self.assertFalse(led.is_mixed_transition(), "negative alone is not mixed")
         for i in range(2):
             led.observe_episode(f"s{i}", [ev(f"r{i}", "repair_softening", EvidenceStatus.SUPPORTING,
-                                             episode=f"s{i}")], {"repair_softening"})
+                                             episode=f"s{i}")])
         self.assertTrue(led.is_mixed_transition())
 
     def test_bare_candidates_do_not_make_a_snapshot_mixed(self):
