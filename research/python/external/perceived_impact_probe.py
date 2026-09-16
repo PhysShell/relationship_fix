@@ -417,9 +417,15 @@ def label_effect(
     """The manipulation that no observer can see.
 
     Within one actual authorship condition, recipients were randomly told the
-    reply came from a human or from an AI. Any difference here is variance in
-    perceived impact that is not in the message at all, and therefore variance
-    that no observer reading the message could recover even in principle.
+    reply came from a human or from an AI. Randomisation makes the distribution
+    of response text independent of the label, so any difference here is a
+    component of perceived impact that is NOT IDENTIFIABLE FROM THE RESPONSE
+    TEXT ALONE: it moves under contextual information the text does not carry.
+
+    Note the limit of the design: the two arms were not shown the same literal
+    text twice, so this is a randomised contrast, not a paired same-text
+    counterfactual. It establishes a causal contextual effect; it does not
+    establish what an ideal reader of one fixed message could or could not do.
     """
     arm = [s for s in self_reports.values() if s.actual_source == actual_source]
     human_label = [s.composite for s in arm if s.stated_label == "human label"]
