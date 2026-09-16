@@ -63,8 +63,9 @@ Companion: [ontology-crosswalk.md](ontology-crosswalk.md) · [invalidation-revie
 
 > **RESEARCH FINDING R-A1.** Наш pilot кодирует **одну реплику** (`unit_of_analysis: "utterance"`, 40 items, target_message_id). IDCS-CMC — ближайшая существующая система для ровно нашего носителя (текстовый чат реальных пар) — **не кодирует ничего короче 5-минутного сегмента, и даже эти сегментные оценки выбрасывает**.
 > Это не «мы взяли меньший unit». Это **другой класс измерения**: dimensional intensity целой интеракции vs binary presence одной реплики.
-> **candidate change:** перестать описывать наши labels как «adapted_from IDCS-CMC» без явной пометки `unit_relation: "incompatible_granularity"`.
-> **falsification:** если утверждаемый pilot-alpha ≥ 0.667 на utterance-уровне для ≥3 labels, granularity-претензия ослабевает для этих конкретных labels (но не для WITHDRAWAL — см. §1.5).
+> **Как это называть честно.** Наш дизайн — `exchange-context → decision about target utterance` — следует считать **новым measurement design, inspired by prior constructs**, а не уменьшенной версией CIRS/IDCS. Это не понижение статуса: это снятие ложного обещания, что чужая валидация переносится к нам вместе с именем конструкта.
+> **candidate change (для v1, НЕ сейчас):** в словаре `relation` из [observational-coding-prior-art.md](observational-coding-prior-art.md) §6 значение `adapted_from` («direct ancestor but unit/rules were adapted») для наших labels в большинстве случаев **завышено**. Точнее — `inspired_by` плюс отдельное поле `unit_relation: "incompatible_granularity"`. Особенно это касается `B.PRESSURE_FOR_CHANGE`, где расходится не только unit, но и **ядро конструкта** (§2.4): там слово «adaptation» надо убрать, и признать, что у нас **собственный operational construct, исторически мотивированный CIRS**.
+> **falsification:** если pilot-alpha ≥ 0.667 на utterance-уровне для ≥3 labels, granularity-претензия ослабевает для этих конкретных labels (но не для WITHDRAWAL — см. §1.5). На provenance-термин это не влияет: даже работающая метрика не делает нас адаптацией чужой системы.
 
 ### 1.4 Reliability (Table 4.1, ICC, two-way mixed, consistency, average-measures)
 
@@ -89,7 +90,8 @@ Companion: [ontology-crosswalk.md](ontology-crosswalk.md) · [invalidation-revie
 Обучение: 4 кодировщика; 5 training logs → недостаточно (ICC 4 кодировщиков без master-кодов = **.79**, при том что *с* master-кодами = .85) → +3 лога → .83. Fully-crossed дизайн на 16 логах, остальные 24 распределены по одному кодировщику.
 
 > **RESEARCH FINDING R-A2 — «anchoring collapse».** Withdrawal дал **.87 на training-логах и .51 сразу, как только исчезли групповое обсуждение и master-коды**. Это не шум: та же команда, то же обучение, тот же manual.
-> Авторы сами наткнулись на этот механизм и на других измерениях: «master scores были consistently в середине», ICC с master-кодами .85 vs без них .79 — то есть **согласие частично производилось якорем, а не конструктом**.
+> Авторы наблюдали то же и на других измерениях: «master scores были consistently в середине», ICC с master-кодами .85 vs без них .79.
+> **Корректная формулировка вывода:** reliability здесь **очень чувствительна к процедуре калибровки и наличию якорей**. Формулировка «столько-то согласия произведено калибровкой» была бы статистической алхимией — ICC не является запасом вещества «agreement», из которого вычитают долю; разность двух ICC не есть причинный вклад.
 > **Прямое следствие для нас:** любая цифра agreement, полученная после совместной калибровки на тех же/похожих items, **завышена**. Наш pilot строго blind (`blind_rules` в `pilot-manifest.json` запрещают обсуждение до заморозки обоих слоёв) — это правильно и должно остаться.
 
 ### 1.5 Withdrawal: разбор, ради которого всё затевалось
@@ -246,8 +248,9 @@ CIRS различает их так: **Blame атакует/оценивает; 
 
 > **RESEARCH FINDING R-B4 — 31 item схлопывается в 4 фактора.** Это, возможно, самое неприятное для нашей дорожной карты. Люди, у которых есть обученные кодировщики, полные записи и десятилетия итераций, при факторизации получают **negativity / positivity / withdrawal / problem-solving**. Blame и Pressure уходят в negativity. Withdrawal и Avoidance — в withdrawal.
 > То есть **наши шесть labels с высокой вероятностью измеряют два-три измерения**, а не шесть. И, что хуже, именно три пары, которые мы объявили `confusable_with` (BLAME↔PRESSURE, VALIDATION↔REPAIR, WITHDRAWAL↔AVOIDANCE), — это ровно те пары, которые в литературе **сливаются при факторизации**.
-> **candidate change:** добавить в анализ pilot **проверку размерности**, а не только per-label alpha: если BLAME и PRESSURE дают высокое взаимное согласие «хоть один из двух», но низкое согласие «который именно» — это негативность, а не два конструкта.
-> **falsification:** alpha(union BLAME∪PRESSURE) ≈ alpha(BLAME) ≈ alpha(PRESSURE) опровергает слияние; alpha(union) существенно выше обоих — подтверждает.
+> **Граница переноса.** Факторная структура получена на **session-level dimensional ratings обученных кодировщиков**. У нас — **binary/multilabel решение о target-реплике внутри короткого обмена**. Это разные measurement models, и структура одной **не наследуется** другой. Считать это гипотезой против нашей таксономии — правомерно; считать доказательством — нет.
+> **candidate change:** добавить в анализ pilot **boundary-collapse diagnostic**: сравнить alpha(union BLAME∪PRESSURE) с alpha каждого по отдельности.
+> **Что именно он показывает:** alpha(union) ≫ alpha(частей) означает, что люди согласуются по широкой суперкатегории лучше, чем по границе внутри неё. Это совместимо с несколькими объяснениями сразу (один латентный конструкт; два конструкта с плохой operational boundary; нехватка контекста; плохая инструкция; низкая prevalence одного из двух) и **сам по себе размерность не устанавливает**.
 > **Это тоже считается на текущем pilot без изменений.**
 
 ---
@@ -330,3 +333,19 @@ Repair Attempts Observational Coding System (Tabares, Driver & Gottman; глав
 - SSIRS manual (Jones & Christensen, unpublished, UCLA).
 - Kline et al. (2004), глава IDCS в Kerig & Baucom.
 - Tabares, Driver & Gottman, Repair Attempts OCS (Taylor & Francis, paywall).
+
+---
+
+## 8. Журнал ревизий этого документа
+
+Документ правился после внешнего критического разбора. Что изменено и почему — здесь, а не молча:
+
+| Что | Было | Стало | Причина |
+|---|---|---|---|
+| SPAFF `Criticism` | «такого кода нет, ссылку надо исправить» | SPAFF-20 содержит `Criticism` и `Stonewalling`; прежняя ссылка **верна** | Вывод строился на Appendix B диссертации Berkeley, где приведено **подмножество** кодов, использованное в той работе. Ошибка вывода из неполного перечня. Исправлено в §4 и в crosswalk; остаточное упоминание в `next-research-design.md` §1a.3 устранено отдельно |
+| Anchoring collapse (R-A2) | «согласие частично производилось якорем, а не конструктом» | «reliability очень чувствительна к процедуре калибровки и наличию якорей» | ICC не раскладывается на аддитивные доли; разность двух ICC не есть причинный вклад. Результат остаётся важным — без статистической алхимии |
+| Перенос факторной структуры (R-B4) | «наши шесть labels **измеряют** 2–3 конструкта» | «это **гипотеза** против нашей таксономии; факторная структура одной measurement model не наследуется другой» | Их данные — session-level dimensional ratings обученных кодировщиков; наши — binary/multilabel решения о target-реплике. Разные measurement models |
+| Union-анализ | «проверка размерности / factor test» | **boundary-collapse diagnostic** | α(union) ≫ α(частей) совместим минимум с пятью объяснениями и размерность не устанавливает |
+| Withdrawal, минимальная единица | «может не существовать для текста» | «text-only observability под сомнением, minimum sufficient unit не установлен» | IDCS-CMC этот конструкт в CMC всё-таки кодировала; плохая reliability ≠ принципиальная неизмеримость |
+
+Нижележащие эмпирические факты (ICC .87→.51, ICC .85 vs .79, PCA→4 фактора, невербальный канал в трёх системах) **не изменились**. Изменилась сила выводимых из них утверждений.
