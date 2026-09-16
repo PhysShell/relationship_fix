@@ -18,6 +18,13 @@ response-слои, пишет pilot-report.json + pilot-report.md. Ничего 
   Feedback.hs): кросс-табы unnatural_example × disagreement / abstention / stratum /
   item — единственный способ post hoc отделить плохой stimulus от плохого definition
   (dialogue-naturalness-gate §3, §9).
+- boundary-collapse diagnostic (prereg §1.8): alpha по объединённому решению пары
+  labels против alpha каждого по отдельности. Это ДИАГНОСТИКА границы, а НЕ тест
+  размерности: alpha(union) > alpha(частей) означает только «широкая граница
+  воспроизводится лучше узкой» и совместим минимум с пятью объяснениями сразу.
+- directional bias (prereg §1.9): сколько positive-решений у каждого слоя по
+  каждому label и signed difference. Описательно. Никакого вывода «кто прав»:
+  у нас нет gold-стандарта, относительно которого один слой был бы вернее.
 
 Запуск (гейтящие числа — только отсюда, не из notebook):
     uv run python -m metrics.agreement --pilot-dir ../../data/pilot/v0.1
@@ -39,6 +46,14 @@ MIN_PAIRABLE_UNITS = 10       # ниже — underpowered
 MIN_POSITIVE_UNION = 5        # ниже — underpowered
 BOOTSTRAP_ITERATIONS = 2000
 BOOTSTRAP_SEED = 42
+
+# prereg pilot-v0.1-analysis-prereg.md §1.8: пары, для которых boundary-collapse
+# diagnostic зарегистрирован ДО просмотра ответов. Порядок внутри пары канонический
+# (сортированный) — отчёт не должен зависеть от порядка записи здесь.
+BOUNDARY_COLLAPSE_PAIRS = (
+    ("B.BLAME_CRITICISM", "B.PRESSURE_FOR_CHANGE"),
+    ("B.VALIDATION", "B.REPAIR_ATTEMPT"),
+)
 
 DECISIONS = ("assigned", "none_observed", "abstained")
 # Коды item feedback = annotation-web Feedback.hs; UNNATURAL — ось naturalness gate.
@@ -122,6 +137,98 @@ def label_stats(label: str, unit_rows: list[dict]) -> dict:
         "positive_agreement_dice": round(2 * both / (pos_a + pos_b), 4) if (pos_a + pos_b) else None,
         "estimability_status": status,
         "meets_target": (alpha is not None and alpha >= ALPHA_TARGET) if status == "passed" else False,
+    }
+
+
+def boundary_collapse_diagnostic(pair: tuple[str, str], unit_rows: list[dict]) -> dict:
+    """alpha(A ∪ B) против alpha(A) и alpha(B) для одной пары labels.
+
+    ЧТО ЭТО ЗНАЧИТ (prereg §2.3, фиксируется до просмотра ответов):
+    alpha(union) существенно выше обоих => широкая граница воспроизводится лучше
+    узкой границы внутри неё. Это НЕ доказывает, что labels суть один construct:
+    тот же результат дают ещё как минимум boundary ambiguity при двух реальных
+    конструктах, нехватка контекста, плохая инструкция и низкая prevalence одного
+    из двух. Величина `delta_union_minus_max_part` — описательная, не тест.
+
+    Unit считается pairable, если ОБА слоя вынесли решение in {assigned,
+    none_observed} — тот же критерий, что в label_stats, чтобы числа были
+    сопоставимы; abstained не наказывается и здесь.
+    """
+    a_label, b_label = pair
+    pairable = [
+        r for r in unit_rows
+        if r["decision_a"] in ("assigned", "none_observed")
+        and r["decision_b"] in ("assigned", "none_observed")
+    ]
+    union_pairs = [
+        (int(bool(r["labels_a"] & {a_label, b_label})), int(bool(r["labels_b"] & {a_label, b_label})))
+        for r in pairable
+    ]
+    union_alpha = krippendorff_alpha_binary(union_pairs)
+    parts = {label: label_stats(label, unit_rows)["alpha"] for label in pair}
+    known_parts = [v for v in parts.values() if v is not None]
+
+    # Оба согласились, что «хоть один из двух есть», но разошлись в том, какой
+    # именно — это и есть наблюдаемая цена узкой границы.
+    both_union_positive = sum(1 for a, b in union_pairs if a == 1 and b == 1)
+    split_on_which = sum(
+        1 for r in pairable
+        if (r["labels_a"] & {a_label, b_label}) and (r["labels_b"] & {a_label, b_label})
+        and (r["labels_a"] & {a_label, b_label}) != (r["labels_b"] & {a_label, b_label})
+    )
+    n = len(union_pairs)
+    union_positive_union = sum(1 for a, b in union_pairs if a == 1 or b == 1)
+    estimable = n >= MIN_PAIRABLE_UNITS and union_positive_union >= MIN_POSITIVE_UNION and union_alpha is not None
+
+    return {
+        "pair": list(pair),
+        "n_units": n,
+        "union_alpha": round(union_alpha, 4) if union_alpha is not None else None,
+        "union_bootstrap_ci_95": bootstrap_ci(union_pairs),
+        "union_positive_union": union_positive_union,
+        "part_alphas": {k: v for k, v in parts.items()},
+        "delta_union_minus_max_part": (
+            round(union_alpha - max(known_parts), 4)
+            if union_alpha is not None and known_parts else None
+        ),
+        "both_union_positive": both_union_positive,
+        "split_on_which_label": split_on_which,
+        "estimability_status": "passed" if estimable else "underpowered_not_estimable",
+        "interpretation_note": (
+            "boundary-collapse diagnostic, NOT a dimensionality test: a higher union alpha "
+            "shows only that the broad boundary reproduces better than the fine one."
+        ),
+    }
+
+
+def directional_bias(label: str, unit_rows: list[dict]) -> dict:
+    """Описательно: систематически ли один слой ставит positive чаще другого.
+
+    Никакого вывода «кто прав» — gold-стандарта нет (prereg §2.3). Назначение:
+    отличить систематическое расхождение (сдвиг порога => проблема определения
+    или инструкции) от рассеянного (неоднозначность стимулов) — различение
+    Krippendorff (2011) между systematic и random disagreement.
+    """
+    pairable = [
+        r for r in unit_rows
+        if r["decision_a"] in ("assigned", "none_observed")
+        and r["decision_b"] in ("assigned", "none_observed")
+    ]
+    only_a = sum(1 for r in pairable if label in r["labels_a"] and label not in r["labels_b"])
+    only_b = sum(1 for r in pairable if label in r["labels_b"] and label not in r["labels_a"])
+    disagreements = only_a + only_b
+    return {
+        "n_units": len(pairable),
+        "n_positive_a": sum(1 for r in pairable if label in r["labels_a"]),
+        "n_positive_b": sum(1 for r in pairable if label in r["labels_b"]),
+        "signed_difference_a_minus_b": only_a - only_b,
+        "disagreements": disagreements,
+        # 1.0 = все расхождения в одну сторону (систематический сдвиг порога);
+        # 0.0 = расхождения делятся поровну (рассеянное разногласие).
+        "one_sidedness": round(abs(only_a - only_b) / disagreements, 4) if disagreements else None,
+        "interpretation_note": (
+            "descriptive only; no gold standard exists, so neither layer is 'correct'."
+        ),
     }
 
 
@@ -392,6 +499,16 @@ def run(pilot_dir: Path, issuance_dir: Path | None = None) -> int:
         b_id: dict(Counter(r["reason_b"] for r in rows if r["reason_b"]).most_common()),
     }
 
+    # prereg §1.8 / §1.9: зарегистрированы ДО просмотра ответов. Exploratory-but-
+    # preregistered: считаются всегда, интерпретируются по фиксированным правилам
+    # prereg §2.3, и ни один из них не является гейтом.
+    boundary_collapse = [
+        boundary_collapse_diagnostic(pair, rows)
+        for pair in BOUNDARY_COLLAPSE_PAIRS
+        if set(pair) <= active
+    ]
+    bias = {label: directional_bias(label, rows) for label in sorted(active)}
+
     report = {
         "schema_version": "rf.pilot-report.v1",
         "pilot_id": manifest["pilot_id"],
@@ -412,6 +529,17 @@ def run(pilot_dir: Path, issuance_dir: Path | None = None) -> int:
         },
         "abstention_reasons": abstention_reasons,
         "item_feedback": feedback_crosstab(rows, strata),
+        "boundary_collapse": boundary_collapse,
+        "directional_bias": bias,
+        "preregistration": {
+            "document": "docs/research/pilot-v0.1-analysis-prereg.md",
+            "boundary_collapse_pairs": [list(p) for p in BOUNDARY_COLLAPSE_PAIRS],
+            "note": (
+                "boundary_collapse and directional_bias are exploratory-but-preregistered "
+                "diagnostics, not gates. Any analysis not listed in the prereg document must "
+                "be reported as POST_HOC / EXPLORATORY."
+            ),
+        },
     }
 
     out_dir = pilot_dir / "report"
@@ -449,6 +577,30 @@ def render_markdown(report: dict) -> str:
               json.dumps(report["confusion"]["all"], ensure_ascii=False, indent=2), "```",
               "", "## Abstentions", "```json",
               json.dumps(report["abstention_reasons"], ensure_ascii=False, indent=2), "```", ""]
+    if report.get("boundary_collapse"):
+        lines += ["## Boundary-collapse diagnostic (prereg §1.8 — NOT a dimensionality test)", "",
+                  "| pair | n | union α | part α | Δ union−max(part) | both-union-pos | split on which | status |",
+                  "|---|---|---|---|---|---|---|---|"]
+        for d in report["boundary_collapse"]:
+            parts = ", ".join(f"{k.split('.')[-1]}={v}" for k, v in d["part_alphas"].items())
+            lines.append(
+                f"| {' ∪ '.join(x.split('.')[-1] for x in d['pair'])} | {d['n_units']} | {d['union_alpha']} "
+                f"| {parts} | {d['delta_union_minus_max_part']} | {d['both_union_positive']} "
+                f"| {d['split_on_which_label']} | {d['estimability_status']} |")
+        lines += ["", "> Более высокая union-α означает только, что широкая граница воспроизводится "
+                      "лучше узкой. Это НЕ доказательство одного latent construct.", ""]
+
+    if report.get("directional_bias"):
+        lines += ["## Directional bias (prereg §1.9 — descriptive, no 'who is right')", "",
+                  "| label | n | pos A | pos B | signed diff (A−B) | disagreements | one-sidedness |",
+                  "|---|---|---|---|---|---|---|"]
+        for label, d in report["directional_bias"].items():
+            lines.append(
+                f"| {label} | {d['n_units']} | {d['n_positive_a']} | {d['n_positive_b']} "
+                f"| {d['signed_difference_a_minus_b']:+d} | {d['disagreements']} | {d['one_sidedness']} |")
+        lines += ["", "> one-sidedness → 1.0: расхождения систематически в одну сторону (сдвиг порога). "
+                      "→ 0.0: рассеянное разногласие. Ни то, ни другое не говорит, чей слой вернее.", ""]
+
     feedback = report.get("item_feedback", {})
     if not feedback.get("collected"):
         lines += ["## Item feedback (unnatural_example)", "", feedback.get("note", "not collected"), ""]

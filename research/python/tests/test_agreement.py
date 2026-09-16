@@ -6,9 +6,11 @@ import unittest
 from pathlib import Path
 
 from metrics.agreement import (
+    boundary_collapse_diagnostic,
     build_unit_rows,
     check_eligibility,
     confusion_analysis,
+    directional_bias,
     feedback_crosstab,
     krippendorff_alpha_binary,
     label_stats,
@@ -229,3 +231,101 @@ class FeedbackCrosstabTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def row(item_id, labels_a, labels_b, decision_a="assigned", decision_b="assigned"):
+    """Синтетическая пара решений. Пустой набор labels => решение none_observed."""
+    return {
+        "item_id": item_id,
+        "decision_a": decision_a if labels_a else ("none_observed" if decision_a == "assigned" else decision_a),
+        "decision_b": decision_b if labels_b else ("none_observed" if decision_b == "assigned" else decision_b),
+        "labels_a": set(labels_a),
+        "labels_b": set(labels_b),
+        "reason_a": None, "reason_b": None,
+        "feedback_collected_a": False, "feedback_collected_b": False,
+        "feedback_a": set(), "feedback_b": set(),
+    }
+
+
+A = "B.BLAME_CRITICISM"
+B = "B.PRESSURE_FOR_CHANGE"
+
+
+class BoundaryCollapseDiagnosticTests(unittest.TestCase):
+    """prereg §1.8. Диагностика границы, НЕ тест размерности."""
+
+    def test_perfect_superordinate_agreement_with_zero_boundary_agreement(self):
+        """Оба всегда видят «что-то из пары», но никогда не сходятся какой именно.
+        union alpha должна быть высокой, part alpha — нулевой/отрицательной."""
+        rows = [row(f"i{i}", [A], [B]) if i % 2 else row(f"i{i}", [B], [A]) for i in range(12)]
+        rows += [row(f"n{i}", [], []) for i in range(12)]  # negatives, иначе alpha не определена
+        d = boundary_collapse_diagnostic((A, B), rows)
+
+        self.assertEqual(d["estimability_status"], "passed")
+        self.assertEqual(d["n_units"], 24)
+        self.assertEqual(d["both_union_positive"], 12)
+        self.assertEqual(d["split_on_which_label"], 12, "все 12 — расхождение внутри границы")
+        self.assertAlmostEqual(d["union_alpha"], 1.0, places=4)
+        for part_alpha in d["part_alphas"].values():
+            self.assertLess(part_alpha, 0.1, "внутри границы согласия нет")
+        self.assertGreater(d["delta_union_minus_max_part"], 0.8)
+
+    def test_distinct_constructs_show_no_union_advantage(self):
+        """Оба надёжно различают A и B => union не даёт преимущества."""
+        rows = [row(f"a{i}", [A], [A]) for i in range(6)]
+        rows += [row(f"b{i}", [B], [B]) for i in range(6)]
+        rows += [row(f"n{i}", [], []) for i in range(12)]
+        d = boundary_collapse_diagnostic((A, B), rows)
+
+        self.assertEqual(d["split_on_which_label"], 0)
+        self.assertAlmostEqual(d["union_alpha"], 1.0, places=4)
+        self.assertAlmostEqual(d["delta_union_minus_max_part"], 0.0, places=4)
+
+    def test_underpowered_when_too_few_positives(self):
+        rows = [row(f"n{i}", [], []) for i in range(20)] + [row("p1", [A], [A])]
+        d = boundary_collapse_diagnostic((A, B), rows)
+        self.assertEqual(d["estimability_status"], "underpowered_not_estimable")
+
+    def test_abstained_units_are_excluded_not_punished(self):
+        """Тот же критерий pairable, что в label_stats — числа обязаны быть сопоставимы."""
+        rows = [row(f"n{i}", [], []) for i in range(12)] + [row(f"p{i}", [A], [A]) for i in range(6)]
+        rows.append(row("abs", [], [A], decision_a="abstained"))
+        d = boundary_collapse_diagnostic((A, B), rows)
+        self.assertEqual(d["n_units"], 18, "abstained unit не входит в pairable")
+        self.assertEqual(d["n_units"], label_stats(A, rows)["n_units"])
+
+    def test_diagnostic_carries_its_own_interpretation_guard(self):
+        """Правило интерпретации живёт в артефакте, а не только в прозе документа."""
+        rows = [row(f"n{i}", [], []) for i in range(12)] + [row(f"p{i}", [A], [B]) for i in range(6)]
+        d = boundary_collapse_diagnostic((A, B), rows)
+        self.assertIn("NOT a dimensionality test", d["interpretation_note"])
+
+
+class DirectionalBiasTests(unittest.TestCase):
+    """prereg §1.9. Описательно; вывода «кто прав» нет и быть не может."""
+
+    def test_fully_one_sided_disagreement(self):
+        """A ставит label там, где B не ставит — и никогда наоборот."""
+        rows = [row(f"x{i}", [A], []) for i in range(8)] + [row(f"n{i}", [], []) for i in range(8)]
+        d = directional_bias(A, rows)
+        self.assertEqual(d["n_positive_a"], 8)
+        self.assertEqual(d["n_positive_b"], 0)
+        self.assertEqual(d["signed_difference_a_minus_b"], 8)
+        self.assertEqual(d["one_sidedness"], 1.0)
+
+    def test_scattered_disagreement_is_not_one_sided(self):
+        rows = [row(f"x{i}", [A], []) for i in range(4)] + [row(f"y{i}", [], [A]) for i in range(4)]
+        d = directional_bias(A, rows)
+        self.assertEqual(d["signed_difference_a_minus_b"], 0)
+        self.assertEqual(d["one_sidedness"], 0.0, "поровну в обе стороны => рассеянное")
+
+    def test_no_disagreement_yields_none_not_zero(self):
+        """Отсутствие расхождений — не «нулевая односторонность», а неопределённость."""
+        rows = [row(f"p{i}", [A], [A]) for i in range(5)] + [row(f"n{i}", [], []) for i in range(5)]
+        d = directional_bias(A, rows)
+        self.assertEqual(d["disagreements"], 0)
+        self.assertIsNone(d["one_sidedness"])
+
+    def test_bias_never_claims_a_correct_layer(self):
+        rows = [row(f"x{i}", [A], []) for i in range(8)] + [row(f"n{i}", [], []) for i in range(8)]
+        self.assertIn("no gold standard", directional_bias(A, rows)["interpretation_note"])
