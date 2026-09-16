@@ -1,10 +1,17 @@
-"""Verifier против настоящего репозитория + сверка с .NET OntologyValidator.
+"""Verifier против настоящего репозитория + drift tripwire по OntologyValidator.
 
-Существующий OntologyValidator уже реализует часть этого набора инвариантов.
-Переписывать его ради архитектурного фэншуя не нужно — но harness обязан либо
-использовать его, либо cross-check'ить. .NET SDK в исследовательском окружении
-нет, поэтому здесь второе: каждая проверка C#-валидатора обязана иметь
-зеркало в spine, а появление новой проверки в C# обязано ронять этот тест.
+Существующий OntologyValidator уже реализует часть этого набора инвариантов, и
+переписывать его ради архитектурного фэншуя не нужно. .NET SDK в
+исследовательском окружении нет, поэтому здесь охранная сигнализация, а НЕ
+доказательство эквивалентности.
+
+Что тест ловит: исчезновение известного сообщения и изменение числа
+`issues.Add(` — то есть добавление или удаление проверки в C# без зеркала.
+
+Чего тест НЕ ловит, и это важно не путать: если поменять СМЫСЛ существующей
+проверки, сохранив её сообщение и общее число вызовов, тест останется зелёным.
+Это drift cross-check, а не semantic parity. Для research harness этого
+достаточно; выдавать сигнализацию за доказательство — нельзя.
 """
 
 import unittest
@@ -90,8 +97,12 @@ class Resolution(unittest.TestCase):
                 self.assertIsNotNone(self.verifier.resolve(parse_ref(raw)))
 
 
-class DotNetParity(unittest.TestCase):
-    """Cross-check, а не переписывание: OntologyValidator остаётся на месте."""
+class OntologyValidatorDriftTripwire(unittest.TestCase):
+    """Сигнализация, а не переписывание: OntologyValidator остаётся на месте.
+
+    Границы охвата описаны в docstring модуля. Тест ловит появление и
+    исчезновение проверок, но не подмену их смысла.
+    """
 
     def setUp(self) -> None:
         self.source = (REPO_ROOT / ONTOLOGY_VALIDATOR).read_text(encoding="utf-8")
@@ -111,7 +122,8 @@ class DotNetParity(unittest.TestCase):
             emitted,
             len(DOTNET_CHECK_MIRROR),
             "OntologyValidator.Validate emits a check with no mirror in the spine verifier; "
-            "add it to DOTNET_CHECK_MIRROR and to spine/verifier.py",
+            "add it to DOTNET_CHECK_MIRROR and to spine/verifier.py. This tripwire counts "
+            "checks and matches messages; it cannot see a check whose meaning changed.",
         )
 
     def test_mirrors_name_real_spine_checks(self) -> None:

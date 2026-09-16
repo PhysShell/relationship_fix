@@ -18,6 +18,12 @@
     "docs/annotation-protocol-v0.md",
     "docs/research/dialogue-naturalness-gate.md"
   ],
+  "oracle_targets": [
+    "data/ontology/behavior-v0.1.json#B.VALIDATION",
+    "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT",
+    "docs/annotation-protocol-v0.md#3. Решения разметчика",
+    "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
+  ],
   "expected_touched_area": "ontology label definitions + annotation protocol",
   "allowed_tools": [
     "read",

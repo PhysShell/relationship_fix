@@ -54,8 +54,16 @@ jobs:
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
+      SPINE_WORKTREE_DIR: ${{ runner.temp }}/spine-worktrees
     steps:
+      # fetch-depth: 0 обязателен. Задачи объявляют base_commit, и harness
+      # раскладывает его в отдельный git worktree. При shallow checkout коммит
+      # недоступен, и прогон падает — намеренно, а не откатывается на рабочее
+      # дерево: тихий откат вернул бы невоспроизводимость, ради которой всё это
+      # и переделывалось.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
@@ -80,11 +88,20 @@ jobs:
       - name: Harness tests
         run: uv run --no-project python -m unittest discover -t . -s tests -v
 
-      # Снимок чисел обновляется, но в CI защищаются не цифры, а выводы:
-      # raw/docs/lexical читают весь репозиторий, поэтому числа поедут от любого
-      # нового файла. Ordering-утверждения README живут в tests/test_claims.py и
-      # уже прогнаны шагом выше; здесь только проверяем, что снимок пересчитывается.
-      - name: Selection results recompute
+      # Subject приколочен к base_commit, поэтому числа больше не зависят от
+      # содержимого текущего дерева — и байт-равенство снова осмысленно.
+      # Раньше здесь стояла проверка на выводы, потому что проверять цифры было
+      # нельзя: любой новый файл в репозитории их двигал.
+      - name: Frozen selection results reproduce byte for byte
         run: |
-          uv run --no-project python eval/score.py --budget 4000 --out /tmp/s4000.json
-          uv run --no-project python eval/score.py --budget 8000 --out /tmp/s8000.json
+          for budget in 2000 4000 8000 16000; do
+            uv run --no-project python eval/score.py --budget "$budget" \
+              --out "$RUNNER_TEMP/fresh-$budget.json"
+            if ! cmp -s "$RUNNER_TEMP/fresh-$budget.json" "eval/results/selection-$budget.json"; then
+              echo "::error::selection results at budget $budget no longer reproduce"
+              diff <(python3 -m json.tool "eval/results/selection-$budget.json") \
+                   <(python3 -m json.tool "$RUNNER_TEMP/fresh-$budget.json") | head -40
+              exit 1
+            fi
+          done
+          echo "frozen results reproduce at every budget"

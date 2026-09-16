@@ -17,6 +17,7 @@ from spine.selector import (
     SpineSelector,
     TaskSpec,
 )
+from spine.subject import subject_worktree
 
 from ._harness import REPO_ROOT, SPEC_DIR, SPINE_ROOT
 
@@ -27,6 +28,12 @@ HARNESS_PREFIX = "experiments/semantic-spine"
 
 def load_tasks() -> list[TaskSpec]:
     return [TaskSpec.load(path) for path in sorted(TASKS_DIR.glob("*.json"))]
+
+
+def subject_for(task: TaskSpec) -> Path:
+    """Стратегии читают worktree на base_commit, а не рабочее дерево."""
+
+    return subject_worktree(REPO_ROOT, task.base_commit)
 
 
 class BenchmarkIntegrity(unittest.TestCase):
@@ -42,11 +49,12 @@ class BenchmarkIntegrity(unittest.TestCase):
                         "an oracle file inside the harness rigs the benchmark",
                     )
 
-    def test_every_oracle_file_exists(self) -> None:
+    def test_every_oracle_file_exists_in_its_subject(self) -> None:
         for task in load_tasks():
+            subject = subject_for(task)
             for path in task.oracle_files:
                 with self.subTest(task=task.id, path=path):
-                    self.assertTrue((REPO_ROOT / path).is_file())
+                    self.assertTrue((subject / path).is_file())
 
     def test_seeds_are_parseable_references(self) -> None:
         from spine.refs import parse_ref
@@ -68,15 +76,16 @@ class BudgetFairness(unittest.TestCase):
             for name, cls in STRATEGIES.items():
                 for task in self.tasks:
                     with self.subTest(strategy=name, budget=budget_tokens, task=task.id):
-                        bundle = cls(REPO_ROOT, self.compilation).select(task, budget)
+                        bundle = cls(subject_for(task), self.compilation).select(task, budget)
                         self.assertLessEqual(bundle.tokens, budget_tokens)
 
     def test_every_strategy_counts_tokens_with_the_same_function(self) -> None:
         budget = ContextBudget(4000)
         task = self.tasks[0]
+        subject = subject_for(task)
         for name, cls in STRATEGIES.items():
             with self.subTest(strategy=name):
-                bundle = cls(REPO_ROOT, self.compilation).select(task, budget)
+                bundle = cls(subject, self.compilation).select(task, budget)
                 self.assertEqual(
                     bundle.tokens,
                     sum(approx_tokens(chunk.text) for chunk in bundle.chunks),
@@ -87,8 +96,8 @@ class BudgetFairness(unittest.TestCase):
         task = self.tasks[0]
         for name, cls in STRATEGIES.items():
             with self.subTest(strategy=name):
-                prefix = cls(REPO_ROOT, self.compilation, FILL_PREFIX).select(task, budget)
-                backfill = cls(REPO_ROOT, self.compilation, FILL_BACKFILL).select(task, budget)
+                prefix = cls(subject_for(task), self.compilation, FILL_PREFIX).select(task, budget)
+                backfill = cls(subject_for(task), self.compilation, FILL_BACKFILL).select(task, budget)
                 self.assertLessEqual(prefix.tokens, backfill.tokens)
 
     def test_selection_is_deterministic(self) -> None:
@@ -96,8 +105,8 @@ class BudgetFairness(unittest.TestCase):
         task = self.tasks[0]
         for name, cls in STRATEGIES.items():
             with self.subTest(strategy=name):
-                first = cls(REPO_ROOT, self.compilation).select(task, budget)
-                second = cls(REPO_ROOT, self.compilation).select(task, budget)
+                first = cls(subject_for(task), self.compilation).select(task, budget)
+                second = cls(subject_for(task), self.compilation).select(task, budget)
                 self.assertEqual(first.files(), second.files())
                 self.assertEqual(first.render(), second.render())
 
@@ -108,9 +117,8 @@ class SpineBehaviour(unittest.TestCase):
         self.tasks = {task.id: task for task in load_tasks()}
 
     def _bundle(self, task_id: str, budget_tokens: int = 8000, cls=SpineSelector):
-        return cls(REPO_ROOT, self.compilation).select(
-            self.tasks[task_id], ContextBudget(budget_tokens)
-        )
+        task = self.tasks[task_id]
+        return cls(subject_for(task), self.compilation).select(task, ContextBudget(budget_tokens))
 
     def test_spine_reaches_production_files_not_only_its_own_spec(self) -> None:
         bundle = self._bundle("confusable-drift")
@@ -147,7 +155,7 @@ class SpineBehaviour(unittest.TestCase):
         gate = "docs/research/dialogue-naturalness-gate.md"
         chunks = [c for c in bundle.chunks if c.path == gate]
         self.assertTrue(chunks, "the spine did not reach the naturalness gate at all")
-        whole = (REPO_ROOT / gate).read_text(encoding="utf-8")
+        whole = (subject_for(self.tasks["naturalness-register-leak"]) / gate).read_text(encoding="utf-8")
         self.assertLess(
             sum(approx_tokens(c.text) for c in chunks),
             approx_tokens(whole) // 4,
@@ -165,9 +173,12 @@ class CorpusIntegrity(unittest.TestCase):
     def test_harness_files_are_not_in_the_searched_corpus(self) -> None:
         from spine.selector import repo_text_files
 
+        # Двойная защита: subject на base_commit harness'а не содержит вовсе,
+        # а исключение по префиксу держит инвариант и для будущих коммитов.
+        root = REPO_ROOT
         inside = [
-            p for p in repo_text_files(REPO_ROOT)
-            if str(p.relative_to(REPO_ROOT)).startswith(HARNESS_PREFIX)
+            p for p in repo_text_files(root)
+            if str(p.relative_to(root)).startswith(HARNESS_PREFIX)
         ]
         self.assertEqual(
             inside,
@@ -183,7 +194,39 @@ class CorpusIntegrity(unittest.TestCase):
         task = load_tasks()[0]
         for cls in (RawSelector, DocsSelector, LexicalSelector, SymbolGraphSelector):
             with self.subTest(strategy=cls.name):
-                bundle = cls(REPO_ROOT, compilation).select(task, ContextBudget(8000))
+                bundle = cls(subject_for(task), compilation).select(task, ContextBudget(8000))
                 self.assertFalse(
                     [f for f in bundle.files() if f.startswith(HARNESS_PREFIX)]
                 )
+
+
+class OracleSections(unittest.TestCase):
+    """Anchor-level верхняя граница обязана быть и точной, и полной."""
+
+    def setUp(self) -> None:
+        from spine.selector import OracleSectionsSelector
+
+        self.cls = OracleSectionsSelector
+        self.compilation = compile_spec_dir(SPEC_DIR)
+
+    def test_it_retrieves_every_declared_anchor(self) -> None:
+        from spine.targets import covers, locate_all
+
+        for task in load_tasks():
+            subject = subject_for(task)
+            locations = locate_all(subject, list(task.oracle_targets))
+            bundle = self.cls(subject, self.compilation).select(task, ContextBudget(16000))
+            for location in locations:
+                with self.subTest(task=task.id, target=location.target.raw):
+                    self.assertTrue(
+                        any(covers(location, c.path, c.text) for c in bundle.chunks)
+                    )
+
+    def test_it_is_an_excerpt_strategy_not_a_whole_file_one(self) -> None:
+        task = next(t for t in load_tasks() if t.id == "naturalness-register-leak")
+        subject = subject_for(task)
+        bundle = self.cls(subject, self.compilation).select(task, ContextBudget(16000))
+        whole = sum(
+            approx_tokens((subject / f).read_text(encoding="utf-8")) for f in task.oracle_files
+        )
+        self.assertLess(bundle.tokens, whole // 2)

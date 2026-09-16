@@ -17,6 +17,11 @@
     "data/ontology/behavior-v0.1.json",
     "src/annotation-web/src/Domain.hs"
   ],
+  "oracle_targets": [
+    "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
+    "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE",
+    "src/annotation-web/src/Domain.hs#labelCode"
+  ],
   "expected_touched_area": "Evaluation slice annotator",
   "allowed_tools": [
     "read",

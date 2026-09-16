@@ -1,90 +1,139 @@
 {
-  "schema_version": "rf.spine-selection-result.v1",
+  "schema_version": "rf.spine-selection-result.v2",
   "budget_tokens": 8000,
   "fill_policy": "prefix",
-  "repo_commit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
   "token_counter": "spine.budget.approx_tokens (deterministic proxy, not a BPE tokenizer)",
-  "note": "Selection only. No agent was run; resolved/tests_passed are not measured here.",
+  "subject_commits": {
+    "add-exchange-unit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "confusable-drift": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "evidence-required-enforcement": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "golden-contract-label": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "label-registry-drift": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "naturalness-register-leak": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "ontology-version-bump": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "pressure-missing-implementation": "c6cf909bd96759c3974f5427f72baaf29a749f09"
+  },
+  "note": "Selection only, against a pinned subject worktree per task. No agent was run; resolved/tests_passed are not measured here.",
   "summary": [
     {
-      "strategy": "semantic-spine/-rationale",
+      "strategy": "oracle-sections",
       "tasks": 8,
-      "mean_localization_recall": 0.8333,
-      "mean_context_precision": 0.1933,
-      "mean_context_tokens": 4520.8,
-      "tasks_with_full_recall": 4
-    },
-    {
-      "strategy": "semantic-spine",
-      "tasks": 8,
-      "mean_localization_recall": 0.8333,
-      "mean_context_precision": 0.1896,
-      "mean_context_tokens": 4614.5,
-      "tasks_with_full_recall": 4
-    },
-    {
-      "strategy": "semantic-spine/+irrelevant-docs",
-      "tasks": 8,
-      "mean_localization_recall": 0.8333,
-      "mean_context_precision": 0.1226,
-      "mean_context_tokens": 7098.5,
-      "tasks_with_full_recall": 4
+      "mean_file_recall": 0.9583,
+      "mean_file_precision": 1.0,
+      "mean_target_recall": 0.9688,
+      "mean_target_precision": 1.0,
+      "mean_context_tokens": 3223.2,
+      "tasks_with_full_target_recall": 7
     },
     {
       "strategy": "oracle",
       "tasks": 8,
-      "mean_localization_recall": 0.625,
-      "mean_context_precision": 0.875,
+      "mean_file_recall": 0.625,
+      "mean_file_precision": 0.875,
+      "mean_target_recall": 0.6354,
+      "mean_target_precision": 0.875,
       "mean_context_tokens": 4540.0,
-      "tasks_with_full_recall": 3
+      "tasks_with_full_target_recall": 3
     },
     {
       "strategy": "raw+oracle-file-list",
       "tasks": 8,
-      "mean_localization_recall": 0.625,
-      "mean_context_precision": 0.8111,
+      "mean_file_recall": 0.625,
+      "mean_file_precision": 0.8111,
+      "mean_target_recall": 0.6354,
+      "mean_target_precision": 0.8111,
       "mean_context_tokens": 4927.8,
-      "tasks_with_full_recall": 3
+      "tasks_with_full_target_recall": 3
     },
     {
-      "strategy": "lexical",
+      "strategy": "semantic-spine",
       "tasks": 8,
-      "mean_localization_recall": 0.4166,
-      "mean_context_precision": 0.1643,
-      "mean_context_tokens": 7475.0,
-      "tasks_with_full_recall": 1
+      "mean_file_recall": 0.8333,
+      "mean_file_precision": 0.1896,
+      "mean_target_recall": 0.5417,
+      "mean_target_precision": 0.1462,
+      "mean_context_tokens": 4614.5,
+      "tasks_with_full_target_recall": 1
     },
     {
-      "strategy": "symbol-graph",
+      "strategy": "semantic-spine/+irrelevant-docs",
       "tasks": 8,
-      "mean_localization_recall": 0.2917,
-      "mean_context_precision": 0.1514,
-      "mean_context_tokens": 6878.4,
-      "tasks_with_full_recall": 0
+      "mean_file_recall": 0.8333,
+      "mean_file_precision": 0.1226,
+      "mean_target_recall": 0.5417,
+      "mean_target_precision": 0.0944,
+      "mean_context_tokens": 7098.5,
+      "tasks_with_full_target_recall": 1
+    },
+    {
+      "strategy": "semantic-spine/-rationale",
+      "tasks": 8,
+      "mean_file_recall": 0.8333,
+      "mean_file_precision": 0.1933,
+      "mean_target_recall": 0.5417,
+      "mean_target_precision": 0.149,
+      "mean_context_tokens": 4520.8,
+      "tasks_with_full_target_recall": 1
+    },
+    {
+      "strategy": "bm25",
+      "tasks": 8,
+      "mean_file_recall": 0.3542,
+      "mean_file_precision": 0.2029,
+      "mean_target_recall": 0.3021,
+      "mean_target_precision": 0.1158,
+      "mean_context_tokens": 7504.6,
+      "tasks_with_full_target_recall": 0
     },
     {
       "strategy": "semantic-spine/-typed-edges",
       "tasks": 8,
-      "mean_localization_recall": 0.2708,
-      "mean_context_precision": 0.1014,
-      "mean_context_tokens": 3342.2,
-      "tasks_with_full_recall": 0
+      "mean_file_recall": 0.2708,
+      "mean_file_precision": 0.1359,
+      "mean_target_recall": 0.2708,
+      "mean_target_precision": 0.1359,
+      "mean_context_tokens": 2539.2,
+      "tasks_with_full_target_recall": 0
+    },
+    {
+      "strategy": "symbol-graph",
+      "tasks": 8,
+      "mean_file_recall": 0.2917,
+      "mean_file_precision": 0.1514,
+      "mean_target_recall": 0.25,
+      "mean_target_precision": 0.1301,
+      "mean_context_tokens": 6878.4,
+      "tasks_with_full_target_recall": 0
+    },
+    {
+      "strategy": "lexical",
+      "tasks": 8,
+      "mean_file_recall": 0.4166,
+      "mean_file_precision": 0.1643,
+      "mean_target_recall": 0.2083,
+      "mean_target_precision": 0.047,
+      "mean_context_tokens": 7475.0,
+      "tasks_with_full_target_recall": 1
     },
     {
       "strategy": "docs",
       "tasks": 8,
-      "mean_localization_recall": 0.0,
-      "mean_context_precision": 0.0,
+      "mean_file_recall": 0.0,
+      "mean_file_precision": 0.0,
+      "mean_target_recall": 0.0,
+      "mean_target_precision": 0.0,
       "mean_context_tokens": 6956.0,
-      "tasks_with_full_recall": 0
+      "tasks_with_full_target_recall": 0
     },
     {
       "strategy": "raw",
       "tasks": 8,
-      "mean_localization_recall": 0.0,
-      "mean_context_precision": 0.0,
-      "mean_context_tokens": 6517.0,
-      "tasks_with_full_recall": 0
+      "mean_file_recall": 0.0,
+      "mean_file_precision": 0.0,
+      "mean_target_recall": 0.0,
+      "mean_target_precision": 0.0,
+      "mean_context_tokens": 5359.0,
+      "tasks_with_full_target_recall": 0
     }
   ],
   "rows": [
@@ -92,18 +141,27 @@
       "task_id": "add-exchange-unit",
       "strategy": "raw",
       "budget_tokens": 8000,
-      "context_tokens": 6517,
-      "chunks": 5,
-      "files": 5,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 5359,
+      "chunks": 4,
+      "files": 4,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs",
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -113,15 +171,24 @@
       "context_tokens": 6956,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs",
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -131,13 +198,48 @@
       "context_tokens": 7738,
       "chunks": 11,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1427,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1427,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.027,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+      ]
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "bm25",
+      "budget_tokens": 8000,
+      "context_tokens": 7202,
+      "chunks": 6,
+      "files": 5,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
+      "truncated": true,
+      "missed_files": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs",
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
+        "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -147,13 +249,21 @@
       "context_tokens": 7739,
       "chunks": 7,
       "files": 7,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1967,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1967,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.0262,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -163,13 +273,21 @@
       "context_tokens": 4373,
       "chunks": 14,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1919,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1919,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.1743,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -179,30 +297,46 @@
       "context_tokens": 4313,
       "chunks": 14,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1945,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1945,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.1767,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
       "task_id": "add-exchange-unit",
       "strategy": "semantic-spine/-typed-edges",
       "budget_tokens": 8000,
-      "context_tokens": 3282,
-      "chunks": 10,
-      "files": 6,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.2322,
+      "context_tokens": 2479,
+      "chunks": 9,
+      "files": 5,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.3074,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.3074,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -212,13 +346,21 @@
       "context_tokens": 6857,
       "chunks": 15,
       "files": 10,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1224,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1224,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.1111,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -228,12 +370,17 @@
       "context_tokens": 6737,
       "chunks": 4,
       "files": 4,
-      "oracle_total": 3,
-      "oracle_found": 3,
-      "localization_recall": 1.0,
-      "context_precision": 0.7698,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 0.7698,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 3,
+      "target_recall": 1.0,
+      "target_precision": 0.7698,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "add-exchange-unit",
@@ -242,29 +389,63 @@
       "context_tokens": 5186,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 3,
-      "oracle_found": 3,
-      "localization_recall": 1.0,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 3,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
       "truncated": false,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
+    },
+    {
+      "task_id": "add-exchange-unit",
+      "strategy": "oracle-sections",
+      "budget_tokens": 8000,
+      "context_tokens": 2142,
+      "chunks": 3,
+      "files": 3,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 3,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
+      "truncated": false,
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "confusable-drift",
       "strategy": "raw",
       "budget_tokens": 8000,
-      "context_tokens": 6517,
-      "chunks": 5,
-      "files": 5,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 5359,
+      "chunks": 4,
+      "files": 4,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "docs/annotation-protocol-v0.md",
         "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика",
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
       ]
     },
     {
@@ -274,15 +455,25 @@
       "context_tokens": 6956,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "docs/annotation-protocol-v0.md",
         "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика",
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
       ]
     },
     {
@@ -292,14 +483,49 @@
       "context_tokens": 7074,
       "chunks": 9,
       "files": 8,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.1484,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.1484,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика",
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
+      ]
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "bm25",
+      "budget_tokens": 8000,
+      "context_tokens": 7773,
+      "chunks": 7,
+      "files": 7,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.2484,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.25,
+      "target_precision": 0.1133,
+      "truncated": true,
+      "missed_files": [
+        "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика",
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
       ]
     },
     {
@@ -309,15 +535,25 @@
       "context_tokens": 5982,
       "chunks": 2,
       "files": 2,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "docs/annotation-protocol-v0.md",
         "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика",
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
       ]
     },
     {
@@ -327,12 +563,20 @@
       "context_tokens": 4629,
       "chunks": 14,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 3,
-      "localization_recall": 1.0,
-      "context_precision": 0.2932,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 0.2932,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.5,
+      "target_precision": 0.1532,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+      ]
     },
     {
       "task_id": "confusable-drift",
@@ -341,29 +585,47 @@
       "context_tokens": 4558,
       "chunks": 14,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 3,
-      "localization_recall": 1.0,
-      "context_precision": 0.2977,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 0.2977,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.5,
+      "target_precision": 0.1556,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+      ]
     },
     {
       "task_id": "confusable-drift",
       "strategy": "semantic-spine/-typed-edges",
       "budget_tokens": 8000,
-      "context_tokens": 3281,
-      "chunks": 10,
-      "files": 6,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 2478,
+      "chunks": 9,
+      "files": 5,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "docs/annotation-protocol-v0.md",
         "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика",
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
       ]
     },
     {
@@ -373,12 +635,20 @@
       "context_tokens": 7113,
       "chunks": 15,
       "files": 10,
-      "oracle_total": 3,
-      "oracle_found": 3,
-      "localization_recall": 1.0,
-      "context_precision": 0.1908,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 0.1908,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.5,
+      "target_precision": 0.0997,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+      ]
     },
     {
       "task_id": "confusable-drift",
@@ -387,13 +657,20 @@
       "context_tokens": 6658,
       "chunks": 2,
       "files": 2,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 1.0,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 3,
+      "target_recall": 0.75,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
       ]
     },
     {
@@ -403,30 +680,68 @@
       "context_tokens": 6658,
       "chunks": 2,
       "files": 2,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 1.0,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 3,
+      "target_recall": 0.75,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
+      ]
+    },
+    {
+      "task_id": "confusable-drift",
+      "strategy": "oracle-sections",
+      "budget_tokens": 8000,
+      "context_tokens": 4619,
+      "chunks": 3,
+      "files": 2,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 1.0,
+      "oracle_targets_total": 4,
+      "oracle_targets_covered": 3,
+      "target_recall": 0.75,
+      "target_precision": 1.0,
+      "truncated": true,
+      "missed_files": [
+        "docs/research/dialogue-naturalness-gate.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
       ]
     },
     {
       "task_id": "evidence-required-enforcement",
       "strategy": "raw",
       "budget_tokens": 8000,
-      "context_tokens": 6517,
-      "chunks": 5,
-      "files": 5,
-      "oracle_total": 2,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 5359,
+      "chunks": 4,
+      "files": 4,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
         "docs/annotation-protocol-v0.md"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика"
       ]
     },
     {
@@ -436,14 +751,22 @@
       "context_tokens": 6956,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 2,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
         "docs/annotation-protocol-v0.md"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика"
       ]
     },
     {
@@ -453,12 +776,40 @@
       "context_tokens": 7663,
       "chunks": 9,
       "files": 6,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 0.3808,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 0.3808,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 0.2928,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "bm25",
+      "budget_tokens": 8000,
+      "context_tokens": 7102,
+      "chunks": 6,
+      "files": 5,
+      "oracle_files_total": 2,
+      "oracle_files_found": 1,
+      "file_recall": 0.5,
+      "file_precision": 0.2499,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.5,
+      "target_precision": 0.2499,
+      "truncated": true,
+      "missed_files": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation"
+      ]
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -467,14 +818,22 @@
       "context_tokens": 7641,
       "chunks": 8,
       "files": 8,
-      "oracle_total": 2,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
         "docs/annotation-protocol-v0.md"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation",
+        "docs/annotation-protocol-v0.md#3. Решения разметчика"
       ]
     },
     {
@@ -484,12 +843,17 @@
       "context_tokens": 4746,
       "chunks": 15,
       "files": 9,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 0.3289,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 0.3289,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 0.2086,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -498,27 +862,39 @@
       "context_tokens": 4602,
       "chunks": 15,
       "files": 9,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 0.3392,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 0.3392,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 0.2151,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "evidence-required-enforcement",
       "strategy": "semantic-spine/-typed-edges",
       "budget_tokens": 8000,
-      "context_tokens": 3403,
-      "chunks": 11,
-      "files": 6,
-      "oracle_total": 2,
-      "oracle_found": 1,
-      "localization_recall": 0.5,
-      "context_precision": 0.2239,
+      "context_tokens": 2600,
+      "chunks": 10,
+      "files": 5,
+      "oracle_files_total": 2,
+      "oracle_files_found": 1,
+      "file_recall": 0.5,
+      "file_precision": 0.2931,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.5,
+      "target_precision": 0.2931,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/annotation-protocol-v0.md"
+      ],
+      "missed_targets": [
+        "docs/annotation-protocol-v0.md#3. Решения разметчика"
       ]
     },
     {
@@ -528,12 +904,17 @@
       "context_tokens": 7230,
       "chunks": 16,
       "files": 10,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 0.2159,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 0.2159,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 0.1369,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -542,12 +923,17 @@
       "context_tokens": 5518,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 0.7189,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 0.7189,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 0.7189,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -556,28 +942,60 @@
       "context_tokens": 3967,
       "chunks": 2,
       "files": 2,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 1.0,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
       "truncated": false,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
+    },
+    {
+      "task_id": "evidence-required-enforcement",
+      "strategy": "oracle-sections",
+      "budget_tokens": 8000,
+      "context_tokens": 2550,
+      "chunks": 2,
+      "files": 2,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
+      "truncated": false,
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "golden-contract-label",
       "strategy": "raw",
       "budget_tokens": 8000,
-      "context_tokens": 6517,
-      "chunks": 5,
-      "files": 5,
-      "oracle_total": 2,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 5359,
+      "chunks": 4,
+      "files": 4,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
       ]
     },
     {
@@ -587,14 +1005,22 @@
       "context_tokens": 6956,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 2,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
       ]
     },
     {
@@ -604,14 +1030,47 @@
       "context_tokens": 7047,
       "chunks": 8,
       "files": 6,
-      "oracle_total": 2,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
+      ]
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "bm25",
+      "budget_tokens": 8000,
+      "context_tokens": 7482,
+      "chunks": 6,
+      "files": 6,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
+      "truncated": true,
+      "missed_files": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
+        "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
       ]
     },
     {
@@ -621,14 +1080,22 @@
       "context_tokens": 5523,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 2,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
       ]
     },
     {
@@ -638,12 +1105,19 @@
       "context_tokens": 4746,
       "chunks": 15,
       "files": 9,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 0.1165,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 0.1165,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.5,
+      "target_precision": 0.1003,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
+      ]
     },
     {
       "task_id": "golden-contract-label",
@@ -652,28 +1126,43 @@
       "context_tokens": 4602,
       "chunks": 15,
       "files": 9,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 0.1202,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 0.1202,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.5,
+      "target_precision": 0.1034,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
+      ]
     },
     {
       "task_id": "golden-contract-label",
       "strategy": "semantic-spine/-typed-edges",
       "budget_tokens": 8000,
-      "context_tokens": 3403,
-      "chunks": 11,
-      "files": 6,
-      "oracle_total": 2,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 2600,
+      "chunks": 10,
+      "files": 5,
+      "oracle_files_total": 2,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
       ]
     },
     {
@@ -683,12 +1172,19 @@
       "context_tokens": 7230,
       "chunks": 16,
       "files": 10,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 0.0765,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 0.0765,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.5,
+      "target_precision": 0.0658,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
+      ]
     },
     {
       "task_id": "golden-contract-label",
@@ -697,12 +1193,17 @@
       "context_tokens": 7154,
       "chunks": 2,
       "files": 2,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 1.0,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "golden-contract-label",
@@ -711,29 +1212,62 @@
       "context_tokens": 7154,
       "chunks": 2,
       "files": 2,
-      "oracle_total": 2,
-      "oracle_found": 2,
-      "localization_recall": 1.0,
-      "context_precision": 1.0,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
       "truncated": false,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": []
+    },
+    {
+      "task_id": "golden-contract-label",
+      "strategy": "oracle-sections",
+      "budget_tokens": 8000,
+      "context_tokens": 1801,
+      "chunks": 2,
+      "files": 2,
+      "oracle_files_total": 2,
+      "oracle_files_found": 2,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 2,
+      "oracle_targets_covered": 2,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
+      "truncated": false,
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "label-registry-drift",
       "strategy": "raw",
       "budget_tokens": 8000,
-      "context_tokens": 6517,
-      "chunks": 5,
-      "files": 5,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 5359,
+      "chunks": 4,
+      "files": 4,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/src/Domain.hs",
         "src/annotation-web/test/PilotSpec.hs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/annotation-web/src/Domain.hs#parseBehaviorLabel",
+        "src/annotation-web/test/PilotSpec.hs#activeLabels",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -743,15 +1277,24 @@
       "context_tokens": 6956,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/src/Domain.hs",
         "src/annotation-web/test/PilotSpec.hs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/annotation-web/src/Domain.hs#parseBehaviorLabel",
+        "src/annotation-web/test/PilotSpec.hs#activeLabels",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -761,14 +1304,48 @@
       "context_tokens": 7980,
       "chunks": 9,
       "files": 6,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.1355,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.1355,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/test/PilotSpec.hs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/annotation-web/src/Domain.hs#parseBehaviorLabel",
+        "src/annotation-web/test/PilotSpec.hs#activeLabels",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+      ]
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "bm25",
+      "budget_tokens": 8000,
+      "context_tokens": 7998,
+      "chunks": 8,
+      "files": 6,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.1652,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.03,
+      "truncated": true,
+      "missed_files": [
+        "src/annotation-web/test/PilotSpec.hs",
+        "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/annotation-web/test/PilotSpec.hs#activeLabels",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -778,13 +1355,20 @@
       "context_tokens": 7828,
       "chunks": 10,
       "files": 10,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1495,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1495,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.1495,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -794,12 +1378,19 @@
       "context_tokens": 4373,
       "chunks": 14,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 3,
-      "localization_recall": 1.0,
-      "context_precision": 0.2959,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 0.2959,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.2783,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+      ]
     },
     {
       "task_id": "label-registry-drift",
@@ -808,28 +1399,43 @@
       "context_tokens": 4313,
       "chunks": 14,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 3,
-      "localization_recall": 1.0,
-      "context_precision": 0.3,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 0.3,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.2822,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+      ]
     },
     {
       "task_id": "label-registry-drift",
       "strategy": "semantic-spine/-typed-edges",
       "budget_tokens": 8000,
-      "context_tokens": 3282,
-      "chunks": 10,
-      "files": 6,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.1289,
+      "context_tokens": 2479,
+      "chunks": 9,
+      "files": 5,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.1706,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.1706,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/test/PilotSpec.hs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/annotation-web/test/PilotSpec.hs#activeLabels",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -839,12 +1445,19 @@
       "context_tokens": 6857,
       "chunks": 15,
       "files": 10,
-      "oracle_total": 3,
-      "oracle_found": 3,
-      "localization_recall": 1.0,
-      "context_precision": 0.1887,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 0.1887,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.1775,
       "truncated": true,
-      "missed": []
+      "missed_files": [],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+      ]
     },
     {
       "task_id": "label-registry-drift",
@@ -853,14 +1466,22 @@
       "context_tokens": 3835,
       "chunks": 1,
       "files": 1,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/test/PilotSpec.hs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/annotation-web/test/PilotSpec.hs#activeLabels",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
     },
     {
@@ -870,32 +1491,68 @@
       "context_tokens": 3835,
       "chunks": 1,
       "files": 1,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/test/PilotSpec.hs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/annotation-web/test/PilotSpec.hs#activeLabels",
+        "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
       ]
+    },
+    {
+      "task_id": "label-registry-drift",
+      "strategy": "oracle-sections",
+      "budget_tokens": 8000,
+      "context_tokens": 2502,
+      "chunks": 3,
+      "files": 3,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 3,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
+      "truncated": false,
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "naturalness-register-leak",
       "strategy": "raw",
       "budget_tokens": 8000,
-      "context_tokens": 6517,
-      "chunks": 5,
-      "files": 5,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 5359,
+      "chunks": 4,
+      "files": 4,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/research/dialogue-naturalness-gate.md",
         "data/ontology/behavior-v0.1.json",
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
     },
     {
@@ -905,15 +1562,24 @@
       "context_tokens": 6956,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/research/dialogue-naturalness-gate.md",
         "data/ontology/behavior-v0.1.json",
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
     },
     {
@@ -923,14 +1589,46 @@
       "context_tokens": 7223,
       "chunks": 6,
       "files": 4,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.435,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.435,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
+      ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "bm25",
+      "budget_tokens": 8000,
+      "context_tokens": 7367,
+      "chunks": 4,
+      "files": 3,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.8421,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.4156,
+      "truncated": true,
+      "missed_files": [
+        "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION"
       ]
     },
     {
@@ -940,14 +1638,22 @@
       "context_tokens": 4697,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.6057,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.6057,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.6057,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
     },
     {
@@ -957,13 +1663,21 @@
       "context_tokens": 4810,
       "chunks": 15,
       "files": 10,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.116,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.116,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.1,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
     },
     {
@@ -973,31 +1687,48 @@
       "context_tokens": 4739,
       "chunks": 15,
       "files": 10,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1177,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1177,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.1015,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
     },
     {
       "task_id": "naturalness-register-leak",
       "strategy": "semantic-spine/-typed-edges",
       "budget_tokens": 8000,
-      "context_tokens": 3462,
-      "chunks": 11,
-      "files": 7,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 2659,
+      "chunks": 10,
+      "files": 6,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/research/dialogue-naturalness-gate.md",
         "data/ontology/behavior-v0.1.json",
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
     },
     {
@@ -1007,13 +1738,21 @@
       "context_tokens": 7294,
       "chunks": 16,
       "files": 11,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.0765,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.0765,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.0659,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
     },
     {
@@ -1023,15 +1762,24 @@
       "context_tokens": 0,
       "chunks": 0,
       "files": 0,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/research/dialogue-naturalness-gate.md",
         "data/ontology/behavior-v0.1.json",
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
     },
     {
@@ -1041,33 +1789,70 @@
       "context_tokens": 0,
       "chunks": 0,
       "files": 0,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "docs/research/dialogue-naturalness-gate.md",
         "data/ontology/behavior-v0.1.json",
         "docs/item-authoring-v0.1.md"
+      ],
+      "missed_targets": [
+        "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+        "data/ontology/behavior-v0.1.json#B.VALIDATION",
+        "docs/item-authoring-v0.1.md#Главное правило"
       ]
+    },
+    {
+      "task_id": "naturalness-register-leak",
+      "strategy": "oracle-sections",
+      "budget_tokens": 8000,
+      "context_tokens": 6755,
+      "chunks": 3,
+      "files": 3,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 3,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
+      "truncated": false,
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "ontology-version-bump",
       "strategy": "raw",
       "budget_tokens": 8000,
-      "context_tokens": 6517,
-      "chunks": 5,
-      "files": 5,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 5359,
+      "chunks": 4,
+      "files": 4,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.2-candidate.json",
         "data/ontology/behavior-v0.1.json",
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
+        "data/ontology/behavior-v0.1.json#behavior-v0.1",
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
     },
     {
@@ -1077,15 +1862,24 @@
       "context_tokens": 6956,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.2-candidate.json",
         "data/ontology/behavior-v0.1.json",
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
+        "data/ontology/behavior-v0.1.json#behavior-v0.1",
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
     },
     {
@@ -1095,14 +1889,48 @@
       "context_tokens": 7130,
       "chunks": 10,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.0157,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.0157,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.2-candidate.json",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
+        "data/ontology/behavior-v0.1.json#behavior-v0.1",
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
+      ]
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "bm25",
+      "budget_tokens": 8000,
+      "context_tokens": 7366,
+      "chunks": 6,
+      "files": 6,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.0599,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.0599,
+      "truncated": true,
+      "missed_files": [
+        "data/ontology/behavior-v0.2-candidate.json",
+        "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
+        "data/ontology/behavior-v0.1.json#behavior-v0.1"
       ]
     },
     {
@@ -1112,15 +1940,24 @@
       "context_tokens": 7758,
       "chunks": 7,
       "files": 7,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.2-candidate.json",
         "data/ontology/behavior-v0.1.json",
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
+        "data/ontology/behavior-v0.1.json#behavior-v0.1",
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
     },
     {
@@ -1130,13 +1967,20 @@
       "context_tokens": 5320,
       "chunks": 18,
       "files": 12,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.0468,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.0468,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.0468,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
     },
     {
@@ -1146,29 +1990,43 @@
       "context_tokens": 5176,
       "chunks": 18,
       "files": 12,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.0481,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.0481,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.0481,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
     },
     {
       "task_id": "ontology-version-bump",
       "strategy": "semantic-spine/-typed-edges",
       "budget_tokens": 8000,
-      "context_tokens": 4054,
-      "chunks": 15,
-      "files": 10,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.0614,
+      "context_tokens": 3251,
+      "chunks": 14,
+      "files": 9,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.0766,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.0766,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
     },
     {
@@ -1178,13 +2036,20 @@
       "context_tokens": 7804,
       "chunks": 19,
       "files": 13,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.0319,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.0319,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.0319,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
     },
     {
@@ -1194,14 +2059,22 @@
       "context_tokens": 4697,
       "chunks": 1,
       "files": 1,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#behavior-v0.1",
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
     },
     {
@@ -1211,32 +2084,68 @@
       "context_tokens": 4697,
       "chunks": 1,
       "files": 1,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "data/pilot/v0.1/pilot-manifest.json"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#behavior-v0.1",
+        "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
       ]
+    },
+    {
+      "task_id": "ontology-version-bump",
+      "strategy": "oracle-sections",
+      "budget_tokens": 8000,
+      "context_tokens": 3082,
+      "chunks": 3,
+      "files": 3,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 3,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
+      "truncated": false,
+      "missed_files": [],
+      "missed_targets": []
     },
     {
       "task_id": "pressure-missing-implementation",
       "strategy": "raw",
       "budget_tokens": 8000,
-      "context_tokens": 6517,
-      "chunks": 5,
-      "files": 5,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "context_tokens": 5359,
+      "chunks": 4,
+      "files": 4,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs",
         "data/ontology/behavior-v0.1.json",
         "src/annotation-web/src/Domain.hs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
+        "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE",
+        "src/annotation-web/src/Domain.hs#labelCode"
       ]
     },
     {
@@ -1246,15 +2155,24 @@
       "context_tokens": 6956,
       "chunks": 3,
       "files": 3,
-      "oracle_total": 3,
-      "oracle_found": 0,
-      "localization_recall": 0.0,
-      "context_precision": 0.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 0,
+      "file_recall": 0.0,
+      "file_precision": 0.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 0,
+      "target_recall": 0.0,
+      "target_precision": 0.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs",
         "data/ontology/behavior-v0.1.json",
         "src/annotation-web/src/Domain.hs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
+        "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE",
+        "src/annotation-web/src/Domain.hs#labelCode"
       ]
     },
     {
@@ -1264,14 +2182,47 @@
       "context_tokens": 7945,
       "chunks": 9,
       "files": 6,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.0565,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.0565,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.0565,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "data/ontology/behavior-v0.1.json",
         "src/annotation-web/src/Domain.hs"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE",
+        "src/annotation-web/src/Domain.hs#labelCode"
+      ]
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "bm25",
+      "budget_tokens": 8000,
+      "context_tokens": 7747,
+      "chunks": 8,
+      "files": 8,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.058,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.058,
+      "truncated": true,
+      "missed_files": [
+        "data/ontology/behavior-v0.1.json",
+        "src/annotation-web/src/Domain.hs"
+      ],
+      "missed_targets": [
+        "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE",
+        "src/annotation-web/src/Domain.hs#labelCode"
       ]
     },
     {
@@ -1281,13 +2232,20 @@
       "context_tokens": 7859,
       "chunks": 6,
       "files": 6,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.2596,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.2596,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 0.2596,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/src/Domain.hs"
+      ],
+      "missed_targets": [
+        "src/annotation-web/src/Domain.hs#labelCode"
       ]
     },
     {
@@ -1297,13 +2255,21 @@
       "context_tokens": 3919,
       "chunks": 13,
       "files": 8,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1276,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1276,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.1079,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
+        "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE"
       ]
     },
     {
@@ -1313,30 +2279,46 @@
       "context_tokens": 3863,
       "chunks": 13,
       "files": 8,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.1294,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.1294,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.1095,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
+        "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE"
       ]
     },
     {
       "task_id": "pressure-missing-implementation",
       "strategy": "semantic-spine/-typed-edges",
       "budget_tokens": 8000,
-      "context_tokens": 2571,
-      "chunks": 9,
-      "files": 5,
-      "oracle_total": 3,
-      "oracle_found": 1,
-      "localization_recall": 0.3333,
-      "context_precision": 0.1645,
+      "context_tokens": 1768,
+      "chunks": 8,
+      "files": 4,
+      "oracle_files_total": 3,
+      "oracle_files_found": 1,
+      "file_recall": 0.3333,
+      "file_precision": 0.2393,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.2393,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs",
         "data/ontology/behavior-v0.1.json"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
+        "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE"
       ]
     },
     {
@@ -1346,13 +2328,21 @@
       "context_tokens": 6403,
       "chunks": 14,
       "files": 9,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 0.0781,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 0.0781,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 1,
+      "target_recall": 0.3333,
+      "target_precision": 0.0661,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs"
+      ],
+      "missed_targets": [
+        "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
+        "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE"
       ]
     },
     {
@@ -1362,13 +2352,20 @@
       "context_tokens": 4823,
       "chunks": 2,
       "files": 2,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/src/Domain.hs"
+      ],
+      "missed_targets": [
+        "src/annotation-web/src/Domain.hs#labelCode"
       ]
     },
     {
@@ -1378,14 +2375,40 @@
       "context_tokens": 4823,
       "chunks": 2,
       "files": 2,
-      "oracle_total": 3,
-      "oracle_found": 2,
-      "localization_recall": 0.6667,
-      "context_precision": 1.0,
+      "oracle_files_total": 3,
+      "oracle_files_found": 2,
+      "file_recall": 0.6667,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 2,
+      "target_recall": 0.6667,
+      "target_precision": 1.0,
       "truncated": true,
-      "missed": [
+      "missed_files": [
         "src/annotation-web/src/Domain.hs"
+      ],
+      "missed_targets": [
+        "src/annotation-web/src/Domain.hs#labelCode"
       ]
+    },
+    {
+      "task_id": "pressure-missing-implementation",
+      "strategy": "oracle-sections",
+      "budget_tokens": 8000,
+      "context_tokens": 2335,
+      "chunks": 3,
+      "files": 3,
+      "oracle_files_total": 3,
+      "oracle_files_found": 3,
+      "file_recall": 1.0,
+      "file_precision": 1.0,
+      "oracle_targets_total": 3,
+      "oracle_targets_covered": 3,
+      "target_recall": 1.0,
+      "target_precision": 1.0,
+      "truncated": false,
+      "missed_files": [],
+      "missed_targets": []
     }
   ]
 }

@@ -16,6 +16,10 @@
     "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
     "docs/annotation-protocol-v0.md"
   ],
+  "oracle_targets": [
+    "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation",
+    "docs/annotation-protocol-v0.md#3. Решения разметчика"
+  ],
   "expected_touched_area": "ontology validator + protocol §3",
   "allowed_tools": [
     "read",

@@ -115,8 +115,10 @@ data/pilot/naturalness-audit/     слепой аудит всех 46 items: с�
 experiments/semantic-spine/       изолированный research harness (не source of truth, не часть продукта):
                                   literate spec 4 label'ов → типизированный граф → fail-closed verifier
                                   (16 проверок, 19 мутаций) → selective context; доказанное равенство
-                                  compile(spec) == behavior-v0.1 subset и измеренный отбор контекста
-                                  против raw/docs/lexical/symbol-graph/oracle baseline'ов
+                                  compile(spec) == behavior-v0.1 subset; отбор контекста измерен против
+                                  raw/docs/lexical/bm25/symbol-graph/oracle/oracle-sections на pinned
+                                  subject-коммите, ground truth файловый И anchor-level. Phase 2.5
+                                  заморожена: spine ведёт по файлам и ПРОИГРЫВАЕТ по якорям — см. README
 research/python/                  uv-проект (stdlib-only): agreement (α, CI, positive agreement, confusion pairs,
                                   estimability, unnatural_example × disagreement), validate_items (+ lineage
                                   rf.pilot-item.v2), presentation, naturalness_ab, naturalness_audit, materialize (build/verify/

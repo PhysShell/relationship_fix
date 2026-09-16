@@ -19,6 +19,11 @@
     "data/ontology/behavior-v0.1.json",
     "docs/item-authoring-v0.1.md"
   ],
+  "oracle_targets": [
+    "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
+    "data/ontology/behavior-v0.1.json#B.VALIDATION",
+    "docs/item-authoring-v0.1.md#Главное правило"
+  ],
   "expected_touched_area": "naturalness gate + ontology examples",
   "allowed_tools": [
     "read",

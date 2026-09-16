@@ -20,6 +20,7 @@ from .compiler import Compilation, compile_spec_dir
 from .graph import Graph
 from .ir import KIND_CODE, KIND_DATA, KIND_DOC, KIND_EXAMPLE, KIND_LABEL, KIND_ONTOLOGY, KIND_TEST
 from .refs import RefSyntaxError, parse_ref
+from .targets import TargetUnresolvable, locate, parse_target
 
 TEXT_SUFFIXES = {".md", ".cs", ".hs", ".py", ".json", ".jsonl", ".yaml", ".yml", ".sh", ".csv", ".slnx", ".props", ".nix", ".cabal", ".wit", ".mjs", ".c"}
 SKIP_DIRS = {".git", "generated", "result", "node_modules", "__pycache__", ".venv", "dist-newstyle", ".stack-work"}
@@ -53,19 +54,28 @@ MAX_EXCERPT_LINES = 60
 class TaskSpec:
     id: str
     prompt: str
+    base_commit: str
     seeds: tuple[str, ...]
     oracle_files: tuple[str, ...]
+    oracle_targets: tuple[str, ...]
     expected_touched_area: str
     keywords: tuple[str, ...] = ()
 
     @staticmethod
     def load(path: Path) -> "TaskSpec":
         payload = json.loads(path.read_text(encoding="utf-8"))
+        # base_commit обязателен: задача без зафиксированного subject'а
+        # невоспроизводима, а невоспроизводимый прогон не результат.
+        base_commit = payload.get("base_commit")
+        if not base_commit:
+            raise ValueError(f"{path.name}: task manifest has no base_commit")
         return TaskSpec(
             id=payload["task_id"],
             prompt=payload["prompt"],
+            base_commit=base_commit,
             seeds=tuple(payload.get("seeds", [])),
             oracle_files=tuple(payload["oracle_files"]),
+            oracle_targets=tuple(payload.get("oracle_targets", [])),
             expected_touched_area=payload.get("expected_touched_area", ""),
             keywords=tuple(payload.get("keywords", [])),
         )
@@ -250,16 +260,15 @@ class DocsSelector(Selector):
         return _fill(self._bundle(task), budget, chunks, self.fill)
 
 
-class LexicalSelector(Selector):
-    """Заглушка плотного retrieval: tf-idf по чанкам, без модели и без сети.
+class SparseRankingSelector(Selector):
+    """Общий каркас лексических baseline'ов: одинаковое чанкование и запрос.
 
-    Названа lexical, а не embedding, потому что это tf-idf, а не эмбеддинги.
-    Настоящий dense baseline требует модели и остаётся объявленной дырой —
-    см. README §Ограничения.
+    Разница между tf-idf и BM25 должна быть разницей в формуле ранжирования,
+    а не в том, что одному нарезали корпус удобнее.
     """
 
-    name = "lexical"
     CHUNK_LINES = 40
+    reason = "sparse rank"
 
     def _chunks(self) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
@@ -276,37 +285,82 @@ class LexicalSelector(Selector):
     def _terms(text: str) -> Counter:
         return Counter(re.findall(r"\w+", text.lower(), re.UNICODE))
 
+    def _query(self, task: TaskSpec) -> Counter:
+        return self._terms(" ".join([task.prompt, *task.keywords, *task.seeds]))
+
+    def _score(self, query: Counter, terms: Counter, stats: dict) -> float:
+        raise NotImplementedError
+
     def select(self, task: TaskSpec, budget: ContextBudget) -> ContextBundle:
         chunks = self._chunks()
         documents = [self._terms(body) for _, body in chunks]
         document_frequency: Counter = Counter()
         for terms in documents:
             document_frequency.update(set(terms))
-        total = max(1, len(documents))
+        lengths = [sum(terms.values()) for terms in documents]
+        stats = {
+            "n": max(1, len(documents)),
+            "df": document_frequency,
+            "avgdl": (sum(lengths) / len(lengths)) if lengths else 1.0,
+        }
+        query = self._query(task)
+        scores = [self._score(query, terms, stats) for terms in documents]
 
-        query_text = " ".join([task.prompt, *task.keywords, *task.seeds])
-        query = self._terms(query_text)
-
-        def score(terms: Counter) -> float:
-            numerator = 0.0
-            for term, count in query.items():
-                if term not in terms:
-                    continue
-                idf = math.log(total / (1 + document_frequency[term]))
-                numerator += count * terms[term] * max(idf, 0.0)
-            norm = math.sqrt(sum(v * v for v in terms.values())) or 1.0
-            return numerator / norm
-
-        ranked = sorted(
-            range(len(chunks)),
-            key=lambda i: (-score(documents[i]), chunks[i][0], i),
-        )
+        ranked = sorted(range(len(chunks)), key=lambda i: (-scores[i], chunks[i][0], i))
         ordered = [
-            Chunk(origin=chunks[i][0], path=chunks[i][0], text=chunks[i][1], reason="tf-idf rank")
+            Chunk(origin=chunks[i][0], path=chunks[i][0], text=chunks[i][1], reason=self.reason)
             for i in ranked
-            if score(documents[i]) > 0
+            if scores[i] > 0
         ]
         return _fill(self._bundle(task), budget, ordered, self.fill)
+
+
+class LexicalSelector(SparseRankingSelector):
+    """tf-idf по чанкам, без модели и без сети.
+
+    Названа lexical, а не embedding, потому что это tf-idf, а не эмбеддинги.
+    Настоящий dense baseline требует модели и остаётся объявленной дырой —
+    см. README §Ограничения.
+    """
+
+    name = "lexical"
+    reason = "tf-idf rank"
+
+    def _score(self, query: Counter, terms: Counter, stats: dict) -> float:
+        numerator = 0.0
+        for term, count in query.items():
+            if term not in terms:
+                continue
+            idf = math.log(stats["n"] / (1 + stats["df"][term]))
+            numerator += count * terms[term] * max(idf, 0.0)
+        norm = math.sqrt(sum(v * v for v in terms.values())) or 1.0
+        return numerator / norm
+
+
+class Bm25Selector(SparseRankingSelector):
+    """Okapi BM25 — дешёвый, но заметно более сильный sparse baseline.
+
+    Обгонять tf-idf несложно; если spine не обгоняет BM25, заявлять преимущество
+    над retrieval'ом нельзя.
+    """
+
+    name = "bm25"
+    reason = "bm25 rank"
+    K1 = 1.5
+    B = 0.75
+
+    def _score(self, query: Counter, terms: Counter, stats: dict) -> float:
+        length = sum(terms.values()) or 1
+        total = 0.0
+        for term in query:
+            frequency = terms.get(term, 0)
+            if not frequency:
+                continue
+            df = stats["df"][term]
+            idf = math.log(1 + (stats["n"] - df + 0.5) / (df + 0.5))
+            denominator = frequency + self.K1 * (1 - self.B + self.B * length / (stats["avgdl"] or 1.0))
+            total += idf * frequency * (self.K1 + 1) / denominator
+        return total
 
 
 class SymbolGraphSelector(Selector):
@@ -467,6 +521,31 @@ class OracleSelector(Selector):
         return _fill(self._bundle(task), budget, chunks, self.fill)
 
 
+class OracleSectionsSelector(Selector):
+    """Верхняя граница на уровне якорей: знает идеальные места, но не граф.
+
+    Это честный потолок для сравнения. `oracle` (файлы целиком) проигрывает
+    из-за гранулярности, а не из-за незнания — обгонять его неинтересно.
+    Обгонять или догонять oracle-sections уже содержательно.
+    """
+
+    name = "oracle-sections"
+
+    def select(self, task: TaskSpec, budget: ContextBudget) -> ContextBundle:
+        chunks: list[Chunk] = []
+        for raw in task.oracle_targets:
+            target = parse_target(raw)
+            try:
+                location = locate(self.repo, target)
+            except TargetUnresolvable:
+                continue
+            lines = _read(self.repo / target.path).split("\n")
+            start = max(0, location.line_no - 1 - 4)
+            body = "\n".join(lines[start : start + MAX_EXCERPT_LINES])
+            chunks.append(Chunk(raw, target.path, body, "oracle anchor"))
+        return _fill(self._bundle(task), budget, chunks, self.fill)
+
+
 class RawPlusOracleSelector(Selector):
     """Контроль, отделяющий «не нашёл файл» от «нашёл, но не понял»."""
 
@@ -493,6 +572,7 @@ STRATEGIES: dict[str, type[Selector]] = {
         RawSelector,
         DocsSelector,
         LexicalSelector,
+        Bm25Selector,
         SymbolGraphSelector,
         SpineSelector,
         SpineNoRationaleSelector,
@@ -500,6 +580,7 @@ STRATEGIES: dict[str, type[Selector]] = {
         SpineNoisySelector,
         RawPlusOracleSelector,
         OracleSelector,
+        OracleSectionsSelector,
     )
 }
 

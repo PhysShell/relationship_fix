@@ -16,6 +16,10 @@
     "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs",
     "data/ontology/behavior-v0.1.json"
   ],
+  "oracle_targets": [
+    "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
+    "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
+  ],
   "expected_touched_area": "DataContracts golden fixtures",
   "allowed_tools": [
     "read",

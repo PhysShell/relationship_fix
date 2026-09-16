@@ -1,68 +1,109 @@
 """Утверждения, которые делает README, проверяются как тесты.
 
-Числа в таблицах — снимок против конкретного коммита, и они поедут, как только
-репозиторий подрастёт: raw, docs и lexical читают его целиком. Поэтому в CI
-защищаются не цифры, а ВЫВОДЫ. Если репозиторий изменился настолько, что вывод
-перестал держаться, README врёт — и узнать об этом должен тест, а не читатель.
+Прогон идёт против worktree на `base_commit`, как и eval/score.py: тест,
+который мерит рабочее дерево, охраняет не тот эксперимент.
+
+Здесь же зафиксирован главный отрицательный результат Phase 2.5: на уровне
+файлов spine ведёт, на уровне якорей — проигрывает whole-file oracle'у.
+Инверсия заявлена в README и обязана падать, если перестанет держаться.
 """
 
 import unittest
+from functools import lru_cache
 
 from spine.budget import ContextBudget
 from spine.compiler import compile_spec_dir
 from spine.selector import STRATEGIES, TaskSpec
+from spine.subject import subject_worktree
+from spine.targets import covers, locate_all
 
 from ._harness import REPO_ROOT, SPEC_DIR, SPINE_ROOT
 
+BUDGET = 8000
 
-def mean_recall(strategy: str, budget_tokens: int) -> float:
+
+@lru_cache(maxsize=1)
+def measure() -> dict[str, dict[str, float]]:
     compilation = compile_spec_dir(SPEC_DIR)
-    budget = ContextBudget(budget_tokens)
+    budget = ContextBudget(BUDGET)
     tasks = [TaskSpec.load(p) for p in sorted((SPINE_ROOT / "eval/tasks").glob("*.json"))]
-    total = 0.0
+
+    totals = {name: {"file": 0.0, "target": 0.0} for name in STRATEGIES}
     for task in tasks:
-        bundle = STRATEGIES[strategy](REPO_ROOT, compilation).select(task, budget)
-        selected = set(bundle.files())
-        hit = sum(1 for path in task.oracle_files if path in selected)
-        total += hit / len(task.oracle_files)
-    return total / len(tasks)
+        subject = subject_worktree(REPO_ROOT, task.base_commit)
+        locations = locate_all(subject, list(task.oracle_targets))
+        for name, cls in STRATEGIES.items():
+            bundle = cls(subject, compilation).select(task, budget)
+            selected = set(bundle.files())
+            totals[name]["file"] += sum(
+                1 for path in task.oracle_files if path in selected
+            ) / len(task.oracle_files)
+            totals[name]["target"] += sum(
+                1
+                for location in locations
+                if any(covers(location, c.path, c.text) for c in bundle.chunks)
+            ) / len(locations)
+    return {
+        name: {key: value / len(tasks) for key, value in scores.items()}
+        for name, scores in totals.items()
+    }
 
 
 class ReadmeClaims(unittest.TestCase):
-    BUDGET = 8000
-
     def setUp(self) -> None:
-        self.recall = {name: mean_recall(name, self.BUDGET) for name in STRATEGIES}
+        self.score = measure()
 
-    def test_spine_beats_every_non_oracle_baseline(self) -> None:
-        for baseline in ("raw", "docs", "lexical", "symbol-graph"):
+    def test_spine_beats_every_retrieval_baseline_on_targets(self) -> None:
+        for baseline in ("raw", "docs", "lexical", "bm25", "symbol-graph"):
             with self.subTest(baseline=baseline):
-                self.assertGreater(self.recall["semantic-spine"], self.recall[baseline])
+                self.assertGreater(
+                    self.score["semantic-spine"]["target"], self.score[baseline]["target"]
+                )
 
-    def test_spine_beats_the_whole_file_oracle_on_recall(self) -> None:
-        # Заявленная причина — гранулярность, а не семантика: oracle читает
-        # файлы целиком и не помещается в бюджет. Вывод держится, пока держится
-        # и эта причина.
-        self.assertGreater(self.recall["semantic-spine"], self.recall["oracle"])
+    def test_bm25_is_the_stronger_sparse_baseline(self) -> None:
+        # Обгонять tf-idf несложно. Если бы BM25 обгонял spine, заявлять
+        # преимущество над retrieval'ом было бы нельзя.
+        self.assertGreater(self.score["bm25"]["target"], self.score["lexical"]["target"])
+
+    def test_oracle_sections_is_the_upper_bound(self) -> None:
+        for name in STRATEGIES:
+            if name == "oracle-sections":
+                continue
+            with self.subTest(strategy=name):
+                self.assertGreaterEqual(
+                    self.score["oracle-sections"]["target"], self.score[name]["target"]
+                )
+
+    def test_spine_loses_to_whole_file_oracle_on_targets(self) -> None:
+        """Заявленная инверсия: файл находит лучше, нужное место — хуже.
+
+        Если это перестанет держаться, README врёт в обе стороны сразу:
+        и про честное поражение, и про причину file-level преимущества.
+        """
+
+        self.assertGreater(
+            self.score["semantic-spine"]["file"], self.score["oracle"]["file"]
+        )
+        self.assertLess(
+            self.score["semantic-spine"]["target"], self.score["oracle"]["target"]
+        )
 
     def test_typed_edges_actually_bind(self) -> None:
         self.assertGreater(
-            self.recall["semantic-spine"],
-            self.recall["semantic-spine/-typed-edges"],
-            "typed edge ordering bought nothing; the README claim about typed edges is false",
+            self.score["semantic-spine"]["target"],
+            self.score["semantic-spine/-typed-edges"]["target"],
         )
 
     def test_injected_noise_never_helps(self) -> None:
         self.assertLessEqual(
-            self.recall["semantic-spine/+irrelevant-docs"], self.recall["semantic-spine"]
+            self.score["semantic-spine/+irrelevant-docs"]["target"],
+            self.score["semantic-spine"]["target"],
         )
 
     def test_rationale_does_not_improve_retrieval(self) -> None:
-        # Честный отрицательный результат: rationale стоит бюджета и для ПОИСКА
-        # не даёт ничего. Помогает ли он агенту ПОНЯТЬ — вопрос Phase 3, на
-        # который эта метрика ответить не может.
         self.assertGreaterEqual(
-            self.recall["semantic-spine/-rationale"], self.recall["semantic-spine"]
+            self.score["semantic-spine/-rationale"]["target"],
+            self.score["semantic-spine"]["target"],
         )
 
 

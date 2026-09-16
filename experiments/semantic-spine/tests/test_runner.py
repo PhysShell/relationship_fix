@@ -7,6 +7,7 @@ from pathlib import Path
 from spine.budget import ContextBudget
 from spine.compiler import compile_spec_dir
 from spine.selector import SpineSelector, TaskSpec
+from spine.subject import subject_worktree
 
 from ._harness import REPO_ROOT, SPEC_DIR, SPINE_ROOT
 
@@ -24,7 +25,8 @@ from runner import (  # noqa: E402
 class Metrics(unittest.TestCase):
     def setUp(self) -> None:
         self.task = TaskSpec.load(SPINE_ROOT / "eval/tasks/confusable-drift.json")
-        self.bundle = SpineSelector(REPO_ROOT, compile_spec_dir(SPEC_DIR)).select(
+        subject = subject_worktree(REPO_ROOT, self.task.base_commit)
+        self.bundle = SpineSelector(subject, compile_spec_dir(SPEC_DIR)).select(
             self.task, ContextBudget(8000)
         )
 
@@ -70,9 +72,8 @@ class Metrics(unittest.TestCase):
 class NoSilentZeroes(unittest.TestCase):
     def test_unconfigured_adapter_refuses_to_report(self) -> None:
         task = TaskSpec.load(SPINE_ROOT / "eval/tasks/confusable-drift.json")
-        bundle = SpineSelector(REPO_ROOT, compile_spec_dir(SPEC_DIR)).select(
-            task, ContextBudget(1000)
-        )
+        subject = subject_worktree(REPO_ROOT, task.base_commit)
+        bundle = SpineSelector(subject, compile_spec_dir(SPEC_DIR)).select(task, ContextBudget(1000))
         with self.assertRaises(AgentNotConfigured):
             UnconfiguredAdapter().run(task, bundle, Path("/nonexistent"))
 

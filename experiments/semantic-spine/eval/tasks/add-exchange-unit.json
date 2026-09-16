@@ -18,6 +18,11 @@
     "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs",
     "data/ontology/behavior-v0.1.json"
   ],
+  "oracle_targets": [
+    "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
+    "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
+    "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+  ],
   "expected_touched_area": "Domain smart enum + ontology validator",
   "allowed_tools": [
     "read",

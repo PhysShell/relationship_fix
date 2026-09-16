@@ -17,6 +17,11 @@
     "src/annotation-web/test/PilotSpec.hs",
     "data/ontology/behavior-v0.1.json"
   ],
+  "oracle_targets": [
+    "src/annotation-web/src/Domain.hs#parseBehaviorLabel",
+    "src/annotation-web/test/PilotSpec.hs#activeLabels",
+    "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
+  ],
   "expected_touched_area": "annotation-web domain + pilot spec",
   "allowed_tools": [
     "read",
