@@ -141,7 +141,40 @@
       "retrieval_wins_agent_does_not": "spine retrieval >> BM25, но resolved D ≈ resolved B — агент компенсирует инструментами",
       "reasoning_win": "разница в retrieval умеренная, но resolved D >> B — структурированный контекст помогает рассуждению; самый интересный исход для исходной гипотезы",
       "compressor_only": "full agentic: всё одинаково; context-only: spine сильно лучше — spine полезна как компрессор стартового контекста для ограниченных агентов"
-    }
+    },
+    "phases": {
+      "commit_A": {
+        "sets": {
+          "protocol_version": 2,
+          "phase": "v2_implementation_frozen"
+        },
+        "contains": "materialized_in -> label-level rendering",
+        "must_not_contain": "новые задачи"
+      },
+      "commit_B": {
+        "sets": {
+          "preregistered_treatment_digest": "<treatment_digest() после починки>"
+        },
+        "contains": "преригистрация кода воздействия; предсказание остаётся записанным",
+        "must_not_contain": "held-out задачи"
+      },
+      "commit_C": {
+        "sets": {
+          "phase": "v2_tasks_revealed"
+        },
+        "contains": "манифесты held-out задач",
+        "invariant": "treatment_digest() == preregistered_treatment_digest"
+      }
+    },
+    "critical_property": "when phase == v2_tasks_revealed: treatment_digest() == preregistered_treatment_digest. После первой held-out задачи selector, рендеринг, веса связей, packing policy и token accounting заморожены до следующей версии протокола."
   },
-  "v1_status_note": "v1 закрыт. fae5843 — operational closure (зелёный CI, точная арифметика), 2ef1e5c — protocol-v1 freeze. Следующий содержательный коммит обязан открывать protocol_version: 2."
+  "v1_status_note": "v1 закрыт. fae5843 — operational closure (зелёный CI, точная арифметика), 2ef1e5c — protocol-v1 freeze. Следующий содержательный коммит обязан открывать protocol_version: 2.",
+  "phase": "v1_closed",
+  "treatment_digest": "39f8a84945ed6c3577faf09cce25c236408c163f4eb59bc83ac16acca86de31a",
+  "v1_record": {
+    "note": "Историческая запись v1. Остаётся неизменной и после открытия v2.",
+    "surface_digest": "a2a7e7eb7839b557c338fca186b4700d2206bcc17addbb9ea46bb4d75a9522ce",
+    "treatment_digest": "39f8a84945ed6c3577faf09cce25c236408c163f4eb59bc83ac16acca86de31a",
+    "tasks": 8
+  }
 }
