@@ -283,6 +283,31 @@ class DuplicateConflictTests(unittest.TestCase):
             with self.assertRaises(ex.DuplicateConflict):
                 run(stream)
 
+    def test_present_versus_deleted_fails_closed_in_either_order(self):
+        """One phone says the message is there, the other says it was deleted.
+
+        Dropping deleted copies before the conflict check made this the single
+        disagreement resolved silently — always in favour of present — while a
+        changed author already failed closed. Both permutations are asserted
+        because the old code reached the same silent answer along two different
+        paths.
+        """
+        copies = [msg("a", Q, 1.0, device="phone", deleted=False),
+                  msg("a", Q, 1.0, device="laptop", deleted=True)]
+        for stream in (copies, list(reversed(copies))):
+            with self.assertRaises(ex.DeletionStateConflict):
+                run(stream)
+            with self.assertRaises(ex.DuplicateConflict):   # same failure family
+                run(stream)
+
+    def test_two_copies_that_agree_they_are_deleted_are_not_a_conflict(self):
+        result = run([msg("a", Q, 1.0, device="phone", deleted=True),
+                      msg("a", Q, 1.0, device="laptop", deleted=True),
+                      msg("b", Q, 2.0), msg("c", P, 3.0)])
+        self.assertEqual(result.aggregate.deleted_dropped, 1)    # distinct ids
+        self.assertEqual(result.aggregate.duplicates_dropped, 1)  # repeat sightings
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 1)
+
     def test_a_clock_disagreement_alone_is_resolved_not_refused(self):
         """Two phones disagreeing about when is plausible; earliest wins."""
         result = run([msg("a", Q, 1.0, chars=12, device="phone"),

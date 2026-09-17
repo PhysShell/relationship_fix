@@ -52,6 +52,21 @@ class DuplicateConflict(ValueError):
     """
 
 
+class DeletionStateConflict(DuplicateConflict):
+    """One device says the message is there, another says it was deleted.
+
+    A subclass, so `except DuplicateConflict` still catches it: it is the same
+    failure — copies of one id disagreeing about something that cannot be true
+    both ways. Dropping deleted copies BEFORE the conflict check used to make
+    this the one disagreement the extractor resolved silently, always in favour
+    of present. The most consequential field was the only unguarded one, while
+    a changed author already failed closed.
+
+    No "deletion always wins" rule is invented here. Which copy is current
+    depends on the exporter's semantics, and the oracle does not guess.
+    """
+
+
 def normalize(raw: list[RawMessage]) -> tuple[list[NormalizedMessage], int, int, float]:
     """Timezone → UTC, drop deletions, collapse device duplicates, total-order.
 
@@ -63,6 +78,9 @@ def normalize(raw: list[RawMessage]) -> tuple[list[NormalizedMessage], int, int,
         that syncs eight hours late still happened when it was sent, and late
         sync is therefore invisible to latency. This is a stated limitation:
         we cannot observe delivery, only sending.
+      * `deleted_dropped` counts distinct ids dropped as deleted;
+        `duplicates_dropped` counts repeat sightings of an id, deleted copies
+        included. Both are hand-checkable from the input by counting.
       * a deleted message is dropped entirely. Name the contract correctly:
         this is CURRENT-STATE RECONSTRUCTION, not historically stable
         aggregation. Recomputing an old period after a reply is deleted WILL
@@ -79,23 +97,35 @@ def normalize(raw: list[RawMessage]) -> tuple[list[NormalizedMessage], int, int,
       * order is (timestamp, message_id), so identical timestamps resolve
         deterministically and input order cannot matter.
     """
-    deleted_dropped = 0
     max_sync_lag = 0.0
+    duplicates_dropped = 0
+    #: id -> (actor, char_count, deleted). Deleted copies are recorded here too,
+    #: so the present/deleted disagreement is reachable by the check below.
+    seen: dict[str, tuple[str, int, bool]] = {}
     by_id: dict[str, NormalizedMessage] = {}
 
     for message in raw:
         max_sync_lag = max(max_sync_lag, message.sync_lag_seconds)
+        prior = seen.get(message.message_id)
+        if prior is not None:
+            duplicates_dropped += 1
+            prior_actor, prior_chars, prior_deleted = prior
+            if prior_actor != message.actor or prior_chars != message.char_count:
+                raise DuplicateConflict(
+                    f"copies of {message.message_id!r} disagree: "
+                    f"actor {prior_actor!r}/{message.actor!r}, "
+                    f"char_count {prior_chars}/{message.char_count}"
+                )
+            if prior_deleted != message.deleted:
+                raise DeletionStateConflict(
+                    f"copies of {message.message_id!r} disagree about deletion: "
+                    f"{'deleted' if prior_deleted else 'present'}/"
+                    f"{'deleted' if message.deleted else 'present'}"
+                )
+        seen[message.message_id] = (message.actor, message.char_count, message.deleted)
         if message.deleted:
-            deleted_dropped += 1
             continue
         existing = by_id.get(message.message_id)
-        if existing is not None and (existing.actor != message.actor
-                                     or existing.char_count != message.char_count):
-            raise DuplicateConflict(
-                f"copies of {message.message_id!r} disagree: "
-                f"actor {existing.actor!r}/{message.actor!r}, "
-                f"char_count {existing.char_count}/{message.char_count}"
-            )
         if existing is None:
             by_id[message.message_id] = NormalizedMessage(
                 message_id=message.message_id,
@@ -115,7 +145,7 @@ def normalize(raw: list[RawMessage]) -> tuple[list[NormalizedMessage], int, int,
             sync_lag_seconds=max(existing.sync_lag_seconds, message.sync_lag_seconds),
         )
 
-    duplicates_dropped = sum(1 for m in raw if not m.deleted) - len(by_id)
+    deleted_dropped = sum(1 for _, _, deleted in seen.values() if deleted)
     stream = sorted(by_id.values(), key=lambda m: m.sort_key)
     return stream, deleted_dropped, duplicates_dropped, max_sync_lag
 
@@ -184,7 +214,14 @@ def extract(
     consent_to_share_trace: bool = False,
     horizons_hours: tuple[float, ...] = HORIZONS_HOURS,
 ) -> ExtractionResult:
-    """The whole extractor. Messages outside the period are dropped first.
+    """The whole extractor.
+
+    Messages outside the period are NOT dropped first — that was the left-edge
+    bug. Topology is built on the full normalized stream and the period then
+    SELECTS: opportunities by `opened_at`, own messages and episode returns by
+    timestamp, the latter still judged against the full stream. A well-meaning
+    refactor that reintroduces an early slice reintroduces a phantom hand-over
+    at `period_start`; `LeftBoundaryTests` exists to stop it.
 
     `mode` is a required part of the contract rather than a flag with a helpful
     default behaviour: PRODUCTION never builds the per-opportunity trace at all.
