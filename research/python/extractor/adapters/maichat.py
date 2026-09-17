@@ -45,17 +45,20 @@ from .semantics import (
     Deduplication,
     LengthSemantics,
     MessageIdentity,
+    OrderingEvidence,
     OrderingSemantics,
     SourceSemantics,
     TimestampResolution,
+    TimestampSemantics,
 )
 
 #: MaiChat's declaration. Compare with the WhatsApp-export corpora, where
 #: resolution is MINUTE, ordering is partial and identity is absent.
 SEMANTICS = SourceSemantics(
-    timestamp_meaning="server_receive",
+    timestamp_meaning=TimestampSemantics.SERVER_RECEIVE,
     timestamp_resolution=TimestampResolution.MILLISECOND,
     ordering=OrderingSemantics.TOTAL,
+    ordering_evidence=OrderingEvidence.TIMESTAMP,   # ms clock orders everything
     message_identity=MessageIdentity.STABLE_ID,     # MongoDB ObjectID per message
     deduplication=Deduplication.BY_STABLE_ID,
     length=LengthSemantics.TEXT_CHARS,              # len(content), emojis included
@@ -64,18 +67,6 @@ SEMANTICS = SourceSemantics(
 
 SOURCE = "MaiChat v1.0 (Dao, Lai & Bell, LREC 2026; doi:10.7488/ds/8083)"
 LICENCE = "CC BY-SA 4.0 — attribution and share-alike; derivative datasets carry the same licence"
-
-
-class TimestampSemantics(str, Enum):
-    """What the number in a message's time field actually is.
-
-    Never inferred. An adapter that does not know says UNKNOWN, and a consumer
-    that needs send-time must refuse rather than assume.
-    """
-
-    SEND_LOCAL = "send_local"            # clock of the sending device — what RawMessage assumes
-    SERVER_RECEIVE = "server_receive"    # what MaiChat provides
-    UNKNOWN = "unknown"
 
 
 class FailedDeliveryPolicy(str, Enum):
@@ -88,7 +79,6 @@ class AdapterProvenance:
     """What a downstream sentence about these numbers is allowed to say."""
 
     source: str
-    timestamp_semantics: TimestampSemantics
     failed_delivery_policy: FailedDeliveryPolicy
     licence: str
     semantics: SourceSemantics
@@ -100,7 +90,7 @@ class AdapterProvenance:
     def claim_prefix(self) -> str:
         """Prepended to any reported result, so the caveat cannot detach."""
         return (f"on {self.source}, using source-provided "
-                f"{self.timestamp_semantics.value} timestamps at "
+                f"{self.semantics.timestamp_meaning.value} timestamps at "
                 f"{self.semantics.timestamp_resolution.value} resolution")
 
 
@@ -165,7 +155,6 @@ def adapt(
 
     provenance = AdapterProvenance(
         source=SOURCE,
-        timestamp_semantics=TimestampSemantics.SERVER_RECEIVE,
         failed_delivery_policy=failed_delivery,
         licence=LICENCE,
         semantics=SEMANTICS,

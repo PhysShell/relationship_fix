@@ -9,11 +9,12 @@ import unittest
 
 from extractor.adapters.guards import DyadMembershipError
 from extractor.adapters.maichat import (
+    SEMANTICS,
     AdapterProvenance,
     FailedDeliveryPolicy,
-    TimestampSemantics,
     adapt,
 )
+from extractor.adapters.semantics import TimestampSemantics
 from extractor.model import RawMessage
 
 A = "656d3dd6104bbd083868580d"
@@ -53,8 +54,15 @@ class SemanticsTests(unittest.TestCase):
         server receive time (README §7). The adapter says so rather than
         assigning one to the other."""
         _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
-        self.assertIs(provenance.timestamp_semantics, TimestampSemantics.SERVER_RECEIVE)
-        self.assertIsNot(provenance.timestamp_semantics, TimestampSemantics.SEND_LOCAL)
+        self.assertIs(provenance.semantics.timestamp_meaning, TimestampSemantics.SERVER_RECEIVE)
+        self.assertIsNot(provenance.semantics.timestamp_meaning, TimestampSemantics.SEND_LOCAL)
+
+    def test_there_is_one_typed_truth_about_the_timestamp_not_two(self):
+        """A provenance field and a semantics field could drift apart; only the
+        declaration survives, so agreement is structural rather than virtuous."""
+        fields = {f.name for f in AdapterProvenance.__dataclass_fields__.values()}
+        self.assertNotIn("timestamp_semantics", fields)
+        self.assertIn("semantics", fields)
 
     def test_every_reported_claim_carries_the_semantics_with_it(self):
         _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
@@ -186,7 +194,7 @@ class ProvenanceShapeTests(unittest.TestCase):
     def test_provenance_is_immutable(self):
         _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
         with self.assertRaises((AttributeError, TypeError)):
-            provenance.timestamp_semantics = TimestampSemantics.SEND_LOCAL
+            provenance.semantics = SEMANTICS
         self.assertIsInstance(provenance, AdapterProvenance)
 
 
@@ -221,6 +229,7 @@ class SourceSemanticsTests(unittest.TestCase):
             Deduplication,
             LengthSemantics,
             MessageIdentity,
+            OrderingEvidence,
             OrderingSemantics,
             SourceSemantics,
             TimestampResolution,
@@ -229,9 +238,10 @@ class SourceSemanticsTests(unittest.TestCase):
         )
 
         whatsapp_like = SourceSemantics(
-            timestamp_meaning="whatsapp_export",
+            timestamp_meaning=TimestampSemantics.EXPORT_RENDERED,
             timestamp_resolution=TimestampResolution.MINUTE,
             ordering=OrderingSemantics.PARTIAL_WITHIN_EQUAL_TIMESTAMP,
+            ordering_evidence=OrderingEvidence.NONE,
             message_identity=MessageIdentity.NONE,
             deduplication=Deduplication.DISABLED,
             length=LengthSemantics.TEXT_CHARS_EXCLUDING_EMOJI,
@@ -244,22 +254,41 @@ class SourceSemanticsTests(unittest.TestCase):
         from extractor.adapters.maichat import SEMANTICS
         assert_topology_oracle_usable(SEMANTICS, "maichat")   # does not raise
 
-    def test_a_content_hash_identity_is_not_enough_even_with_a_total_order(self):
+    def test_order_and_identity_answer_different_questions(self):
+        """A source that guarantees its own emission order knows its topology
+        exactly while giving no ids at all — dedup impossible, oracle fine. The
+        reverse also holds: ids alone order nothing."""
         from extractor.adapters.semantics import (
             Deduplication,
             LengthSemantics,
             MessageIdentity,
+            OrderingEvidence,
             OrderingSemantics,
             SourceSemantics,
             TimestampResolution,
+            TimestampSemantics,
         )
 
-        hashed = SourceSemantics(
-            timestamp_meaning="send_local",
-            timestamp_resolution=TimestampResolution.MILLISECOND,
+        ordered_but_anonymous = SourceSemantics(
+            timestamp_meaning=TimestampSemantics.EXPORT_RENDERED,
+            timestamp_resolution=TimestampResolution.MINUTE,
             ordering=OrderingSemantics.TOTAL,
-            message_identity=MessageIdentity.CONTENT_HASH,
+            ordering_evidence=OrderingEvidence.SOURCE_SEQUENCE,
+            message_identity=MessageIdentity.NONE,
             deduplication=Deduplication.DISABLED,
             length=LengthSemantics.TEXT_CHARS,
         )
-        self.assertFalse(hashed.usable_as_topology_oracle)
+        self.assertTrue(ordered_but_anonymous.usable_as_topology_oracle)
+        self.assertFalse(ordered_but_anonymous.deduplication_possible)
+
+        identified_but_unordered = SourceSemantics(
+            timestamp_meaning=TimestampSemantics.UNKNOWN,
+            timestamp_resolution=TimestampResolution.MINUTE,
+            ordering=OrderingSemantics.PARTIAL_WITHIN_EQUAL_TIMESTAMP,
+            ordering_evidence=OrderingEvidence.NONE,
+            message_identity=MessageIdentity.STABLE_ID,
+            deduplication=Deduplication.BY_STABLE_ID,
+            length=LengthSemantics.TEXT_CHARS,
+        )
+        self.assertFalse(identified_but_unordered.usable_as_topology_oracle)
+        self.assertTrue(identified_but_unordered.deduplication_possible)

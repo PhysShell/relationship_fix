@@ -23,6 +23,19 @@ from dataclasses import dataclass
 from enum import Enum
 
 
+class TimestampSemantics(str, Enum):
+    """What the number in a message's time field actually is.
+
+    Never inferred. An adapter that does not know says UNKNOWN, and a consumer
+    that needs send-time must refuse rather than assume.
+    """
+
+    SEND_LOCAL = "send_local"              # clock of the sending device
+    SERVER_RECEIVE = "server_receive"      # e.g. MaiChat
+    EXPORT_RENDERED = "export_rendered"    # a timestamp printed by an exporter
+    UNKNOWN = "unknown"
+
+
 class TimestampResolution(str, Enum):
     """The grain of the source clock. A coarse timestamp is a bucket, not a point."""
 
@@ -43,6 +56,21 @@ class OrderingSemantics(str, Enum):
     TOTAL = "total"                                   # every pair is ordered
     PARTIAL_WITHIN_EQUAL_TIMESTAMP = "partial_within_equal_timestamp"
     UNKNOWN = "unknown"
+
+
+class OrderingEvidence(str, Enum):
+    """WHAT establishes the order, which is a separate question from identity.
+
+    A source can guarantee that file order is message order while giving no ids
+    at all: topology is then known exactly and deduplication is impossible.
+    Conversely, stable ids on their own order nothing. Conflating the two was a
+    defect in the first version of this module.
+    """
+
+    TIMESTAMP = "timestamp"                # the clock is fine enough to order everything
+    SOURCE_SEQUENCE = "source_sequence"    # the source guarantees its own emission order
+    STABLE_ORDER_KEY = "stable_order_key"  # a monotone key independent of the clock
+    NONE = "none"
 
 
 class MessageIdentity(str, Enum):
@@ -75,9 +103,10 @@ class LengthSemantics(str, Enum):
 class SourceSemantics:
     """One adapter's declaration about its source. Every field is required."""
 
-    timestamp_meaning: str            # e.g. 'server_receive', 'send_local'
+    timestamp_meaning: TimestampSemantics
     timestamp_resolution: TimestampResolution
     ordering: OrderingSemantics
+    ordering_evidence: OrderingEvidence
     message_identity: MessageIdentity
     deduplication: Deduplication
     length: LengthSemantics
@@ -85,9 +114,20 @@ class SourceSemantics:
 
     @property
     def usable_as_topology_oracle(self) -> bool:
-        """Exact hand-over claims need a total order backed by real identity."""
+        """Exact hand-over claims need a total order AND something that establishes it.
+
+        Identity is deliberately NOT part of this test. Ids answer a different
+        question — deduplication, cross-device reconciliation, stable references
+        — and a source with guaranteed emission order and no ids at all knows
+        its topology perfectly.
+        """
         return (self.ordering is OrderingSemantics.TOTAL
-                and self.message_identity is MessageIdentity.STABLE_ID)
+                and self.ordering_evidence is not OrderingEvidence.NONE)
+
+    @property
+    def deduplication_possible(self) -> bool:
+        """The other question, answered by identity rather than by order."""
+        return self.message_identity is MessageIdentity.STABLE_ID
 
     @property
     def boundary_uncertainty_seconds(self) -> float:
@@ -100,16 +140,35 @@ class TopologyOracleRefused(ValueError):
 
 
 def assert_topology_oracle_usable(semantics: SourceSemantics, source: str) -> None:
-    """Refuse exact-topology use of a source that does not order its messages.
+    """Refuse any topology-derived use of a source that does not order its messages.
 
-    Aggregate use at hour scale is a different question and is NOT blocked here:
-    a one-minute ordering error is negligible against a six-hour horizon, even
-    though it can flip whether a particular hand-over exists at all.
+    NOT merely exact per-message claims. An earlier version of this docstring
+    said a one-minute ordering error was "negligible against a six-hour horizon",
+    which is wrong, and wrong because of the very clause that followed it. If the
+    ambiguity only shifted a known latency by up to a minute, it would indeed be
+    nothing against H=6h. But an ambiguous cross-actor tie changes the actor
+    SEQUENCE, and therefore how many hand-overs exist at all:
+
+        12:01 A                 one reading:  A | B A   -> one hand-over
+        12:01 B                 another:      A B | A   -> hand-over, answered
+        12:01 A                 another:      A B A ... -> different pairing again
+
+    A single flipped tie can turn one opportunity into two, and the extra one
+    contributes a FULL H to `sum_min_latency` if it ends up unanswered. That
+    moves `opportunities_eligible`, `replied_within`, `sum_min_latency_H` and the
+    RMTR denominator. It is not sixty seconds against six hours.
+
+    So a partially-ordered source supports parsing, spans, volume, sender-set
+    checks, message-type and length accounting — and no topology-derived
+    aggregate computed the ordinary way. What it CAN support is bounds over all
+    admissible orderings, which is a different computation and a far more
+    interesting one; see docs/research/reactivity-power-design.md §6.1.2.
     """
     if semantics.usable_as_topology_oracle:
         return
     raise TopologyOracleRefused(
         f"{source}: ordering={semantics.ordering.value}, "
-        f"identity={semantics.message_identity.value} — exact hand-over claims are "
-        f"not supported; synthesising ids to break ties would manufacture hand-overs"
+        f"evidence={semantics.ordering_evidence.value} — topology-derived aggregates "
+        f"are not supported as point values; compute bounds over admissible orderings "
+        f"or restrict to unambiguous segments"
     )
