@@ -1,0 +1,146 @@
+"""MaiChat adapter: source semantics are declared, never inferred.
+
+Fixtures are inline and tiny. The corpus itself is CC BY-SA 4.0 and is not
+vendored — share-alike would follow a copy into this repository — so the harness
+takes a path and these tests take dictionaries shaped like the real files.
+"""
+
+import unittest
+
+from extractor.adapters.maichat import (
+    AdapterProvenance,
+    FailedDeliveryPolicy,
+    TimestampSemantics,
+    adapt,
+)
+from extractor.model import RawMessage
+
+A = "656d3dd6104bbd083868580d"
+B = "656d3dea104bbd0838685810"
+
+
+def message(mid, actor, when, content="hi", device="Desktop", failed=False):
+    node = {
+        "_id": {"$oid": mid},
+        "ofUser": {"$oid": actor},
+        "content": content,
+        "deviceType": device,
+        "time": {"$date": when},
+        "logs": [],
+    }
+    if failed:
+        node["deliveryStatus"] = "failed"
+    return node
+
+
+def conversation(*messages):
+    return {
+        "_id": {"$oid": "c0"},
+        "firstId": {"$oid": A},
+        "secondId": {"$oid": B},
+        "firstUserName": "conv001_1",
+        "secondUserName": "conv001_2",
+        "messages": list(messages),
+    }
+
+
+class SemanticsTests(unittest.TestCase):
+    """The reason this adapter exists at all."""
+
+    def test_the_timestamp_semantics_are_declared_as_server_receive(self):
+        """RawMessage documents a sending-device clock; MaiChat's `time` is the
+        server receive time (README §7). The adapter says so rather than
+        assigning one to the other."""
+        _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
+        self.assertIs(provenance.timestamp_semantics, TimestampSemantics.SERVER_RECEIVE)
+        self.assertIsNot(provenance.timestamp_semantics, TimestampSemantics.SEND_LOCAL)
+
+    def test_every_reported_claim_carries_the_semantics_with_it(self):
+        _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
+        self.assertIn("server_receive", provenance.claim_prefix())
+        self.assertIn("MaiChat", provenance.claim_prefix())
+
+    def test_the_licence_travels_with_the_data(self):
+        _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
+        self.assertIn("CC BY-SA 4.0", provenance.licence)
+
+
+class ParsingTests(unittest.TestCase):
+    def test_extended_json_wrappers_are_unwrapped(self):
+        messages, _ = adapt(conversation(
+            message("m1", A, "2023-12-07T20:13:50.843Z"),
+            message("m2", B, "2023-12-07T20:13:52.000Z"),
+        ))
+        self.assertEqual([m.message_id for m in messages], ["m1", "m2"])
+        self.assertEqual([m.actor for m in messages], [A, B])
+        self.assertAlmostEqual(messages[1].timestamp - messages[0].timestamp, 1.157, places=3)
+
+    def test_millisecond_dates_are_accepted_too(self):
+        messages, _ = adapt(conversation({
+            "_id": {"$oid": "m1"}, "ofUser": {"$oid": A}, "content": "x",
+            "deviceType": "Mobile", "time": {"$date": 1701980030843}, "logs": [],
+        }))
+        self.assertAlmostEqual(messages[0].timestamp, 1701980030.843, places=3)
+
+    def test_timestamps_are_utc_so_the_offset_is_zero(self):
+        messages, _ = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
+        self.assertEqual(messages[0].utc_offset_minutes, 0)
+        self.assertEqual(messages[0].local_time, messages[0].timestamp)
+
+    def test_content_becomes_a_length_and_nothing_else(self):
+        messages, _ = adapt(conversation(
+            message("m1", A, "2023-12-07T20:13:50.843Z", content="something private")))
+        self.assertEqual(messages[0].char_count, len("something private"))
+        self.assertNotIn("private", repr(messages[0]))
+        self.assertEqual({f for f in RawMessage.__dataclass_fields__} & {"content", "text"}, set())
+
+    def test_device_type_carries_over_and_missing_is_named(self):
+        node = message("m1", A, "2023-12-07T20:13:50.843Z", device="Tablet")
+        self.assertEqual(adapt(conversation(node))[0][0].device_id, "Tablet")
+        node.pop("deviceType")
+        self.assertEqual(adapt(conversation(node))[0][0].device_id, "unknown")
+
+
+class FailedDeliveryTests(unittest.TestCase):
+    """Whether an undelivered message took part is a question about the source."""
+
+    def test_failed_messages_are_excluded_by_default_and_counted(self):
+        messages, provenance = adapt(conversation(
+            message("m1", A, "2023-12-07T20:13:50.843Z"),
+            message("m2", A, "2023-12-07T20:13:51.000Z", failed=True),
+            message("m3", B, "2023-12-07T20:13:52.000Z"),
+        ))
+        self.assertEqual([m.message_id for m in messages], ["m1", "m3"])
+        self.assertEqual(provenance.failed_excluded, 1)
+        self.assertEqual(provenance.messages_in_file, 3)
+        self.assertIs(provenance.failed_delivery_policy, FailedDeliveryPolicy.EXCLUDED)
+
+    def test_the_other_policy_is_expressible_and_recorded(self):
+        messages, provenance = adapt(
+            conversation(message("m1", A, "2023-12-07T20:13:50.843Z", failed=True)),
+            failed_delivery=FailedDeliveryPolicy.INCLUDED,
+        )
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(provenance.failed_excluded, 0)
+        self.assertIs(provenance.failed_delivery_policy, FailedDeliveryPolicy.INCLUDED)
+
+    def test_absence_of_the_field_means_delivered(self):
+        _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
+        self.assertEqual(provenance.failed_excluded, 0)
+
+
+class ProvenanceShapeTests(unittest.TestCase):
+    def test_provenance_names_both_participants(self):
+        _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
+        self.assertEqual(provenance.participants, (A, B))
+        self.assertEqual(provenance.conversation_id, "c0")
+
+    def test_provenance_is_immutable(self):
+        _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
+        with self.assertRaises((AttributeError, TypeError)):
+            provenance.timestamp_semantics = TimestampSemantics.SEND_LOCAL
+        self.assertIsInstance(provenance, AdapterProvenance)
+
+
+if __name__ == "__main__":
+    unittest.main()
