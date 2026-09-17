@@ -206,7 +206,7 @@ OBSERVED CHAT
 3. Не оценивает точность: вопрос «правильно ли система читает ход» здесь не ставится и не может быть поставлен на синтетике.
 4. Не калибрует константы. `MIN_REFERENCE_OBSERVATIONS`, `DIVERGENCE_POSITION_GAP`, `USABLE_MIN_SUPPORT`, `RECENCY_WINDOW_EVENTS`, `CONSISTENCY_FLOOR`, ширина полосы — все placeholder, все помечены `PROVENANCE`.
 5. Не трогает `BehaviorOntology`, dyadic spike, Pilot A, Pilot B.
-6. Не решает, как feedback собирается. Как именно спросить партнёра «как это дошло», не разрушив сам разговор, — отдельный вопрос, и он здесь не отвечается.
+6. ~~Не решает, как feedback собирается.~~ **Закрыто 2026-09-17:** [feedback-acquisition-policy.md](feedback-acquisition-policy.md). Остаётся нерешённым внутри него: как показывать user-initiated канал, чтобы он не стал вторым push'ем, и реактивен ли самоотчёт к самому факту опроса — последнее проверяется только экспериментом с рукой `NEVER_ASK`.
 
 ---
 
@@ -227,7 +227,7 @@ OBSERVED CHAT
 
 | | |
 |---|---|
-| **MAIN** | Personal Calibration Loop v0 — этот документ |
+| **MAIN** | Personal Calibration Loop v0 — этот документ + [Feedback Acquisition Policy v0](feedback-acquisition-policy.md) |
 | BACKGROUND | **P-1** — `BLOCKED_EXTERNAL_DATA`, ждёт транскриптов от Yin et al. Архитектурных ожиданий от него нет |
 | BACKGROUND | **P-2a** — external replication на Lend an Ear / EPITOME. Можно прогонять, Calibration Loop не задерживает |
 | BLOCKED | **P-2b** — заблокирован отсутствием recipient-данных |

@@ -63,6 +63,13 @@ MOVE_SIGNATURES = (
 )
 
 
+#: The only two visibilities v0 knows. Sharing is a separate feature.
+VISIBILITIES = ("private_to_recipient", "shared_with_partner")
+
+#: How an observation was obtained. Never merged: see acquisition.py.
+CHANNELS = ("passive_sampled", "user_initiated")
+
+
 class EstimatorKind(str, Enum):
     HUMAN_OBSERVER = "human_observer"
     MODEL = "model"
@@ -137,6 +144,15 @@ class RecipientFeedback:
     observed_at: float
     respondent_is_recipient: bool
     believed_source: str | None = None   # what the recipient thought at the time
+    #: Whose eyes this is for. Default is the only safe default: an answer about
+    #: how a message landed belongs to the person it landed on. Showing the
+    #: partner "your line scored 2/7" is a different feature with its own
+    #: consent, and nothing in this package flips this field.
+    visibility: str = "private_to_recipient"
+    #: PASSIVE_SAMPLED or USER_INITIATED. Self-selection differs enormously
+    #: between the two — people correct an app where it annoys them — so the
+    #: channel travels with the observation rather than being reconstructed.
+    channel: str = "passive_sampled"
 
     def __post_init__(self) -> None:
         if not self.respondent_is_recipient:
@@ -148,6 +164,10 @@ class RecipientFeedback:
         low, high = self.scale
         if not low <= self.value <= high:
             raise ValueError(f"value {self.value} outside its own scale {self.scale}")
+        if self.visibility not in VISIBILITIES:
+            raise ValueError(f"unknown visibility {self.visibility!r}")
+        if self.channel not in CHANNELS:
+            raise ValueError(f"unknown channel {self.channel!r}")
 
 
 @dataclass(frozen=True, slots=True)
