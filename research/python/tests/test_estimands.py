@@ -5,6 +5,7 @@ the estimand is chosen downstream. These fixtures pin the choices so that a
 future analysis cannot take one by accident.
 """
 
+import dataclasses
 import unittest
 
 from extractor import estimands as es
@@ -216,6 +217,56 @@ class StructuralInvariantTests(unittest.TestCase):
         self.assertIs(got.status, es.CheckStatus.NOT_APPLICABLE)
         self.assertIsNone(got.passed)
         self.assertEqual(got.violations, ())
+
+
+class EstimateFrameTests(unittest.TestCase):
+    """The accounting that travels with every estimate. Mutation testing found
+    it entirely untested: the share could be inverted and nothing complained."""
+
+    def setUp(self):
+        self.sample = [cell(2, 1200.0), cell(0, 0.0, pid="p2"),
+                       cell(0, 0.0, pid="p3"), cell(1, 300.0, pid="p4")]
+
+    def test_zero_incidence_share_is_empty_cells_over_all_cells(self):
+        got = es.person_period_weighted_rmtr(self.sample, H)
+        self.assertEqual(got.person_periods, 4)
+        self.assertEqual(got.zero_incidence, 2)
+        self.assertEqual(got.zero_incidence_share, 0.5)
+
+    def test_the_share_is_undefined_rather_than_zero_for_an_empty_sample(self):
+        got = es.mean_burden([], H)
+        self.assertEqual(got.person_periods, 0)
+        self.assertIsNone(got.zero_incidence_share)
+        self.assertIsNone(got.value)
+
+    def test_conditioning_is_flagged_only_when_a_cell_was_actually_dropped(self):
+        self.assertTrue(es.person_period_weighted_rmtr(self.sample, H).conditions_on_occurrence)
+        full = [cell(2, 1200.0), cell(1, 300.0, pid="p2")]
+        self.assertFalse(es.person_period_weighted_rmtr(full, H).conditions_on_occurrence)
+
+    def test_a_burden_exactly_equal_to_the_window_is_lawful(self):
+        """`burden > window`, not `>=`. A person-period entirely consumed by
+        capped re-entry time is extreme, not impossible."""
+        window = 24 * HOUR
+        got = es.burden_fits_window(cell(4, window, window=window), time_axis_total=True)
+        self.assertTrue(got.passed)
+        over = es.burden_fits_window(cell(4, window + 1.0, window=window), time_axis_total=True)
+        self.assertFalse(over.passed)
+
+
+class EstimandShapeTests(unittest.TestCase):
+    """Same contract as the aggregates: an estimate cannot be edited after the
+    fact, and nothing can be stapled onto one."""
+
+    def test_estimate_objects_are_frozen_and_slotted(self):
+        sample = [cell(2, 1200.0), cell(0, 0.0, pid="p2")]
+        for obj in (es.mean_burden(sample, H),
+                    es.burden_decomposition(sample, H),
+                    es.burden_fits_window(sample[0], time_axis_total=True)):
+            self.assertFalse(hasattr(obj, "__dict__"))
+            field = next(iter(obj.__dataclass_fields__))
+            with self.assertRaises(dataclasses.FrozenInstanceError):
+                setattr(obj, field, getattr(obj, field))
 
 
 if __name__ == "__main__":

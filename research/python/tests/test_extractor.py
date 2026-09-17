@@ -174,6 +174,227 @@ class BurdenTests(unittest.TestCase):
         self.assertNotEqual(a.rmtr_seconds, b.rmtr_seconds)    # different process
 
 
+
+class MutationFoundGapsTests(unittest.TestCase):
+    """Written to kill surviving mutants, not to look thorough.
+
+    Every assertion here corresponds to a mutation the suite failed to notice:
+    `tools/mutate.py` flipped a comparison, an operator or a default and all 458
+    tests stayed green. A boundary that is only correct in Markdown is not
+    correct.
+    """
+
+    def test_a_message_exactly_at_period_start_is_inside_the_period(self):
+        """`period_start <= t`: the `<=` must not decay to `<`."""
+        result = run([msg("a", P, 0.0), msg("b", P, 1.0)], start=0.0, end=WEEK)
+        self.assertEqual(result.aggregate.own_messages.count, 2)
+
+    def test_a_message_exactly_at_period_end_is_outside_the_period(self):
+        """`t < period_end`: the `<` must not decay to `<=`."""
+        result = run([msg("a", P, 0.0), msg("b", P, 24.0)], start=0.0, end=24 * HOUR)
+        self.assertEqual(result.aggregate.own_messages.count, 1)
+
+    def test_an_opportunity_opening_exactly_at_period_end_is_not_selected(self):
+        result = run([msg("a", Q, 0.0), msg("b", P, 1.0), msg("c", Q, 24.0), msg("d", P, 25.0)],
+                     start=0.0, end=24 * HOUR)
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 1)
+
+    def test_an_opportunity_opening_exactly_at_period_start_is_selected(self):
+        result = run([msg("a", Q, 0.0), msg("b", P, 1.0)], start=0.0, end=24 * HOUR)
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 1)
+
+    def test_a_reply_landing_exactly_on_the_horizon_counts_as_a_reply(self):
+        """`latency <= H`, not `< H`. One tick decides whether the episode is a
+        reply at all, and therefore which of the two burdens it contributes."""
+        result = run([msg("a", Q, 0.0), msg("b", P, 6.0)], start=0.0, end=WEEK)
+        cell = horizon(result, 6.0)
+        self.assertEqual(cell.replied_within, 1)
+        self.assertEqual(cell.reentry_burden_seconds, 6 * HOUR)
+
+    def test_the_observation_window_is_the_period_length_not_its_end(self):
+        """Survived because every other fixture starts at 0, where `end - start`
+        and `end + start` are the same number. Periods do not start at 0."""
+        result = run([msg("a", P, 30.0)], start=24 * HOUR, end=48 * HOUR)
+        self.assertEqual(result.aggregate.observation_window_seconds, 24 * HOUR)
+
+    def test_sync_lag_is_how_late_the_device_learned_not_a_sum_of_clocks(self):
+        late = msg("a", P, 10.0, synced=11 * HOUR)
+        self.assertEqual(late.sync_lag_seconds, HOUR)
+        early = msg("b", P, 10.0, synced=9 * HOUR)
+        self.assertEqual(early.sync_lag_seconds, 0.0)      # never negative
+
+    def test_the_worst_sync_lag_wins_across_duplicate_copies(self):
+        """Two devices, one message: the export reports the WORST lag seen."""
+        result = run([msg("a", P, 10.0, device="d0", synced=10 * HOUR),
+                      msg("a", P, 10.0, device="d1", synced=13 * HOUR)])
+        self.assertEqual(result.aggregate.max_sync_lag_seconds, 3 * HOUR)
+
+    def test_a_message_is_present_unless_it_says_otherwise(self):
+        """`deleted: bool = False` — the default decides whether an untouched
+        stream survives extraction at all."""
+        plain = RawMessage(message_id="a", actor=P, local_time=0.0,
+                           utc_offset_minutes=0, char_count=5)
+        result = run([plain])
+        self.assertEqual(result.aggregate.deleted_dropped, 0)
+        self.assertEqual(result.aggregate.own_messages.count, 1)
+
+    def test_a_trace_is_refused_unless_consent_was_given(self):
+        """`consent_to_share_trace: bool = False` twice over — the dataclass
+        default and the extract() parameter default."""
+        result = run([msg("a", Q, 0.0), msg("b", P, 1.0)], mode=Mode.QUALIFICATION)
+        with self.assertRaises(PermissionError):
+            result.export_trace()
+
+
+class DescriptiveStatisticsTests(unittest.TestCase):
+    """The descriptive companions had no direct fixtures, so their arithmetic
+    could be inverted without a single test objecting."""
+
+    def setUp(self):
+        # two opportunities: one replied after 1h, one never replied
+        self.cell = horizon(run([
+            msg("a", Q, 0.0), msg("b", Q, 0.25), msg("c", P, 1.0),
+            msg("d", Q, 2.0), msg("e", P, 100.0),
+        ], start=0.0, end=50 * HOUR), 6.0)
+
+    def test_reply_rate_is_replies_over_opportunities(self):
+        self.assertEqual(self.cell.opportunities_eligible, 2)
+        self.assertEqual(self.cell.replied_within, 1)
+        self.assertEqual(self.cell.reply_rate, 0.5)
+
+    def test_mean_reply_speed_divides_by_replies_not_by_opportunities(self):
+        self.assertEqual(self.cell.mean_reply_speed_seconds,
+                         self.cell.sum_reply_speed_seconds / 1)
+
+    def test_mean_run_span_divides_by_opportunities(self):
+        self.assertEqual(self.cell.mean_run_span_seconds,
+                         self.cell.sum_run_span_seconds / 2)
+
+    def test_mean_run_span_is_undefined_with_an_empty_risk_set(self):
+        empty = horizon(run([msg("a", P, 0.0)], start=0.0, end=WEEK), 6.0)
+        self.assertEqual(empty.opportunities_eligible, 0)
+        self.assertIsNone(empty.mean_run_span_seconds)
+        self.assertIsNone(empty.mean_run_messages)
+        self.assertIsNone(empty.reply_rate)
+
+    def test_conditional_mean_latency_removes_the_censored_contributions(self):
+        """B = replied latencies + unanswered x H; the conditional mean must
+        subtract the second part before dividing by the replies."""
+        horizon_seconds = 6 * HOUR
+        unanswered = self.cell.opportunities_eligible - self.cell.replied_within
+        want = (self.cell.sum_min_latency_seconds - unanswered * horizon_seconds) / 1
+        self.assertEqual(self.cell.conditional_mean_latency_seconds, want)
+        self.assertEqual(want, HOUR)
+
+
+class AggregateShapeTests(unittest.TestCase):
+    """`frozen=True, slots=True` are not decoration.
+
+    Frozen: an exported aggregate must not be editable after the fact. Slots:
+    nothing can be stapled onto it later — which is exactly how a `text` field
+    would arrive on an object whose whole purpose is not to carry one.
+    """
+
+    def setUp(self):
+        raw = [msg("a", Q, 0.0), msg("b", P, 1.0)]
+        self.result = run(raw, mode=Mode.QUALIFICATION, consent=True)
+        stream, _, _, _ = ex.normalize(raw)
+        self.instances = (
+            raw[0],                                 # RawMessage
+            stream[0],                              # NormalizedMessage
+            self.result.aggregate,                  # PeriodAggregate
+            self.result.aggregate.horizons[0],      # HorizonAggregate
+            self.result.aggregate.own_messages,     # LengthSummary
+            self.result.export_trace()[0],          # Opportunity
+        )
+
+    def test_aggregates_cannot_be_edited_after_extraction(self):
+        for obj in self.instances:
+            field = next(iter(obj.__dataclass_fields__))
+            with self.assertRaises(dataclasses.FrozenInstanceError):
+                setattr(obj, field, getattr(obj, field))
+
+    def test_nothing_can_be_stapled_onto_an_aggregate(self):
+        for obj in self.instances:
+            self.assertFalse(hasattr(obj, "__dict__"))
+            with self.assertRaises((AttributeError, TypeError)):
+                setattr(obj, "message_text", "hello")
+
+
+
+class BoundaryGapsFoundByMutationTests(unittest.TestCase):
+    """Second round. The first round's fixtures were themselves too kind:
+    dividing by one, and counting a boundary that another rule already hid."""
+
+    def test_an_episode_return_exactly_at_period_start_is_counted(self):
+        result = run([msg("a", P, 0.0), msg("b", P, 24.0), msg("c", P, 24.5)],
+                     start=24 * HOUR, end=48 * HOUR)
+        self.assertEqual(result.aggregate.own_episode_returns, 1)   # "b" only
+
+    def test_an_episode_return_exactly_at_period_end_is_not_counted(self):
+        result = run([msg("a", P, 0.0), msg("b", P, 24.0)], start=0.0, end=24 * HOUR)
+        self.assertEqual(result.aggregate.own_episode_returns, 0)
+
+    def test_an_opportunity_opening_at_period_end_is_absent_from_the_trace(self):
+        """`opportunities_eligible` cannot see this boundary — anything opening
+        that late is censored anyway — so the assertion has to be made on the
+        selected set itself."""
+        result = run([msg("a", Q, 0.0), msg("b", P, 1.0),
+                      msg("c", Q, 24.0), msg("d", P, 25.0)],
+                     start=0.0, end=24 * HOUR, mode=Mode.QUALIFICATION, consent=True)
+        self.assertEqual([o.opener_id for o in result.export_trace()], ["a"])
+
+    def test_descriptive_means_divide_by_more_than_one(self):
+        """A fixture with a single reply makes `x / n` and `x * n` identical.
+        Two replies with different speeds is the cheapest honest fixture."""
+        cell = horizon(run([
+            msg("a", Q, 0.0), msg("b", P, 1.0),
+            msg("c", Q, 2.0), msg("d", P, 5.0),
+        ], start=0.0, end=WEEK), 6.0)
+        self.assertEqual(cell.replied_within, 2)
+        self.assertEqual(cell.sum_reply_speed_seconds, 4 * HOUR)
+        self.assertEqual(cell.mean_reply_speed_seconds, 2 * HOUR)
+        self.assertEqual(cell.conditional_mean_latency_seconds, 2 * HOUR)
+
+    def test_the_worst_sync_lag_survives_the_duplicate_merge(self):
+        """The merged record's own field, not the period-level maximum — they
+        are computed separately and only one of them was ever asserted."""
+        stream, _, duplicates, _ = ex.normalize([
+            msg("a", P, 10.0, device="d0", synced=10 * HOUR),
+            msg("a", P, 10.0, device="d1", synced=13 * HOUR),
+        ])
+        self.assertEqual(duplicates, 1)
+        self.assertEqual(stream[0].sync_lag_seconds, 3 * HOUR)
+
+    def test_the_trace_stays_out_of_the_repr(self):
+        """`repr=False` is the difference between a privacy boundary and a
+        privacy intention: an f-string in a log line calls repr, and a repr that
+        carries per-opportunity timings has published them."""
+        result = run([msg("a", Q, 0.0), msg("b", P, 1.0)],
+                     mode=Mode.QUALIFICATION, consent=True)
+        text = repr(result)
+        self.assertNotIn("Opportunity", text)
+        self.assertNotIn("opener_id", text)
+
+    def test_consent_defaults_to_refusal_everywhere_it_is_declared(self):
+        """Three separate defaults: the extract() parameter, the result field,
+        and the retained trace. Each one alone can open the door."""
+        messages = [msg("a", Q, 0.0), msg("b", P, 1.0)]
+        implicit = ex.extract(messages, P, "w1", 0.0, WEEK, mode=Mode.QUALIFICATION)
+        with self.assertRaises(PermissionError):
+            implicit.export_trace()
+
+        built = ExtractionResult(aggregate=implicit.aggregate, mode=Mode.QUALIFICATION,
+                                 _trace=(ex.find_opportunities(ex.normalize(messages)[0], P)[0],))
+        with self.assertRaises(PermissionError):
+            built.export_trace()
+
+        no_trace = ExtractionResult(aggregate=implicit.aggregate, mode=Mode.QUALIFICATION,
+                                    consent_to_share_trace=True)
+        with self.assertRaises(PermissionError):
+            no_trace.export_trace()
+
+
 class RightCensoringTests(unittest.TestCase):
     """Assigning H to a non-response is only sound when the whole window was
     observed. That rule already exists as calendar censoring; named here in
