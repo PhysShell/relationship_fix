@@ -208,7 +208,41 @@ class HorizonAggregate:
         return self.sum_run_messages / self.opportunities_eligible
 
     @property
+    def reentry_burden_seconds(self) -> float:
+        """Σ min(T_i, H) over the period. The SAME number as the numerator of
+        RMTR, named because it answers a different question.
+
+        RMTR divides by `opportunities_eligible`, which is post-treatment: if the
+        regime changes how often the partner gets to open a run, the two arms
+        average over different risk sets. Burden does not divide, so it stays
+        unconditional — "how much capped re-entry time accumulated over a fixed
+        observation window" — and the treatment is entitled to move both the
+        number of episodes and their length.
+
+        It must NOT be the sole primary, because it deliberately mixes the two:
+
+            arm A: 10 opportunities x  5 min = 50
+            arm B:  5 opportunities x 10 min = 50
+
+        Burden calls those identical while the process differs completely. The
+        triple is what reads: `opportunities_eligible` (incidence),
+        `rmtr_seconds` (conditional duration), `reentry_burden_seconds`
+        (unconditional period total). The first two explain the third.
+
+        REQUIRES a common fixed window across persons and arms — see
+        docs/research/reactivity-power-design.md §1.6. A burden summed over
+        per-person spans of different lengths is not comparable between arms.
+        """
+        return self.sum_min_latency_seconds
+
+    @property
     def rmtr_seconds(self) -> float | None:
+        """Conditional on occurrence: the mean among opportunities that arose.
+
+        The denominator is post-treatment, so randomisation identifies the effect
+        of assignment on THIS composite summary and does not recover a
+        common-risk-set estimand. See `reentry_burden_seconds`.
+        """
         if self.opportunities_eligible == 0:
             return None
         return self.sum_min_latency_seconds / self.opportunities_eligible

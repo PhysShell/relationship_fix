@@ -138,6 +138,42 @@ class DecompositionTests(unittest.TestCase):
         self.assertEqual(agg.mean_run_messages, 1.5)
 
 
+class BurdenTests(unittest.TestCase):
+    """The unconditional companion: same numerator, no post-treatment divisor."""
+
+    def test_burden_is_the_rmtr_numerator(self):
+        result = run([msg("a", Q, 0.0), msg("b", P, 1.0),
+                      msg("c", Q, 2.0), msg("d", P, 4.0)])
+        agg = horizon(result, 6.0)
+        self.assertEqual(agg.reentry_burden_seconds, agg.sum_min_latency_seconds)
+        self.assertEqual(agg.rmtr_seconds,
+                         agg.reentry_burden_seconds / agg.opportunities_eligible)
+
+    def test_burden_is_defined_where_rmtr_is_not(self):
+        """No eligible opportunities: the conditional mean is undefined, the
+        period total is honestly zero."""
+        result = run([msg("a", Q, 21.0)], start=0.0, end=24 * HOUR)
+        agg = horizon(result, 6.0)
+        self.assertEqual(agg.opportunities_eligible, 0)
+        self.assertIsNone(agg.rmtr_seconds)
+        self.assertEqual(agg.reentry_burden_seconds, 0.0)
+
+    def test_burden_alone_cannot_distinguish_incidence_from_duration(self):
+        """Which is exactly why it is a companion and never the sole primary.
+
+        Few slow re-entries and many fast ones can accumulate the same total.
+        """
+        few_slow = run([msg("a", Q, 0.0), msg("b", P, 2.0),
+                        msg("c", Q, 3.0), msg("d", P, 5.0)])
+        many_fast = run([msg(f"q{i}", Q, float(i)) if i % 2 == 0 else msg(f"p{i}", P, float(i))
+                         for i in range(8)])
+        a, b = horizon(few_slow, 6.0), horizon(many_fast, 6.0)
+        self.assertEqual(a.reentry_burden_seconds, 4 * HOUR)
+        self.assertEqual(b.reentry_burden_seconds, 4 * HOUR)   # same total
+        self.assertNotEqual(a.opportunities_eligible, b.opportunities_eligible)
+        self.assertNotEqual(a.rmtr_seconds, b.rmtr_seconds)    # different process
+
+
 class RightCensoringTests(unittest.TestCase):
     """Assigning H to a non-response is only sound when the whole window was
     observed. That rule already exists as calendar censoring; named here in
