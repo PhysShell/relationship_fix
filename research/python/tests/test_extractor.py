@@ -215,14 +215,107 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(result.aggregate.deleted_dropped, 1)
 
 
+class LeftBoundaryTests(unittest.TestCase):
+    """Topology is built on the full stream; the period selects, it does not cut.
+
+    Cutting first invents a hand-over at the left edge and loses a return across
+    it. Both are pinned here because both are invisible in mid-stream fixtures.
+    """
+
+    def test_a_partner_run_crossing_the_left_edge_does_not_open_a_new_opportunity(self):
+        """A at -1h hands the ball over; B at +1h merely continues that run.
+        Cut the stream at 0 first and B becomes index 0 — a phantom hand-over."""
+        result = run([
+            msg("A", Q, -1.0), msg("B", Q, 1.0), msg("C", P, 2.0),
+        ], start=0.0, end=100 * HOUR, mode=Mode.QUALIFICATION, consent=True)
+        self.assertEqual(ex.qualification_trace(result), [])
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 0)
+
+    def test_a_genuine_hand_over_inside_the_period_still_counts(self):
+        result = run([
+            msg("A", Q, -1.0), msg("B", P, 0.5), msg("C", Q, 1.0), msg("D", P, 2.0),
+        ], start=0.0, end=100 * HOUR, mode=Mode.QUALIFICATION, consent=True)
+        trace = ex.qualification_trace(result)
+        self.assertEqual([t["opener_id"] for t in trace], ["C"])
+        self.assertEqual(horizon(result, 6.0).sum_min_latency_seconds, HOUR)
+
+    def test_an_opportunity_opened_before_the_period_belongs_to_no_period_here(self):
+        result = run([msg("A", Q, -1.0), msg("B", P, 2.0)], start=0.0, end=100 * HOUR)
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 0)
+        self.assertEqual(result.aggregate.own_messages.count, 1)
+
+    def test_a_return_across_the_left_edge_survives(self):
+        """Last message five hours before the period; the participant comes back
+        inside it. Cut first and the predecessor is gone, so the return vanishes."""
+        result = run([msg("A", Q, -5.0), msg("B", P, 1.0)], start=0.0, end=100 * HOUR)
+        self.assertEqual(result.aggregate.own_episode_returns, 1)
+
+    def test_a_participant_message_with_no_predecessor_at_all_is_not_a_return(self):
+        result = run([msg("B", P, 1.0)], start=0.0, end=100 * HOUR)
+        self.assertEqual(result.aggregate.own_episode_returns, 0)
+
+    def test_a_return_outside_the_period_is_not_counted(self):
+        """Judged against the full stream, counted only inside the period."""
+        result = run([
+            msg("A", Q, -5.0), msg("B", P, 1.0),      # return, inside  -> counts
+            msg("C", P, 500.0),                        # return, outside -> does not
+        ], start=0.0, end=100 * HOUR)
+        self.assertEqual(result.aggregate.own_episode_returns, 1)
+
+
+class DuplicateConflictTests(unittest.TestCase):
+    """One message_id, two copies, disagreeing on something that cannot change."""
+
+    def test_disagreeing_actors_fail_closed(self):
+        with self.assertRaises(ex.DuplicateConflict):
+            run([msg("a", Q, 1.0, chars=12, device="phone"),
+                 msg("a", P, 0.9, chars=12, device="laptop")])
+
+    def test_disagreeing_char_counts_fail_closed(self):
+        with self.assertRaises(ex.DuplicateConflict):
+            run([msg("a", Q, 1.0, chars=12, device="phone"),
+                 msg("a", Q, 0.9, chars=80, device="laptop")])
+
+    def test_the_refusal_does_not_depend_on_input_order(self):
+        copies = [msg("a", Q, 1.0, chars=12, device="phone"),
+                  msg("a", P, 0.9, chars=80, device="laptop")]
+        for stream in (copies, list(reversed(copies))):
+            with self.assertRaises(ex.DuplicateConflict):
+                run(stream)
+
+    def test_a_clock_disagreement_alone_is_resolved_not_refused(self):
+        """Two phones disagreeing about when is plausible; earliest wins."""
+        result = run([msg("a", Q, 1.0, chars=12, device="phone"),
+                      msg("a", Q, 0.5, chars=12, device="laptop"),
+                      msg("b", P, 2.0)])
+        self.assertEqual(result.aggregate.duplicates_dropped, 1)
+        self.assertEqual(horizon(result, 6.0).sum_min_latency_seconds, 1.5 * HOUR)
+
+
+class DeletionContractTests(unittest.TestCase):
+    def test_the_extractor_reconstructs_current_state_not_frozen_history(self):
+        """Named honestly: recomputing an old period after a reply is deleted
+        turns `replied` into `non-replied`. Stability after a period closes is
+        persistence's job, not this extractor's."""
+        before = run([msg("a", Q, 0.0), msg("b", P, 1.0)])
+        after = run([msg("a", Q, 0.0), msg("b", P, 1.0, deleted=True)])
+        self.assertEqual(horizon(before, 6.0).replied_within, 1)
+        self.assertEqual(horizon(after, 6.0).replied_within, 0)
+        self.assertEqual(after.aggregate.deleted_dropped, 1)
+
+
 class PeriodBoundaryTests(unittest.TestCase):
     def test_messages_outside_the_period_are_dropped(self):
+        """`before` is the PARTICIPANT's, so `a` is a genuine hand-over inside
+        the period. Making it the partner's would merely continue a run that
+        opened earlier — see LeftBoundaryTests."""
         result = run([
-            msg("before", Q, -5.0), msg("a", Q, 1.0), msg("b", P, 2.0),
+            msg("before", P, -5.0), msg("a", Q, 1.0), msg("b", P, 2.0),
             msg("after", P, 200.0),
         ], start=0.0, end=100 * HOUR)
         self.assertEqual(result.aggregate.own_messages.count, 1)
         self.assertEqual(horizon(result, 6.0).opportunities_eligible, 1)
+        self.assertEqual(horizon(result, 6.0).sum_min_latency_seconds, HOUR)
 
     def test_the_period_is_half_open(self):
         """[start, end). The opportunity path cannot see this — a message at
@@ -260,6 +353,17 @@ class ExportBoundaryTests(unittest.TestCase):
         self.assertEqual(set(payload), set(ex.EXPORT_KEYS))
         for entry in payload["horizons"]:
             self.assertEqual(set(entry), set(ex.EXPORT_HORIZON_KEYS))
+
+    def test_the_partner_scoped_diagnostics_are_pinned_as_an_open_question(self):
+        """deleted_dropped / duplicates_dropped / max_sync_lag cover the whole
+        input stream, so in single-enrolled mode they partly describe the
+        partner's device. Useful now, to be decided before the variance pilot;
+        pinned so that decision is a field removal, not an act of memory."""
+        result = run([msg("a", Q, 0.0), msg("b", P, 1.0)])
+        payload = ex.production_export(result.aggregate)
+        self.assertTrue(ex.PARTNER_SCOPED_DIAGNOSTIC_KEYS <= set(payload))
+        self.assertEqual(ex.PARTNER_SCOPED_DIAGNOSTIC_KEYS,
+                         {"deleted_dropped", "duplicates_dropped", "max_sync_lag_seconds"})
 
     def test_no_opportunity_identifier_or_open_time_reaches_the_export(self):
         result = run([msg("a", Q, 0.0), msg("b", P, 1.0)])

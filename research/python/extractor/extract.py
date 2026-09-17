@@ -32,6 +32,25 @@ EXPORT_HORIZON_KEYS = frozenset({
     "horizon_hours", "opportunities_eligible", "sum_min_latency_seconds", "replied_within",
 })
 
+#: Exported fields whose scope is the WHOLE input stream and therefore partly
+#: describes the non-enrolled partner's device and deletions. Useful for
+#: qualification, open question before the variance pilot: does the server need
+#: these as numbers, or is a local data-quality flag enough? Pinned as a set so
+#: the decision is a field removal rather than an act of memory.
+PARTNER_SCOPED_DIAGNOSTIC_KEYS = frozenset({
+    "deleted_dropped", "duplicates_dropped", "max_sync_lag_seconds",
+})
+
+
+class DuplicateConflict(ValueError):
+    """Two copies of one message_id disagree on a field that cannot change.
+
+    The reference extractor fails closed rather than picking a winner: a
+    synthesised record that never existed would diff cleanly against nothing,
+    and which copy won would depend on input order. A shipping client may prefer
+    to count these and carry on; the oracle refuses, so a human looks.
+    """
+
 
 def normalize(raw: list[RawMessage]) -> tuple[list[NormalizedMessage], int, int, float]:
     """Timezone → UTC, drop deletions, collapse device duplicates, total-order.
@@ -44,13 +63,19 @@ def normalize(raw: list[RawMessage]) -> tuple[list[NormalizedMessage], int, int,
         that syncs eight hours late still happened when it was sent, and late
         sync is therefore invisible to latency. This is a stated limitation:
         we cannot observe delivery, only sending.
-      * a deleted message is dropped entirely, because a later deletion must not
-        be able to change an aggregate about the past. Consequence worth naming:
-        a deleted reply looks like a non-reply, which is why the count is
-        exported.
+      * a deleted message is dropped entirely. Name the contract correctly:
+        this is CURRENT-STATE RECONSTRUCTION, not historically stable
+        aggregation. Recomputing an old period after a reply is deleted WILL
+        turn `replied` into `non-replied`. Stability after a period closes is
+        the job of persistence — snapshot or event log — and not of this
+        reference extractor. A deleted reply looks like a non-reply, which is
+        why the count is exported.
       * duplicates are collapsed by `message_id` only, keeping the EARLIEST
-        timestamp. Two copies of one message from two phones share an id; two
-        genuinely similar messages do not, and are deliberately NOT merged.
+        timestamp: clock disagreement between two phones is plausible. Fields
+        that CANNOT legitimately differ for one id — `actor`, `char_count` —
+        must match, and a disagreement raises `DuplicateConflict` instead of
+        being silently resolved. Two genuinely similar messages do not share an
+        id and are deliberately NOT merged.
       * order is (timestamp, message_id), so identical timestamps resolve
         deterministically and input order cannot matter.
     """
@@ -64,6 +89,13 @@ def normalize(raw: list[RawMessage]) -> tuple[list[NormalizedMessage], int, int,
             deleted_dropped += 1
             continue
         existing = by_id.get(message.message_id)
+        if existing is not None and (existing.actor != message.actor
+                                     or existing.char_count != message.char_count):
+            raise DuplicateConflict(
+                f"copies of {message.message_id!r} disagree: "
+                f"actor {existing.actor!r}/{message.actor!r}, "
+                f"char_count {existing.char_count}/{message.char_count}"
+            )
         if existing is None:
             by_id[message.message_id] = NormalizedMessage(
                 message_id=message.message_id,
@@ -94,6 +126,12 @@ def find_opportunities(stream: list[NormalizedMessage], participant: str) -> lis
     Opens at the first partner message whose predecessor is not the partner (or
     which starts the stream). A run of partner messages with no reply in between
     is ONE opportunity however long it runs: the ball changed hands once.
+
+    MUST be given the FULL normalized stream, not a stream already cut to the
+    period. Cutting first invents opportunities at the left edge: a partner
+    message that merely continues a run already open before `period_start`
+    becomes index 0 of the slice and looks like a fresh hand-over. Selection by
+    period happens afterwards, on `opened_at`.
     """
     opportunities = []
     for index, message in enumerate(stream):
@@ -111,10 +149,25 @@ def find_opportunities(stream: list[NormalizedMessage], participant: str) -> lis
     return opportunities
 
 
-def _episode_returns(stream: list[NormalizedMessage], participant: str) -> int:
+def _episode_returns(
+    stream: list[NormalizedMessage],
+    participant: str,
+    period_start: float,
+    period_end: float,
+) -> int:
+    """Counted inside the period, but judged against the FULL stream.
+
+    Same left-edge trap as opportunities: the first participant message inside
+    the period cannot see the message immediately before `period_start` if the
+    stream was cut first, so a genuine return after a long pause disappears
+    exactly at the boundary. A message with no predecessor at all is not counted
+    — we cannot know whether it followed a pause.
+    """
     returns = 0
     for index, message in enumerate(stream):
         if message.actor != participant or index == 0:
+            continue
+        if not (period_start <= message.timestamp < period_end):
             continue
         if message.timestamp - stream[index - 1].timestamp >= EPISODE_GAP_SECONDS:
             returns += 1
@@ -141,8 +194,12 @@ def extract(
         raise ValueError(f"the extractor handles dyads only, got actors: {sorted(actors)}")
 
     stream, deleted_dropped, duplicates_dropped, max_sync_lag = normalize(raw)
-    stream = [m for m in stream if period_start <= m.timestamp < period_end]
-    opportunities = find_opportunities(stream, participant)
+    # topology on the full stream, selection by period afterwards — see
+    # find_opportunities' docstring for what cutting first would invent.
+    opportunities = [
+        o for o in find_opportunities(stream, participant)
+        if period_start <= o.opened_at < period_end
+    ]
 
     horizons = []
     for hours in horizons_hours:
@@ -155,13 +212,14 @@ def extract(
             replied_within=sum(1 for o in eligible if o.replied_within(seconds)),
         ))
 
-    own = [m for m in stream if m.actor == participant]
+    own = [m for m in stream
+           if m.actor == participant and period_start <= m.timestamp < period_end]
     aggregate = PeriodAggregate(
         participant_id=participant,
         period_id=period_id,
         horizons=tuple(horizons),
         own_messages=LengthSummary(count=len(own), total_chars=sum(m.char_count for m in own)),
-        own_episode_returns=_episode_returns(stream, participant),
+        own_episode_returns=_episode_returns(stream, participant, period_start, period_end),
         deleted_dropped=deleted_dropped,
         duplicates_dropped=duplicates_dropped,
         max_sync_lag_seconds=max_sync_lag,
