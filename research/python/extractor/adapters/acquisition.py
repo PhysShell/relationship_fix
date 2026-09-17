@@ -102,12 +102,16 @@ class Assumption:
     made_by: str
     supported_by: str          # Property.key
     if_unsupported: str        # what stops working, concretely
-    #: Set when the extractor stopped making the assumption at all, because the
-    #: adapter fails closed instead. Then the property behind it may stay
-    #: UNKNOWN forever without blocking a freeze: there is nothing left to be
-    #: wrong about. An unproved guarantee and an unneeded guarantee are not the
-    #: same state, and only the first one is a hole.
-    eliminated_by_refusal: str = ""
+    #: Set when the extractor stopped making the assumption at all — by failing
+    #: closed, or by a design that never needs it. Then the property behind it
+    #: may stay UNKNOWN or UNAVAILABLE forever without blocking a freeze: there
+    #: is nothing left to be wrong about. An unproved guarantee and an unneeded
+    #: guarantee are not the same state, and only the first one is a hole.
+    #:
+    #: This is the exit from the qualification trap: when a source withholds a
+    #: guarantee, the temptation is to gather more and more data until the
+    #: guarantee starts to FEEL present. The alternative is to stop assuming it.
+    eliminated_by: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,13 +154,14 @@ class Ledger:
            contract);
         2. the source demonstrably does not provide it (UNAVAILABLE) and the
            consequence is written down;
-        3. the extractor stopped making it — `eliminated_by_refusal`.
+        3. the extractor stopped making it — `eliminated_by` (fail closed, or a
+           design that never needed it).
 
         `UNKNOWN` alone is none of those: it is the state where the extractor
         keeps assuming and nobody has checked.
         """
         return tuple(a for a in self.assumptions
-                     if not a.eliminated_by_refusal
+                     if not a.eliminated_by
                      and self.property(a.supported_by).effective_status is Status.UNKNOWN)
 
     def summary(self) -> str:

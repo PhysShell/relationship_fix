@@ -980,7 +980,7 @@ external data
     MaiChat            точная топология · неправильный временной домен
     Seufert            правильный longitudinal-домен · грубый частичный порядок
         ↓
-TARGET ACQUISITION QUALIFICATION          ← ОТКРЫТ: target-acquisition-qualification.md
+TARGET ACQUISITION QUALIFICATION          ✔ ЗАКРЫТ: target-acquisition-qualification.md
     что реально увидит наше приложение:
       откуда timestamp?   какое разрешение?
       edit / delete?      есть ли IDs?      multi-device?
@@ -988,6 +988,8 @@ TARGET ACQUISITION QUALIFICATION          ← ОТКРЫТ: target-acquisition-q
       8 QUALIFIED · 2 PARTIAL · 9 UNKNOWN · 2 UNAVAILABLE
       экспорт не записывает свой диапазон дат → окно только из протокола
       понятия удаления в формате нет вовсе   → current-state reconstruction
+      порядок внутри секунды не установлен   → TiePolicy.STRICT, допущение снято
+      открытых допущений экстрактора: 0
         ↓
 variance pilot
     реальные nuisance-распределения именно на этом acquisition path
@@ -1139,3 +1141,4 @@ Treatment'а нет, поэтому будущий estimand это не нару
 | 2026-09-17 | §6.1.0: ворота из четырёх слоёв перед заморозкой — fixtures → property suite → mutation → корпус; stdlib-harness'ы `tools/propcheck.py` и `tools/mutate.py` вместо .NET-инструментов | CsCheck и Stryker.NET не могут тестировать Python-код, а ADR-0001 держит Python на stdlib. Первый прогон убил 66 из 104 мутантов: боевые границы (`latency <= H`, `period_end - period_start` при нулевом старте, `burden > window`), три default'а consent и privacy-флаги дата-классов были не проверены. После двух кругов — 104 из 104. В самом harness'е нашёлся баг порядка обхода AST, делавший каждую строку отчёта вымыслом |
 | 2026-09-17 | §6.1.0: `slots`/`repr=False`/`frozen` понижены до privacy **guardrail** (граница — export schema + allowlist + тест); счёт переопределён как `killed / conclusive` с пятью исходами вместо булева; добавлены self-tests harness'а и end-to-end калибровка; записан порог возврата к Hypothesis | Guardrail не закрывает объявленное поле, `asdict`, кастомный сериализатор или человека с логом. Булев исход считал сломанный импорт, timeout и падение runner'а убийствами — так идеальный счёт зарабатывается разрывом графа импортов. Harness после найденного дефекта обхода сам стал trusted infrastructure, и его self-tests немедленно нашли второй дефект (утечка atexit-замыканий) |
 | 2026-09-17 | §6.1.2→ открыт отдельный TRACK: `target-acquisition-qualification.md`, Telegram Desktop JSON, 21 свойство, 12 допущений экстрактора сопоставлены | Два `UNAVAILABLE` по первоисточникам меняют контракт: экспорт не записывает запрошенный диапазон дат (значит общее окно `reentry_burden_H` приходит только из протокола), и понятия удалённого сообщения в формате нет вовсе (значит `deleted_dropped = 0` обязан нести флаг «источник не сообщает об удалениях»). Четыре допущения остаются открытыми и закрываются только реальным экспортом |
+| 2026-09-17 | Экстрактор: `TiePolicy.STRICT` — возможности, задевающие группу с одной секундой и более чем одним актёром, исключаются и считаются; в экспорт добавлены `cross_actor_tie_groups` и `ambiguous_opportunities`. Variance pilot обязан вывести ДОЛЮ затронутых возможностей | Target acquisition qualification показала, что порядок разных актёров внутри одной секунды источником не устанавливается и доказан быть не может. Вместо наращивания выборки до психологического комфорта допущение снято конструкцией. Доля решает, нужна ли `BOUNDED`: при 0.02% возможности консервативно выбрасываются, при 15% включается partial-order машинерия — по измеренной причине, а не по теоретической |

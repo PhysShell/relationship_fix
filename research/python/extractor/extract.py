@@ -19,6 +19,7 @@ from .model import (
     Opportunity,
     PeriodAggregate,
     RawMessage,
+    TiePolicy,
 )
 
 #: Keys a production export may contain. Anything else is a bug, and the test
@@ -27,6 +28,7 @@ EXPORT_KEYS = frozenset({
     "participant_id", "period_id", "horizons",
     "own_message_count", "own_total_chars", "own_episode_returns",
     "observation_window_seconds",
+    "cross_actor_tie_groups", "ambiguous_opportunities",
     "deleted_dropped", "duplicates_dropped", "max_sync_lag_seconds",
 })
 EXPORT_HORIZON_KEYS = frozenset({
@@ -165,6 +167,7 @@ def find_opportunities(stream: list[NormalizedMessage], participant: str) -> lis
     becomes index 0 of the slice and looks like a fresh hand-over. Selection by
     period happens afterwards, on `opened_at`.
     """
+    ambiguous = ambiguous_timestamps(stream)
     opportunities = []
     for index, message in enumerate(stream):
         if message.actor == participant:
@@ -175,6 +178,9 @@ def find_opportunities(stream: list[NormalizedMessage], participant: str) -> lis
         while end + 1 < len(stream) and stream[end + 1].actor != participant:
             end += 1
         reply = next((m for m in stream[end + 1:] if m.actor == participant), None)
+        touched = {message.timestamp, stream[end].timestamp}
+        if reply is not None:
+            touched.add(reply.timestamp)
         opportunities.append(Opportunity(
             opener_id=message.message_id,
             opened_at=message.timestamp,
@@ -182,8 +188,26 @@ def find_opportunities(stream: list[NormalizedMessage], participant: str) -> lis
             reply_at=reply.timestamp if reply else None,
             run_end_at=stream[end].timestamp,
             run_message_count=end - index + 1,
+            ambiguous_order=bool(touched & ambiguous),
         ))
     return opportunities
+
+
+def ambiguous_timestamps(stream: list[NormalizedMessage]) -> set[float]:
+    """Timestamps whose group of equal-timestamp messages holds >1 actor.
+
+    A same-actor tie is harmless: permuting Q Q Q leaves the actor sequence
+    Q Q Q, so the hand-over count cannot move. A cross-actor tie is the whole
+    problem — Q P Q and Q Q P are different topologies.
+
+    The tie-break in `sort_key` is `message_id`, a STRING, so its order is
+    arbitrary rather than wrong: nothing about it claims to be chronology. This
+    function marks where that arbitrariness could matter.
+    """
+    groups: dict[float, set[str]] = {}
+    for message in stream:
+        groups.setdefault(message.timestamp, set()).add(message.actor)
+    return {stamp for stamp, actors in groups.items() if len(actors) > 1}
 
 
 def _episode_returns(
@@ -220,6 +244,7 @@ def extract(
     mode: Mode = Mode.PRODUCTION,
     consent_to_share_trace: bool = False,
     horizons_hours: tuple[float, ...] = HORIZONS_HOURS,
+    tie_policy: TiePolicy = TiePolicy.STRICT,
 ) -> ExtractionResult:
     """The whole extractor.
 
@@ -232,7 +257,18 @@ def extract(
 
     `mode` is a required part of the contract rather than a flag with a helpful
     default behaviour: PRODUCTION never builds the per-opportunity trace at all.
+
+    `tie_policy` is STRICT because the source does not order inside a second and
+    we therefore do not: opportunities touching a cross-actor tie are excluded
+    and counted. See `TiePolicy`.
     """
+    if tie_policy is not TiePolicy.STRICT:
+        raise NotImplementedError(
+            "only TiePolicy.STRICT is built. BOUNDED is a dynamic program over "
+            "admissible actor sequences and should be paid for by a measured "
+            "rate of ambiguity from the variance pilot, not by the theoretical "
+            "existence of ties"
+        )
     actors = {m.actor for m in raw}
     if len(actors) > 2:
         raise ValueError(f"the extractor handles dyads only, got actors: {sorted(actors)}")
@@ -240,10 +276,17 @@ def extract(
     stream, deleted_dropped, duplicates_dropped, max_sync_lag = normalize(raw)
     # topology on the full stream, selection by period afterwards — see
     # find_opportunities' docstring for what cutting first would invent.
-    opportunities = [
+    in_period = [
         o for o in find_opportunities(stream, participant)
         if period_start <= o.opened_at < period_end
     ]
+    # The source does not establish order inside a second, so neither do we.
+    opportunities = [o for o in in_period if not o.ambiguous_order]
+    ambiguous_opportunities = len(in_period) - len(opportunities)
+    tie_groups = len({
+        m.timestamp for m in stream
+        if period_start <= m.timestamp < period_end
+    } & ambiguous_timestamps(stream))
 
     horizons = []
     for hours in horizons_hours:
@@ -268,6 +311,8 @@ def extract(
         horizons=tuple(horizons),
         own_messages=LengthSummary(count=len(own), total_chars=sum(m.char_count for m in own)),
         own_episode_returns=_episode_returns(stream, participant, period_start, period_end),
+        cross_actor_tie_groups=tie_groups,
+        ambiguous_opportunities=ambiguous_opportunities,
         observation_window_seconds=period_end - period_start,
         deleted_dropped=deleted_dropped,
         duplicates_dropped=duplicates_dropped,
@@ -301,6 +346,8 @@ def production_export(aggregate: PeriodAggregate) -> dict:
         "own_message_count": aggregate.own_messages.count,
         "own_total_chars": aggregate.own_messages.total_chars,
         "own_episode_returns": aggregate.own_episode_returns,
+        "cross_actor_tie_groups": aggregate.cross_actor_tie_groups,
+        "ambiguous_opportunities": aggregate.ambiguous_opportunities,
         "observation_window_seconds": aggregate.observation_window_seconds,
         "deleted_dropped": aggregate.deleted_dropped,
         "duplicates_dropped": aggregate.duplicates_dropped,

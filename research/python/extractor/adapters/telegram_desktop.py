@@ -233,6 +233,34 @@ ORDERING = (
                        "где `date_unixtime` убывает при возрастании `id`.",
     ),
     _p(
+        key="ordering.equal_second_cross_actor_chronology",
+        question="Установлен ли РЕАЛЬНЫЙ порядок разных актёров внутри одной секунды?",
+        claim="Нет. Файл упорядочен по `id`, а эквивалентность id-порядка физической "
+              "хронологии не утверждает ни один источник, который можно прочитать.",
+        status=Status.UNAVAILABLE,
+        claim_scope=ClaimScope.ARTIFACT,
+        primary_evidence=(f"{OFFSETS} — «typically ... descending object ID values»: "
+                          "«typically» гарантией не является",
+                          f"{TYPES}:3470-3473 — внутри секунды порядок задаёт id, потому что "
+                          "id задаёт весь файл",
+                          "корпус: 235 записей, 1 наблюдённый cross-actor tie — явление "
+                          "реально, но выборка не доказывает и не может доказать связь "
+                          "id с физическим временем"),
+        observed_limitations=("никакое число просмотренных сообщений эту связь не установит: "
+                              "отсутствие контрпримера — не гарантия",),
+        downstream_consequence="`id` НЕ интерпретируется как физическая хронология. Группы "
+                               "сообщений с одной секундой и более чем одним актёром "
+                               "помечаются неоднозначными.",
+        adapter_behavior="`TiePolicy.STRICT`: возможности, задевающие такую группу, "
+                         "исключаются и считаются; `cross_actor_tie_groups` и "
+                         "`ambiguous_opportunities` уезжают в экспорт, чтобы величина "
+                         "неоднозначности была видна, а не предполагалась малой. "
+                         "`BOUNDED` (обе допустимые топологии → границы) объявлена и "
+                         "намеренно не построена: за неё платят измеренной долей.",
+        fixture_needed="Закрыто по решению, а не по данным. Variance pilot измерит ДОЛЮ "
+                       "затронутых возможностей — это и решит, нужна ли `BOUNDED`.",
+    ),
+    _p(
         key="ordering.tie_semantics",
         question="Что разрешает равенство секунд?",
         claim="Позиция в файле, то есть возрастающий `id`. Остаётся ровно один открытый "
@@ -492,8 +520,13 @@ ASSUMPTIONS = (
     Assumption("resolution_fine_enough", "find_opportunities", "ordering.resolution",
                "топология недоступна; остаются только bounds по допустимым порядкам"),
     Assumption("ties_resolvable", "нормализация: сортировка (timestamp, message_id)",
-               "ordering.tie_semantics",
-               "передачи хода внутри секунды считаются неверно — и число, а не только латентность"),
+               "ordering.equal_second_cross_actor_chronology",
+               "передачи хода внутри секунды считались бы неверно — и ЧИСЛО передач, "
+               "а не только латентность",
+               eliminated_by="Допущение снято конструкцией, а не доказано: `TiePolicy.STRICT` "
+                             "помечает cross-actor-группы неоднозначными и исключает "
+                             "затронутые возможности, считая их. Экстрактор больше не "
+                             "предполагает, что id разрешает секунду — он этого не делает."),
     Assumption("stream_order_is_chronological", "нормализация", "ordering.exported_position",
                "порядок приходится строить целиком из timestamp, включая его ties"),
     Assumption("stable_identity", "dedup по message_id", "identity.message_id",
@@ -516,7 +549,7 @@ ASSUMPTIONS = (
                "пропуск в окне неотличим от молчания — и усечение выглядит как медленный ответ"),
     Assumption("input_is_valid_json", "любой будущий adapt_file", "format.strict_json",
                "acquisition отказывает, а не чинит файл на лету",
-               eliminated_by_refusal="Строгий разбор + `REFUSED` при ошибке: экстрактор "
+               eliminated_by="Строгий разбор + `REFUSED` при ошибке: экстрактор "
                                      "не допускает валидности, он её требует. Поэтому "
                                      "`format.strict_json` может остаться UNKNOWN навсегда "
                                      "и не блокировать заморозку."),

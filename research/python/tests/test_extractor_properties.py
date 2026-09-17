@@ -137,7 +137,9 @@ def oracle(scenario: Scenario):
     message, answered by the participant's next message if one exists; topology
     is built on the WHOLE stream and only then selected by period; an
     opportunity is eligible when its whole window fits inside the period; a
-    non-reply contributes the full horizon.
+    non-reply contributes the full horizon; and an opportunity touching a
+    timestamp shared by more than one actor is dropped, because the source does
+    not order inside a second and neither do we.
     """
     horizon = scenario.horizon_seconds
     start, end = 0.0, scenario.window_seconds
@@ -151,6 +153,22 @@ def oracle(scenario: Scenario):
             continue
         runs.append((actor, at))
 
+    # timestamps where more than one actor appears: order not established
+    by_stamp: dict[float, set[str]] = {}
+    for at, _mid, actor in stamped:
+        by_stamp.setdefault(at, set()).add(actor)
+    ambiguous = {at for at, actors in by_stamp.items() if len(actors) > 1}
+
+    # the run's last message, needed to know which timestamps an opportunity touches
+    run_end = {}
+    for position, (actor, opened) in enumerate(runs):
+        last = opened
+        for at, _mid, who in stamped:
+            if at >= opened and who == actor and (position + 1 >= len(runs)
+                                                  or at < runs[position + 1][1]):
+                last = max(last, at)
+        run_end[position] = last
+
     burden, count = 0.0, 0
     for index, (actor, opened) in enumerate(runs):
         if actor == P:
@@ -158,6 +176,11 @@ def oracle(scenario: Scenario):
         if not (start <= opened < end):
             continue
         if opened + horizon > end:            # calendar censoring
+            continue
+        touched = {opened, run_end[index]}
+        if index + 1 < len(runs):
+            touched.add(runs[index + 1][1])
+        if touched & ambiguous:               # order inside a second is unknown
             continue
         count += 1
         if index + 1 < len(runs):

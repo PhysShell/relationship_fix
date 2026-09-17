@@ -18,7 +18,9 @@ from extractor.model import (
     HORIZONS_HOURS,
     ExtractionResult,
     Mode,
+    Opportunity,
     RawMessage,
+    TiePolicy,
 )
 
 HOUR = 3600.0
@@ -405,6 +407,93 @@ class BoundaryGapsFoundByMutationTests(unittest.TestCase):
                                     consent_to_share_trace=True)
         with self.assertRaises(PermissionError):
             no_trace.export_trace()
+
+
+
+class TieAmbiguityTests(unittest.TestCase):
+    """The source does not order inside a second, so neither do we.
+
+    Not "orders it cautiously" — does not order it. The tie-break in `sort_key`
+    is a string comparison of message ids, which is deterministic and carries no
+    claim about chronology; these tests pin where that arbitrariness is allowed
+    to matter and where it is not.
+    """
+
+    def test_a_same_actor_tie_changes_nothing(self):
+        """Q Q Q permutes to Q Q Q. The ball changed hands once either way."""
+        result = run([msg("a", Q, 1.0), msg("b", Q, 1.0), msg("c", Q, 1.0),
+                      msg("d", P, 2.0)])
+        self.assertEqual(result.aggregate.cross_actor_tie_groups, 0)
+        self.assertEqual(result.aggregate.ambiguous_opportunities, 0)
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 1)
+
+    def test_a_cross_actor_tie_makes_the_hand_over_unknowable(self):
+        """Q P Q and Q Q P are different topologies at the same timestamps, and
+        nothing in the source says which happened."""
+        result = run([msg("a", Q, 1.0), msg("b", P, 1.0), msg("c", Q, 1.0),
+                      msg("d", P, 3.0)])
+        self.assertEqual(result.aggregate.cross_actor_tie_groups, 1)
+        self.assertGreater(result.aggregate.ambiguous_opportunities, 0)
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 0)
+
+    def test_an_unambiguous_opportunity_beside_a_tie_survives(self):
+        """Exclusion is local: a tie poisons what it touches, not the period."""
+        result = run([msg("a", Q, 1.0), msg("b", P, 1.0),          # tied pair
+                      msg("c", Q, 5.0), msg("d", P, 6.0)])         # clean
+        self.assertEqual(result.aggregate.cross_actor_tie_groups, 1)
+        self.assertEqual(result.aggregate.ambiguous_opportunities, 1)
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 1)
+
+    def test_a_tie_on_the_reply_is_ambiguous_too(self):
+        """Not only the opener: if the participant's return shares a second
+        with a partner message, whether it IS a return is unestablished."""
+        result = run([msg("a", Q, 1.0), msg("b", Q, 4.0), msg("c", P, 4.0)])
+        self.assertEqual(result.aggregate.cross_actor_tie_groups, 1)
+        self.assertEqual(result.aggregate.ambiguous_opportunities, 1)
+
+    def test_the_counts_are_exported_so_the_magnitude_is_visible(self):
+        """Dropping silently would make ambiguity look like absence — the
+        recurring failure this project keeps meeting."""
+        result = run([msg("a", Q, 1.0), msg("b", P, 1.0)])
+        payload = ex.production_export(result.aggregate)
+        self.assertEqual(payload["cross_actor_tie_groups"], 1)
+        self.assertEqual(payload["ambiguous_opportunities"], 1)
+        self.assertEqual(set(payload), set(ex.EXPORT_KEYS))
+
+    def test_strict_is_the_default_and_bounded_refuses_loudly(self):
+        messages = [msg("a", Q, 1.0), msg("b", P, 2.0)]
+        self.assertEqual(run(messages).aggregate.ambiguous_opportunities, 0)
+        with self.assertRaises(NotImplementedError) as refusal:
+            ex.extract(messages, P, "w1", 0.0, WEEK, tie_policy=TiePolicy.BOUNDED)
+        self.assertIn("measured rate of ambiguity", str(refusal.exception))
+
+    def test_a_clean_opportunity_is_not_born_ambiguous(self):
+        """The default must be "orderable"; ambiguity is something observed,
+        never something forgotten. Constructed directly, because the extractor
+        always passes the flag explicitly and so never exercises the default —
+        which is exactly where a silent flip would live."""
+        self.assertFalse(Opportunity(opener_id="a", opened_at=0.0, reply_id="b",
+                                     reply_at=60.0).ambiguous_order)
+        result = run([msg("a", Q, 1.0), msg("b", P, 2.0)],
+                     mode=Mode.QUALIFICATION, consent=True)
+        self.assertFalse(result.export_trace()[0].ambiguous_order)
+
+    def test_a_tie_group_exactly_at_period_start_is_counted(self):
+        result = run([msg("a", Q, 24.0), msg("b", P, 24.0)],
+                     start=24 * HOUR, end=48 * HOUR)
+        self.assertEqual(result.aggregate.cross_actor_tie_groups, 1)
+
+    def test_a_tie_group_exactly_at_period_end_is_not_counted(self):
+        result = run([msg("a", Q, 0.0), msg("b", P, 0.0),
+                      msg("c", Q, 24.0), msg("d", P, 24.0)],
+                     start=0.0, end=24 * HOUR)
+        self.assertEqual(result.aggregate.cross_actor_tie_groups, 1)   # the one at 0h
+
+    def test_tie_groups_are_counted_per_period_not_per_stream(self):
+        result = run([msg("a", Q, 0.5), msg("b", P, 0.5),          # before period
+                      msg("c", Q, 30.0), msg("d", P, 30.0)],       # inside
+                     start=24 * HOUR, end=48 * HOUR)
+        self.assertEqual(result.aggregate.cross_actor_tie_groups, 1)
 
 
 class RightCensoringTests(unittest.TestCase):

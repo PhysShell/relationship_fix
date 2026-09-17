@@ -84,6 +84,39 @@ class NormalizedMessage:
         return (self.timestamp, self.message_id)
 
 
+class TiePolicy(Enum):
+    """What to do when the source cannot order messages inside one second.
+
+    Telegram Desktop writes second-resolution timestamps and orders the file by
+    message id. Whether that id order is physical chronology is NOT established
+    by any source we could read — `ordering.equal_second_cross_actor_chronology`
+    in the acquisition ledger is UNAVAILABLE. So the extractor does not assume
+    it. Not "assumes it cautiously": does not assume it.
+
+    A tie between messages of the SAME actor is harmless — Q Q Q permutes to
+    Q Q Q and the hand-over count is untouched. A tie ACROSS actors is not:
+    Q P Q and Q Q P are different topologies, and one flipped tie turns one
+    opportunity into two, the second contributing a full H.
+
+    STRICT   affected opportunities are excluded, and the group count is
+             exported so the magnitude is visible rather than assumed small.
+    BOUNDED  evaluate every admissible local order and report lower/upper
+             bounds. Deliberately not built: it is a dynamic program over
+             permissible actor sequences, and it should be paid for by a
+             measured rate of ambiguity, not by the theoretical existence of
+             ties. The variance pilot measures that rate first.
+
+    NOTE on what STRICT does and does not claim. Inside an ambiguous group the
+    actor sequence is unknown, so both the membership AND the count of
+    opportunities touching it are unknown. Dropping the ones we enumerated
+    removes the ones we can see; it does not prove the remainder is complete.
+    That is exactly why `cross_actor_tie_groups` is exported beside the count.
+    """
+
+    STRICT = "strict"
+    BOUNDED = "bounded"
+
+
 @dataclass(frozen=True, slots=True)
 class Opportunity:
     """One partner run and the participant's return to it, if any.
@@ -119,6 +152,11 @@ class Opportunity:
     #: Last message of the partner run, and how many messages it held.
     run_end_at: float | None = None
     run_message_count: int = 1
+    #: True when this opportunity touches a group of messages sharing one
+    #: timestamp in which more than one actor appears. The source does not
+    #: order inside a second, so the actor sequence there is not established
+    #: and neither is this hand-over. See `TiePolicy`.
+    ambiguous_order: bool = False
 
     @property
     def latency_seconds(self) -> float | None:
@@ -296,6 +334,11 @@ class PeriodAggregate:
     horizons: tuple[HorizonAggregate, ...]
     own_messages: LengthSummary
     own_episode_returns: int
+    #: Groups of messages sharing one timestamp with more than one actor in
+    #: them. The honest measure of how much order is unknown in this period.
+    cross_actor_tie_groups: int
+    #: Opportunities dropped because they touch such a group.
+    ambiguous_opportunities: int
     #: `period_end - period_start`. Not a statistic about anybody: it is the
     #: protocol's own window, exported so that the common-window requirement of
     #: `reentry_burden_seconds` is CHECKABLE rather than remembered. A burden

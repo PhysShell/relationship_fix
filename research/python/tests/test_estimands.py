@@ -28,6 +28,8 @@ def cell(n, burden, *, window=24 * HOUR, pid="p1"):
         ),),
         own_messages=LengthSummary(count=0, total_chars=0),
         own_episode_returns=0,
+        cross_actor_tie_groups=0,
+        ambiguous_opportunities=0,
         observation_window_seconds=window,
     )
 

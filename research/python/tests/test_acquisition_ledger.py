@@ -119,6 +119,7 @@ class TelegramVerdictTests(unittest.TestCase):
             "coverage.window_provenance", "coverage.completeness",
             "coverage.requested_range_honored", "provenance.producer_version",
             "events.deleted", "format.strict_json", "time.local_string",
+            "ordering.equal_second_cross_actor_chronology",
         })
 
     def test_edited_is_not_an_edit_flag(self):
@@ -154,7 +155,7 @@ class TelegramVerdictTests(unittest.TestCase):
         for issue in ("24961", "27571"):
             self.assertIn(issue, joined)
         assumption = next(a for a in tg.LEDGER.assumptions if a.key == "input_is_valid_json")
-        self.assertTrue(assumption.eliminated_by_refusal)
+        self.assertTrue(assumption.eliminated_by)
 
     def test_a_live_client_ordering_bug_is_marked_as_not_evidence(self):
         entry = tg.LEDGER.property("ordering.tie_semantics")
@@ -179,11 +180,19 @@ class TelegramVerdictTests(unittest.TestCase):
         self.assertIs(entry.status, Status.UNAVAILABLE)
         self.assertIn("не сообщает об удалениях", entry.adapter_behavior)
 
-    def test_only_one_assumption_is_still_open(self):
-        """The history-fetch pass closed three. What is left is a single
-        empirical question, not a research programme."""
-        self.assertEqual({a.key for a in tg.LEDGER.unresolved_assumptions()},
-                         {"ties_resolvable"})
+    def test_no_assumption_is_still_open(self):
+        """The TRACK's exit criterion, met. And met the right way: the last one
+        was not closed by finding a guarantee, it was closed by no longer
+        needing one. Gathering data until a missing guarantee starts to feel
+        present is the trap this criterion exists to avoid."""
+        self.assertEqual(tg.LEDGER.unresolved_assumptions(), ())
+
+    def test_the_last_assumption_was_eliminated_not_proved(self):
+        assumption = next(a for a in tg.LEDGER.assumptions if a.key == "ties_resolvable")
+        self.assertTrue(assumption.eliminated_by)
+        self.assertIn("TiePolicy.STRICT", assumption.eliminated_by)
+        entry = tg.LEDGER.property(assumption.supported_by)
+        self.assertIs(entry.status, Status.UNAVAILABLE)
 
     def test_the_export_order_is_ascending_id_not_chronology(self):
         """Traced through the source: the server returns descending id,
