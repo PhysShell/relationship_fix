@@ -58,5 +58,90 @@
       "surface_digest_changed": false,
       "recorded_in": "git history; the protocol surface digest is unaffected"
     }
-  ]
+  ],
+  "v2_plan": {
+    "status": "declared, not started",
+    "opens_with": "protocol_version: 2",
+    "blind_barrier": [
+      "1. зафиксировать implementation change: materialized_in -> label-level rendering",
+      "2. заморозить код selector'а v2 (снимки пересчитываются, версия поднимается)",
+      "3. ТОЛЬКО ПОСЛЕ ЭТОГО раскрыть held-out задачи",
+      "4. прогнать условия A/B/C/D/E"
+    ],
+    "why_that_order": "Момент починки и момент раскрытия задач обязаны быть развязаны. Иначе предсказание 0.54 -> 0.85-0.95 перестаёт быть prospective и превращается в «мы починили семь известных промахов, и, невероятно, семь промахов исчезли».",
+    "curator_runner_split": {
+      "curator_produces": [
+        "base_commit",
+        "prompt",
+        "hidden acceptance",
+        "forbidden leakage",
+        "expected behavioural outcome"
+      ],
+      "runner_sees": [
+        "base_commit",
+        "prompt",
+        "condition context"
+      ],
+      "runner_never_sees": [
+        "oracle targets",
+        "the eventual patch",
+        "hidden acceptance"
+      ],
+      "note": "Идеально, если задачи отбирает сессия или человек, не видевший реализацию v2."
+    },
+    "tasks": {
+      "count": "12-20 historical, не 8",
+      "source": "исторические изменения relationship_fix: коммит до фикса -> описание PR как промпт -> приехавший патч/тесты как скрытый acceptance",
+      "classes": [
+        "ontology/protocol drift",
+        "implementation bug",
+        "cross-file contract change",
+        "test/evidence mismatch",
+        "deployment/config bug",
+        "negative task: no change required"
+      ],
+      "why_the_negative_class": "Semantic graph может быть великолепен в поиске того, что надо менять, и ужасен в понимании, что менять ничего не надо. Агенты обожают улучшать мир до состояния failing tests."
+    },
+    "conditions": {
+      "A": "raw repo + обычные agent tools",
+      "B": "BM25 / dense initial context + те же tools",
+      "C": "symbol / dependency retrieval + те же tools",
+      "D": "semantic spine + те же tools",
+      "E": "oracle-sections + те же tools",
+      "modes": [
+        "context-only",
+        "full agentic tools"
+      ]
+    },
+    "run_order": {
+      "rule": "randomized / interleaved по задачам, не «сначала все A, потом все D»",
+      "example": [
+        "task 1: D B A E C",
+        "task 2: C A E D B"
+      ],
+      "why": "При внешнем LLM API модель и serving дрейфуют даже при одинаковом model ID. Перемешивание развязывает временной дрейф и стратегию.",
+      "held_fixed": [
+        "model snapshot/id",
+        "temperature",
+        "tool contract",
+        "budget",
+        "max turns"
+      ]
+    },
+    "primary_metric": "resolved by hidden acceptance",
+    "causal_ladder": [
+      "target recall",
+      "first useful file latency",
+      "correct localization",
+      "correct edit",
+      "hidden acceptance"
+    ],
+    "retrieval_metrics_are": "secondary from here on",
+    "outcomes_all_publishable": {
+      "retrieval_wins_agent_does_not": "spine retrieval >> BM25, но resolved D ≈ resolved B — агент компенсирует инструментами",
+      "reasoning_win": "разница в retrieval умеренная, но resolved D >> B — структурированный контекст помогает рассуждению; самый интересный исход для исходной гипотезы",
+      "compressor_only": "full agentic: всё одинаково; context-only: spine сильно лучше — spine полезна как компрессор стартового контекста для ограниченных агентов"
+    }
+  },
+  "v1_status_note": "v1 закрыт. fae5843 — operational closure (зелёный CI, точная арифметика), 2ef1e5c — protocol-v1 freeze. Следующий содержательный коммит обязан открывать protocol_version: 2."
 }

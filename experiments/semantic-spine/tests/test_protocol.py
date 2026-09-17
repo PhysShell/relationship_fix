@@ -76,3 +76,53 @@ class FrozenSurface(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BlindBarrier(unittest.TestCase):
+    """Порядок Phase 3 обязан быть соблюдаем, а не только описан.
+
+    Правило: сначала чинится рендеринг, потом замораживается код v2, и ТОЛЬКО
+    ПОТОМ раскрываются held-out задачи. Если задачи появятся раньше, записанное
+    предсказание (0.54 -> 0.85-0.95) перестанет быть prospective.
+
+    Часть порядка стережёт surface_digest: новый файл задачи двигает дайджест.
+    Часть — снимки: починка рендеринга двигает числа. Здесь — оставшееся:
+    план обязан существовать ДО того, как кто-то откроет v2.
+    """
+
+    def setUp(self) -> None:
+        self.protocol = load()
+
+    def test_v2_plan_is_declared_before_v2_can_open(self) -> None:
+        plan = self.protocol.get("v2_plan")
+        self.assertIsNotNone(plan, "v2 cannot open without a declared plan")
+        self.assertEqual(plan["status"], "declared, not started")
+        self.assertEqual(len(plan["blind_barrier"]), 4)
+        self.assertIn("materialized_in", plan["blind_barrier"][0])
+
+    def test_held_out_tasks_are_not_revealed_while_v1_is_live(self) -> None:
+        tasks = sorted((SPINE_ROOT / "eval/tasks").glob("*.json"))
+        self.assertEqual(
+            len(tasks),
+            self.protocol["tasks"],
+            "the task set changed while protocol_version is 1; held-out tasks must not "
+            "appear before the v2 implementation change is frozen",
+        )
+
+    def test_the_negative_task_class_is_planned(self) -> None:
+        """Агенты обожают улучшать мир до состояния failing tests."""
+
+        classes = self.protocol["v2_plan"]["tasks"]["classes"]
+        self.assertTrue(
+            any("no change required" in c for c in classes),
+            "a benchmark with no 'no change required' class cannot measure restraint",
+        )
+
+    def test_conditions_and_the_primary_metric_are_pinned(self) -> None:
+        plan = self.protocol["v2_plan"]
+        self.assertEqual(sorted(plan["conditions"]) [:5], ["A", "B", "C", "D", "E"])
+        self.assertEqual(plan["primary_metric"], "resolved by hidden acceptance")
+        self.assertEqual(plan["causal_ladder"][-1], "hidden acceptance")
+
+    def test_run_order_is_randomized_not_blocked_by_strategy(self) -> None:
+        self.assertIn("randomized", self.protocol["v2_plan"]["run_order"]["rule"])

@@ -57,7 +57,7 @@ eval/protocol.json   версия протокола, точка замороз�
 eval/score.py        измерение отбора контекста (Phase 2, работает)
 eval/runner.py       граница агент-раннера (Phase 3, адаптер НЕ подключён)
 eval/results/        замороженные снимки, воспроизводятся побайтно
-tests/               91 тест, включая мутационный набор из 19 мутаций
+tests/               96 тестов, включая мутационный набор из 19 мутаций
 ```
 
 ## Формат spec: человек по-прежнему пишет документ
@@ -418,20 +418,104 @@ shallow checkout коммит недоступен и прогон падает 
 - **Phase 3 — не сделано.** Held-out задачи (не от автора harness'а), скрытые
   acceptance-тесты, `AgentAdapter`, изолированный workdir.
 
-Условия Phase 3, все с одинаковыми инструментами агента:
+### Blind barrier: порядок, без которого предсказание ничего не стоит
 
-    A  raw repo
-    B  BM25 / dense initial context
-    C  symbol / dependency retrieval
-    D  semantic spine
-    E  oracle-sections
+Момент починки и момент раскрытия задач обязаны быть развязаны:
 
-Измеряется уже не retrieval: `resolved`, скрытые тесты, edit precision,
-unrelated edits, tool calls, input/output tokens, время, first-useful-file
-latency. Два режима — context-only и full agentic tools: вполне возможно, что
-spine резко помогает слабому one-shot агенту и почти ничего не даёт хорошему
-агенту с grep/read. **Отрицательный результат здесь тоже результат**, и его
-надо опубликовать так же громко.
+    v1 frozen
+       ↓
+    зафиксировать implementation change: materialized_in → label-level rendering
+       ↓
+    заморозить код selector'а v2
+       ↓
+    ТОЛЬКО ПОСЛЕ ЭТОГО раскрыть held-out задачи
+       ↓
+    прогнать A/B/C/D/E
+
+Иначе записанное предсказание (target recall 0.54 → 0.85–0.95 при неизменном
+file recall) перестаёт быть prospective и превращается в «мы починили семь
+известных промахов, и, невероятно, семь промахов исчезли».
+
+Часть порядка стережётся машинно: новый файл задачи двигает `surface_digest`,
+починка рендеринга двигает снимки. Остальное — в `eval/protocol.json` →
+`v2_plan` и в `tests/test_protocol.py::BlindBarrier`.
+
+**Curator / runner split.** Curator берёт исторический PR и производит
+`base_commit`, промпт, скрытый acceptance, список запрещённых утечек и ожидаемый
+поведенческий исход. Runner видит только `base_commit`, промпт и контекст своего
+условия. Oracle-цели и приехавший патч агенту не показываются; acceptance
+распечатывается и считается после прогонов. Идеально, если задачи отбирает
+сессия или человек, не видевший реализацию v2.
+
+### Задачи Phase 3
+
+12–20 исторических, не 8. Источник — реальные изменения самого
+relationship_fix: коммит до фикса → описание PR как промпт → приехавший
+патч/тесты как скрытый acceptance. Классы:
+
+    ontology/protocol drift
+    implementation bug
+    cross-file contract change
+    test/evidence mismatch
+    deployment/config bug
+    negative task: no change required
+
+Последний класс обязателен. Semantic graph может быть великолепен в поиске
+того, что надо менять, и совершенно ужасен в понимании, что менять ничего не
+надо. А агенты обожают улучшать мир до состояния failing tests.
+
+### Условия и порядок прогона
+
+    A  raw repo + обычные agent tools
+    B  BM25 / dense initial context + те же tools
+    C  symbol / dependency retrieval + те же tools
+    D  semantic spine + те же tools
+    E  oracle-sections + те же tools
+
+Два режима: context-only и full agentic tools.
+
+Условия идут **перемешанно по задачам**, а не блоками («сначала все A, потом все
+D»): при внешнем LLM API модель и serving дрейфуют даже при одинаковом model ID,
+и блочный порядок скоррелирует дрейф со стратегией.
+
+    task 1: D B A E C
+    task 2: C A E D B
+
+Зафиксированы: model snapshot/id, temperature, tool contract, budget, max turns.
+
+### Метрики
+
+Основная — **resolved by hidden acceptance**. Retrieval-метрики с этого момента
+вторичны. Смотреть надо цепочку:
+
+    target recall → first useful file latency → correct localization
+                  → correct edit → hidden acceptance
+
+Три исхода, и все три публикуются одинаково громко:
+
+| исход | что это значит |
+|---|---|
+| retrieval spine >> BM25, но `resolved D ≈ resolved B` | spine хорошо находит контекст, а агент и без неё компенсирует через tools |
+| разница в retrieval умеренная, `resolved D >> B` | структурированный контекст помогает **рассуждению** — самый интересный исход для исходной гипотезы |
+| full agentic: всё одинаково; context-only: spine сильно лучше | spine полезна как компрессор стартового контекста для ограниченных агентов, а сильный search-capable агент сам восстанавливает структуру репозитория |
+
+## Методологический урок этой сессии
+
+Он оказался не «проверено локально ≠ проверено», а точнее и полезнее:
+
+    local green  = evidence в одном окружении
+    CI green     = evidence во втором ОБЪЯВЛЕННОМ окружении
+    reproducible = возможность независимо восстановить объявленное окружение
+                   и получить тот же результат
+
+CI здесь не оракул. Это просто вторая машина, которая удачно оказалась
+достаточно другой, чтобы обнаружить зависимость от float-семантики. Люди
+потратили десятилетия на distributed systems, чтобы выяснить, что 0.8333 — тоже
+распределённая проблема.
+
+Поэтому pin Python 3.11 в CI выполняет именно вторую функцию: он **описывает
+окружение**, а не подпирает корректность. Корректность обеспечивает точная
+арифметика, которая от версии не зависит вовсе.
 
 Смена authoritative источника онтологии **не обсуждается** до тех пор, пока
 Phase 3 не даст числа. Пока их нет, это папка `experiments/`, которая честно
