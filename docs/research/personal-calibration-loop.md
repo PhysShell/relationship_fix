@@ -227,7 +227,7 @@ OBSERVED CHAT
 
 | | |
 |---|---|
-| **MAIN** | [Reactivity Experiment Preregistration v0](reactivity-experiment-prereg.md) → power |
+| **MAIN** | [Reactivity Experiment Preregistration v0](reactivity-experiment-prereg.md) → [power design](reactivity-power-design.md) → variance pilot |
 | FROZEN | Personal Calibration Loop v0 (`cdd6dac`, этот документ) и [Feedback Acquisition Policy v0](feedback-acquisition-policy.md) (`093543c`) |
 | BACKGROUND | **P-1** — `BLOCKED_EXTERNAL_DATA`, ждёт транскриптов от Yin et al. Архитектурных ожиданий от него нет |
 | BACKGROUND | **P-2a** — external replication на Lend an Ear / EPITOME. Можно прогонять, Calibration Loop не задерживает |

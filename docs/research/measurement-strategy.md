@@ -169,7 +169,7 @@ Does Pilot B still answer a unique unanswered question?
 
 | | |
 |---|---|
-| **MAIN** | [reactivity-experiment-prereg.md](reactivity-experiment-prereg.md) → power → minimal product surface → A/B/C |
+| **MAIN** | [reactivity-experiment-prereg.md](reactivity-experiment-prereg.md) → [power design](reactivity-power-design.md) → variance pilot → minimal product surface → A/B/C |
 | FROZEN | Personal Calibration Loop v0 (`cdd6dac`), Feedback Acquisition Policy v0 (`093543c`) |
 | PARKED | TRACK 1, corpus archaeology, дальнейшая синтетика |
 
