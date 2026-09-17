@@ -227,9 +227,10 @@ OBSERVED CHAT
 
 | | |
 |---|---|
-| **MAIN** | Personal Calibration Loop v0 — этот документ + [Feedback Acquisition Policy v0](feedback-acquisition-policy.md) |
+| **MAIN** | [Reactivity Experiment Preregistration v0](reactivity-experiment-prereg.md) → power |
+| FROZEN | Personal Calibration Loop v0 (`cdd6dac`, этот документ) и [Feedback Acquisition Policy v0](feedback-acquisition-policy.md) (`093543c`) |
 | BACKGROUND | **P-1** — `BLOCKED_EXTERNAL_DATA`, ждёт транскриптов от Yin et al. Архитектурных ожиданий от него нет |
 | BACKGROUND | **P-2a** — external replication на Lend an Ear / EPITOME. Можно прогонять, Calibration Loop не задерживает |
 | BLOCKED | **P-2b** — заблокирован отсутствием recipient-данных |
 | FROZEN | Pilot A (12/12, не открыт), Pilot B (11/11, не запущен) |
-| PARKED | TRACK 1, corpus archaeology |
+| PARKED | TRACK 1, corpus archaeology; синтетика по acquisition |
