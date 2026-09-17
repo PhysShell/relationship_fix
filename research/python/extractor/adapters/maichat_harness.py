@@ -16,9 +16,10 @@ import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..estimands import CheckStatus, burden_fits_window
 from ..extract import extract, production_export
 from ..model import HORIZONS_HOURS, Mode
-from .maichat import AdapterProvenance, adapt_file
+from .maichat import SEMANTICS, AdapterProvenance, adapt_file
 
 #: The product's grid, from reactivity-power-design §6.2.
 PRODUCT_HORIZONS = HORIZONS_HOURS
@@ -86,7 +87,17 @@ def check_conversation(path: Path, horizons: tuple[float, ...], violations: Viol
             violations.check(rate is None or 0.0 <= rate <= 1.0,
                              f"{tag}: reply rate outside [0,1]")
 
-        # 4. input order cannot matter, and the run reproduces
+        # 4. structural: capped opportunity intervals are disjoint and clipped
+        #    inside the period, so their sum cannot outgrow the window. MaiChat
+        #    qualifies for the check because its ordering is total and evidenced.
+        fits = burden_fits_window(result.aggregate,
+                                  time_axis_total=SEMANTICS.usable_as_topology_oracle)
+        violations.check(fits.status is CheckStatus.CHECKED,
+                         f"{tag}: structural invariant skipped on a source that should support it")
+        for entry in fits.violations:
+            violations.check(False, f"{tag}: {entry}")
+
+        # 5. input order cannot matter, and the run reproduces
         payload = production_export(result.aggregate)
         shuffled = list(messages)
         random.Random(1234).shuffle(shuffled)

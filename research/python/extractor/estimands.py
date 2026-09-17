@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
+from enum import Enum
 
 from .model import HorizonAggregate, PeriodAggregate
 
@@ -149,3 +150,132 @@ def mean_incidence(aggregates, horizon_hours: float) -> Estimate:
     if not rows:
         return Estimate(value=None, **frame)
     return Estimate(value=statistics.fmean(c.opportunities_eligible for c in rows), **frame)
+
+
+# --------------------------------------------------------------------------
+# Arm-level algebra: which decomposition is exact, and which one is a story
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class BurdenDecomposition:
+    """`mean_burden = mean_incidence × opportunity_weighted_rmtr`, exactly.
+
+    Per cell, `B_i = N_i × R_i`. After averaging over an arm that identity does
+    NOT survive elementwise, because
+
+        E[N R] = E[N] E[R] + Cov(N, R)
+
+    so `mean(B) != mean(N) × mean(R_person)` whenever incidence and duration are
+    associated. Measured on MaiChat, among ACTIVE cells, `Cov(N, R)` runs from
+    −28% of the mean burden at H = 1 min to −202% at H = 12 h: person-periods
+    with many opportunities carry short conditional durations. The naive product
+    overstates the mean burden by a factor of three at the product grid. That is
+    not a rounding difference, it is a third thing the treatment can move.
+
+    The ratio-of-sums weighting has no such term, because the M cancels:
+
+        Σ B / M  =  (Σ N / M) × (Σ B / Σ N)
+
+    which gives `opportunity_weighted_rmtr` its own job and stops it looking
+    like a duplicate of the inferential estimand. The two are NOT
+    interchangeable and must not be merged:
+
+        person_period_weighted_rmtr — inferential; one vote per person-period,
+                                      matching the unit of randomisation
+        opportunity_weighted_rmtr   — algebraic; the exact duration factor of
+                                      the frequency × duration decomposition
+    """
+
+    mean_burden: float | None
+    mean_incidence: float | None
+    opportunity_weighted_rmtr: float | None
+    person_periods: int
+    zero_incidence: int
+    #: `mean_incidence × opportunity_weighted_rmtr − mean_burden`; None when the
+    #: identity is degenerate (no opportunities at all, so the factor does not
+    #: exist). Never rebuild the burden from the factors: see
+    #: `HorizonAggregate.reentry_burden_seconds` on the 1-ulp round trip.
+    residual: float | None
+
+    @property
+    def holds_exactly(self) -> bool | None:
+        """True / False / None — None meaning the identity was not testable."""
+        if self.residual is None:
+            return None
+        return self.residual == 0.0
+
+
+def burden_decomposition(aggregates, horizon_hours: float) -> BurdenDecomposition:
+    """The exact frequency × duration split of the unconditional burden."""
+    burden = mean_burden(aggregates, horizon_hours)          # raises on mixed windows
+    incidence = mean_incidence(aggregates, horizon_hours)
+    duration = opportunity_weighted_rmtr(aggregates, horizon_hours)
+    residual = None
+    if None not in (burden.value, incidence.value, duration.value):
+        residual = incidence.value * duration.value - burden.value
+    return BurdenDecomposition(
+        mean_burden=burden.value,
+        mean_incidence=incidence.value,
+        opportunity_weighted_rmtr=duration.value,
+        person_periods=burden.person_periods,
+        zero_incidence=burden.zero_incidence,
+        residual=residual,
+    )
+
+
+# --------------------------------------------------------------------------
+# Structural invariant
+# --------------------------------------------------------------------------
+
+class CheckStatus(Enum):
+    CHECKED = "checked"
+    #: The source's time axis does not support the check. NOT a pass: a coarse
+    #: or partial clock cannot certify that intervals do not overlap, and
+    #: pretending otherwise is how absence turns into evidence.
+    NOT_APPLICABLE = "not_applicable"
+
+
+@dataclass(frozen=True, slots=True)
+class StructuralCheck:
+    status: CheckStatus
+    violations: tuple[str, ...]
+
+    @property
+    def passed(self) -> bool | None:
+        if self.status is CheckStatus.NOT_APPLICABLE:
+            return None
+        return not self.violations
+
+
+def burden_fits_window(aggregate: PeriodAggregate, *, time_axis_total: bool) -> StructuralCheck:
+    """`0 <= B_H <= observation_window_seconds`, for every horizon.
+
+    Structural, not statistical. Opportunities are disjoint by construction —
+    the next one cannot open until the participant has answered the last — each
+    contributes at most `H`, and every eligible one is clipped inside the
+    period. So the capped intervals tile a subset of the window and their sum
+    cannot exceed it.
+
+    A failure therefore means one of: overlapping opportunities, double
+    counting, clipping applied at the wrong boundary, or a time source that
+    broke an assumption the extractor made about it. All four are worth a human.
+
+    Gated on `time_axis_total` (a source whose ordering is total and evidenced —
+    `SourceSemantics.usable_as_topology_oracle`). Under a coarse or partial
+    clock an ambiguous tie can manufacture an overlapping opportunity, and the
+    invariant would then accuse the extractor of a fault belonging to the
+    timestamps. There the honest answer is NOT_APPLICABLE.
+    """
+    if not time_axis_total:
+        return StructuralCheck(status=CheckStatus.NOT_APPLICABLE, violations=())
+    window = aggregate.observation_window_seconds
+    violations = []
+    for cell in aggregate.horizons:
+        burden = cell.reentry_burden_seconds
+        if burden < 0:
+            violations.append(f"H={cell.horizon_hours}: negative burden {burden}")
+        elif burden > window:
+            violations.append(
+                f"H={cell.horizon_hours}: burden {burden} exceeds observation window {window}"
+            )
+    return StructuralCheck(status=CheckStatus.CHECKED, violations=tuple(violations))

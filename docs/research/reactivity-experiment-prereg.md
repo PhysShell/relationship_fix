@@ -160,7 +160,17 @@ decomposition:     opportunities_eligible — incidence component
 
 **`N = 0`.** Burden определён (`= 0`), RMTR — нет, и `0` подставлять запрещено: он означал бы мгновенный возврат вместо «эпизод не возник». Следствие для анализа: `mean(R | N > 0)` обусловливается дважды, потому что воздействие может менять `P(N = 0)`. Доля person-periods с `N = 0` по каждому `H` — обязательный вывод variance pilot и обязательная строка в отчёте эксперимента.
 
-**Вес RMTR объявляется заранее.** `Σ B_i / Σ N_i` (opportunity-weighted) и `mean_i(B_i / N_i)` (person-period-weighted) — разные estimand'ы; на MaiChat они расходятся в 1.24–4.83 раза. Primary — **person-period-weighted**: единица рандомизации — человек, а не возможность. Opportunity-weighted допускается как descriptive и помечается именем.
+**Вес RMTR объявляется заранее, и у двух весов разные работы.** `Σ B_i / Σ N_i` (opportunity-weighted) и `mean_i(B_i / N_i)` (person-period-weighted) — разные estimand'ы; на MaiChat они расходятся в 1.24–4.83 раза.
+
+```
+person_period_weighted_rmtr   inferential estimand, primary
+                              единица веса = person-period = единица рандомизации
+
+opportunity_weighted_rmtr     algebraic companion, не primary
+                              mean_burden = mean_opportunities × opportunity_weighted_rmtr
+```
+
+Второй нужен потому, что **после усреднения `B = N × R` перестаёт быть декомпозицией**: `E[NR] = E[N]E[R] + Cov(N,R)`, и на MaiChat этот член достигает −202% от среднего burden. Точно декомпозируют mean burden именно `N̄` и **opportunity-weighted** `R`; person-period-weighted `R` отвечает на отдельный participant-level conditional estimand. В выводах эти две роли не смешиваются и ни одна из величин не удаляется как «дубликат».
 
 Детали и замеры — `reactivity-power-design.md` §1.6.
 
@@ -394,3 +404,4 @@ A/B/C randomized study
 | 2026-09-17 | Добавлен §3.2 — граница устройства и агрегатная выгрузка | §3.1 ограничивал **анализ**, но не то, что уезжает на сервер. Построчная выгрузка производных записей всё ещё восстанавливает временную структуру жизни незачисленного партнёра |
 | 2026-09-17 | §3.2: `opportunities_eligible` стал per-`H` | Календарное цензурирование делает набор eligible разным для 6h/12h/24h у границы периода; общий знаменатель ломал бы `RMTR_24h` |
 | 2026-09-17 | §4.2: тройка re-entry объявлена одной estimand family с декомпозицией; граница `N = 0`; вес RMTR зафиксирован как person-period-weighted | `B = N × R` — три величины на две степени свободы, три независимых primary тестировали бы одну и ту же информацию трижды. `R` физически отсутствует при `N = 0`, а воздействие может менять `P(N = 0)`. И два веса RMTR расходятся на MaiChat в 1.24–4.83 раза — это выбор estimand'а, а не форматирование |
+| 2026-09-17 | §4.2: роли двух RMTR разделены — person-period-weighted как inferential primary, opportunity-weighted как algebraic companion точной декомпозиции `mean_burden = N̄ × R_opp` | После усреднения `B = N × R` не декомпозиция: `Cov(N, R)` на MaiChat доходит до −202% от среднего burden, и наивное `N̄ × R̄_person` завышает его втрое. Без записанных ролей два похожих RMTR выглядят как дубликат и будут слиты рефакторингом |

@@ -227,7 +227,13 @@ class HorizonAggregate:
         Burden calls those identical while the process differs completely. The
         triple is what reads: `opportunities_eligible` (incidence),
         `rmtr_seconds` (conditional duration), `reentry_burden_seconds`
-        (unconditional period total). The first two explain the third.
+        (unconditional period total).
+
+        "The first two explain the third" is true PER CELL and false per arm:
+        averaging introduces Cov(N, R). Incidence and the OPPORTUNITY-weighted
+        RMTR decompose the mean burden exactly; the person-period-weighted RMTR
+        answers a separate participant-level question. See
+        `extractor.estimands.burden_decomposition`.
 
         REQUIRES a common fixed window across persons and arms — see
         docs/research/reactivity-power-design.md §1.6. A burden summed over

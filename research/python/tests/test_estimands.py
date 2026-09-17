@@ -142,5 +142,81 @@ class IdentityDirectionTests(unittest.TestCase):
                                agg.reentry_burden_seconds, places=9)
 
 
+class ArmLevelDecompositionTests(unittest.TestCase):
+    """B = N x R survives averaging only under the ratio-of-sums weighting."""
+
+    def setUp(self):
+        # incidence and duration deliberately ANTI-correlated: the busy cell is
+        # fast, the quiet cell is slow. This is the MaiChat pattern.
+        self.sample = [cell(10, 10 * 60.0), cell(1, 3600.0, pid="p2")]
+
+    def test_incidence_times_opportunity_weighted_rmtr_is_the_mean_burden(self):
+        got = es.burden_decomposition(self.sample, H)
+        self.assertEqual(got.mean_incidence * got.opportunity_weighted_rmtr,
+                         got.mean_burden)
+        self.assertEqual(got.residual, 0.0)
+        self.assertTrue(got.holds_exactly)
+
+    def test_the_naive_product_with_the_person_weighted_rmtr_is_wrong(self):
+        """And wrong by a factor, not an epsilon — this is Cov(N, R)."""
+        naive = (es.mean_incidence(self.sample, H).value
+                 * es.person_period_weighted_rmtr(self.sample, H).value)
+        true_mean = es.mean_burden(self.sample, H).value
+        self.assertEqual(true_mean, 2100.0)
+        self.assertEqual(naive, 5.5 * 1830.0)          # 10065.0
+        self.assertGreater(naive / true_mean, 4.0)
+
+    def test_the_two_agree_only_when_incidence_and_duration_are_unassociated(self):
+        flat = [cell(2, 600.0), cell(2, 1200.0, pid="p2")]   # equal N, so Cov = 0
+        naive = (es.mean_incidence(flat, H).value
+                 * es.person_period_weighted_rmtr(flat, H).value)
+        self.assertEqual(naive, es.mean_burden(flat, H).value)
+
+    def test_the_identity_is_not_testable_without_a_single_opportunity(self):
+        """Three states, not two: the factor does not exist, so neither does a
+        verdict on the identity."""
+        empty = [cell(0, 0.0), cell(0, 0.0, pid="p2")]
+        got = es.burden_decomposition(empty, H)
+        self.assertIsNone(got.residual)
+        self.assertIsNone(got.holds_exactly)
+        self.assertEqual(got.mean_burden, 0.0)
+
+    def test_decomposition_inherits_the_common_window_refusal(self):
+        mixed = [cell(1, 600.0), cell(1, 600.0, window=48 * HOUR, pid="p2")]
+        with self.assertRaises(es.WindowMismatch):
+            es.burden_decomposition(mixed, H)
+
+
+class StructuralInvariantTests(unittest.TestCase):
+    """0 <= B_H <= observation window, because capped opportunity intervals are
+    disjoint and clipped inside the period."""
+
+    def test_a_lawful_aggregate_passes(self):
+        got = es.burden_fits_window(cell(3, 3 * HOUR), time_axis_total=True)
+        self.assertIs(got.status, es.CheckStatus.CHECKED)
+        self.assertTrue(got.passed)
+
+    def test_a_burden_larger_than_the_window_is_caught(self):
+        """Only reachable through overlapping opportunities, double counting or
+        a clock that lied — all four causes want a human."""
+        got = es.burden_fits_window(cell(30, 30 * HOUR), time_axis_total=True)
+        self.assertFalse(got.passed)
+        self.assertIn("exceeds observation window", got.violations[0])
+
+    def test_a_negative_burden_is_caught_separately(self):
+        got = es.burden_fits_window(cell(1, -1.0), time_axis_total=True)
+        self.assertFalse(got.passed)
+        self.assertIn("negative burden", got.violations[0])
+
+    def test_a_coarse_time_axis_returns_not_applicable_and_not_a_pass(self):
+        """Silence must not read as a green tick: under a partial order an
+        ambiguous tie can manufacture the overlap the invariant looks for, and
+        the fault would belong to the timestamps, not the extractor."""
+        got = es.burden_fits_window(cell(30, 30 * HOUR), time_axis_total=False)
+        self.assertIs(got.status, es.CheckStatus.NOT_APPLICABLE)
+        self.assertIsNone(got.passed)
+        self.assertEqual(got.violations, ())
+
+
 if __name__ == "__main__":
     unittest.main()
