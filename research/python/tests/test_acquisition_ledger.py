@@ -161,12 +161,45 @@ class TelegramVerdictTests(unittest.TestCase):
         self.assertIs(entry.status, Status.UNAVAILABLE)
         self.assertIn("не сообщает об удалениях", entry.adapter_behavior)
 
-    def test_the_unresolved_assumptions_are_exactly_the_four_open_ones(self):
-        self.assertEqual(
-            {a.key for a in tg.LEDGER.unresolved_assumptions()},
-            {"ties_resolvable", "stream_order_is_chronological",
-             "duplicates_can_occur", "input_is_valid_json"},
-        )
+    def test_only_one_assumption_is_still_open(self):
+        """The history-fetch pass closed three. What is left is a single
+        empirical question, not a research programme."""
+        self.assertEqual({a.key for a in tg.LEDGER.unresolved_assumptions()},
+                         {"ties_resolvable"})
+
+    def test_the_export_order_is_ascending_id_not_chronology(self):
+        """Traced through the source: the server returns descending id,
+        ParseMessagesSlice walks the vector backwards, the cursor advances by
+        the largest id. So position means id order — and calling that
+        chronology is the claim that is NOT established."""
+        entry = tg.LEDGER.property("ordering.exported_position")
+        self.assertIs(entry.status, Status.QUALIFIED)
+        self.assertIn("Возрастающий `id`", entry.claim)
+        self.assertIs(entry.claim_scope, ClaimScope.ARTIFACT)
+
+    def test_the_tie_question_reduced_to_one_root_question(self):
+        entry = tg.LEDGER.property("ordering.tie_semantics")
+        self.assertIs(entry.status, Status.UNKNOWN)
+        self.assertIn("монотонен ли `id` по времени", entry.claim)
+
+    def test_the_export_path_cannot_emit_duplicate_ids(self):
+        entry = tg.LEDGER.property("ordering.multi_device")
+        self.assertIs(entry.status, Status.QUALIFIED)
+        self.assertIn("НОЛЬ раз", entry.adapter_behavior)
+
+    def test_a_numeric_id_must_not_be_passed_as_a_bare_decimal_string(self):
+        """`sort_key = (timestamp, message_id)` compares strings, where
+        "10" < "9". With numeric Telegram ids that turns tie resolution into
+        lexicographic noise."""
+        entry = tg.LEDGER.property("identity.message_id")
+        self.assertIn("«10» < «9»", entry.adapter_behavior)
+
+    def test_the_range_bugs_have_a_mechanism_not_just_reports(self):
+        entry = tg.LEDGER.property("coverage.requested_range_honored")
+        joined = " ".join(entry.primary_evidence)
+        for issue in ("5854", "27183", "30412", "31082"):
+            self.assertIn(issue, joined)
+        self.assertIn("Диапазон в запрос НЕ входит", joined)
 
     def test_every_open_question_names_the_observation_that_would_close_it(self):
         for entry in tg.LEDGER.properties:

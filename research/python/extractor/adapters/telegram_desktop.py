@@ -32,11 +32,18 @@ WRITER = "telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export
 SETTINGS = "telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_settings.h"
 OFFSETS = "core.telegram.org/api/offsets"
 BLOG = "telegram.org/blog/export-and-more"
+APIWRAP = "telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_api_wrap.cpp"
+TYPES = "telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/data/export_data_types.cpp"
 #: Verified defect corpus — each opened and read, not taken from a summary.
 I_EDITED = "tdesktop#30647 (2026-05-03, v6.7.8, result.json attached)"
 I_RANGE = "tdesktop#5854 (2019-03-27, v1.6.2, closed) — «ALL the messages are exported»"
 I_LASTDAY = "tdesktop#27183 (2023-12-03, v4.12.2, closed as NOT PLANNED) — последний выбранный день отсутствует"
 I_CAP = "tdesktop#31328 (2026-09-16, v7.2.8, OPEN) — ровно 10000 сообщений, JSON и HTML"
+I_RANGE66 = ("tdesktop#30412 (2026-03-07, v6.6.2, closed as duplicate) — "
+             "«It exports whole channels messages from oldest message»")
+I_RANGE70 = ("tdesktop#31082 (2026-07-30, v7.0.6, closed as duplicate) — "
+             "«The exported JSON file contains messages from the entire history, "
+             "including messages sent before the selected start date»")
 
 
 def _p(**kw) -> Property:
@@ -102,10 +109,15 @@ COVERAGE = (
         claim="Не надёжно. Подтверждены отказы обоих краёв в разных версиях.",
         status=Status.UNAVAILABLE,
         claim_scope=ClaimScope.ARTIFACT,
-        primary_evidence=(I_RANGE, I_LASTDAY),
-        observed_limitations=("#5854 закрыт, #27183 закрыт как not planned — то есть "
-                              "не «починено», а «не будет»",
-                              "поведение версионно и наблюдалось с 1.6.2 по 4.12.2"),
+        primary_evidence=(I_RANGE, I_LASTDAY, I_RANGE66, I_RANGE70,
+                          f"{APIWRAP}:2282-2290 — механизм: `MTPmessages_GetHistory` уходит с "
+                          "`offset_date = 0`, а в ветке `messages.Search` `min_date`/`max_date` "
+                          "передаются как `MTP_int(0)`. Диапазон в запрос НЕ входит вообще — "
+                          "он применяется на клиенте позже, и именно поэтому ломается"),
+        observed_limitations=("#5854 закрыт, #27183 закрыт как not planned, #30412 и #31082 "
+                              "закрыты как duplicate — то есть класс признан, а не опровергнут",
+                              "наблюдалось на 1.6.2 (2019), 4.12.2 (2023), 6.6.2 и 7.0.6 (2026) — "
+                              "семь лет одного и того же симптома"),
         downstream_consequence="UI-диапазон не является утверждением о покрытии — ни слева "
                                "(могут прийти все сообщения), ни справа (может пропасть "
                                "последний день). Окно `reentry_burden_H` берётся ТОЛЬКО из "
@@ -137,11 +149,17 @@ COVERAGE = (
         claim="Не установлено; гарантии в документации нет.",
         status=Status.UNKNOWN,
         claim_scope=ClaimScope.ARTIFACT,
-        primary_evidence=(f"{WRITER} — сериализация ручная, через конкатенацию байтовых блоков, "
-                          "а не через JSON-библиотеку",),
-        observed_limitations=("ручной сериализатор — это класс, в котором ошибки квотирования "
-                              "и дублирующиеся ключи возможны в принципе",),
-        downstream_consequence="",
+        primary_evidence=(f"{WRITER} — вывод строится в значительной части вручную "
+                          "(`SerializeString`/`SerializeObject`/`SerializeArray`, склейка "
+                          "байтовых блоков), а не исключительно структурным JSON-builder'ом",
+                          f"{WRITER}:2793 — Qt-классы JSON в файле есть, но `QJsonDocument::"
+                          "fromJson` стоит на пути ЧТЕНИЯ стороннего файла в `other_data`, "
+                          "а не на пути записи сообщений"),
+        observed_limitations=("ручная часть — это класс, в котором ошибки квотирования и "
+                              "дублирующиеся ключи возможны в принципе",
+                              "существование валидных файлов ничего не гарантирует о формате"),
+        downstream_consequence="Гарантия валидности не нужна: допущение снято поведением, "
+                               "а не доказательством.",
         adapter_behavior="Строгий разбор; отказ разбора = отказ acquisition, без починки "
                           "«почти JSON» на лету.",
         fixture_needed="Строгий разбор всех публичных result.json из багрепортов.",
@@ -179,41 +197,70 @@ ORDERING = (
     ),
     _p(
         key="ordering.exported_position",
-        question="Хронологичен ли порядок элементов массива?",
-        claim="Не установлено.",
-        status=Status.UNKNOWN,
+        question="Какой порядок у элементов массива `messages`?",
+        claim="Возрастающий `id`. Не «хронологический» — именно id, и это установлено кодом, "
+              "а не наблюдением.",
+        status=Status.QUALIFIED,
         claim_scope=ClaimScope.ARTIFACT,
-        primary_evidence=(f"{BLOG} — о порядке не сказано ничего",),
-        observed_limitations=("порядок записи задаёт обход истории в клиенте, а не контракт",),
-        downstream_consequence="",
-        adapter_behavior="",
-        fixture_needed="Реальный экспорт: монотонность `date_unixtime` по позиции.",
+        primary_evidence=(
+            f"{APIWRAP}:2216-2218 — `requestChatMessages(split, largestIdPlusOne, "
+            "-kMessagesSliceLimit, kMessagesSliceLimit)`: `offset_id` = курсор, "
+            "`add_offset = -100`, `limit = 100` — постраничный обход ВПЕРЁД по id",
+            f"{TYPES}:3470-3473 — `ParseMessagesSlice` идёт по входному вектору С КОНЦА: "
+            "`for (auto i = list.size(); i != 0;) {{ list[--i] }}`, то есть разворачивает "
+            "убывающий ответ сервера в возрастающий",
+            f"{APIWRAP}:2806 — `largestIdPlusOne = slice.list.back().id + 1`: курсор берёт "
+            "ПОСЛЕДНИЙ элемент развёрнутого среза, что подтверждает возрастание",
+            f"{OFFSETS} — «typically ... descending object ID values» на стороне API"),
+        observed_limitations=("порядок по id равен хронологическому только если id монотонен "
+                              "по времени — а это отдельный вопрос, см. `ordering.tie_semantics`",),
+        downstream_consequence="`ordering = TOTAL`, и позиция — осмысленное свидетельство: "
+                               "она детерминирована и означает id-порядок. Но выдавать её за "
+                               "хронологию нельзя, пока не закрыт id↔время.",
+        adapter_behavior="`ordering_evidence` объявляется как id-порядок, а не как хронология; "
+                         "адаптер не пересортировывает файл молча.",
+        fixture_needed="Публичный `result.json`: монотонность `id` по позиции и доля пар, "
+                       "где `date_unixtime` убывает при возрастании `id`.",
     ),
     _p(
         key="ordering.tie_semantics",
         question="Что разрешает равенство секунд?",
-        claim="Не установлено.",
+        claim="Позиция в файле, то есть возрастающий `id`. Остаётся ровно один открытый "
+              "вопрос: монотонен ли `id` по времени.",
         status=Status.UNKNOWN,
         claim_scope=ClaimScope.ARTIFACT,
-        primary_evidence=(f"{OFFSETS} — «typically, results are returned in reverse "
-                          "chronological order with descending object ID values»; «typically» "
-                          "гарантией не является",),
-        observed_limitations=("порядок по id не объявлен эквивалентным хронологии",),
+        primary_evidence=(f"{TYPES}:3470-3473 и {APIWRAP}:2216 — внутри секунды порядок задаёт "
+                          "id, потому что весь файл задаёт id",
+                          f"{OFFSETS} — «typically» гарантией монотонности не является"),
+        observed_limitations=("два неизвестных схлопнулись в одно: вопрос о ties — это вопрос "
+                              "об id↔времени и ничего сверх",),
         downstream_consequence="",
         adapter_behavior="",
-        fixture_needed="Экспорт с известной реальной последовательностью внутри одной секунды.",
+        fixture_needed="Публичный `result.json`: есть ли пара, где `id` растёт, а "
+                       "`date_unixtime` падает. ОДИН такой случай закрывает вопрос отрицательно.",
     ),
     _p(
         key="ordering.multi_device",
         question="Могут ли в файле оказаться две копии одного сообщения?",
-        claim="Не установлено.",
-        status=Status.UNKNOWN,
+        claim="Этот путь экспорта дублей по `id` не производит: срезы не перекрываются, "
+              "а мигрированная история сдвинута в непересекающийся диапазон.",
+        status=Status.QUALIFIED,
         claim_scope=ClaimScope.ARTIFACT,
-        primary_evidence=(f"{WRITER} — писатель не содержит понятия «копия с другого устройства»",),
-        observed_limitations=("отсутствие поля не доказывает отсутствие дублей",),
-        downstream_consequence="",
-        adapter_behavior="",
-        fixture_needed="Реальный экспорт: повторяющиеся `id` внутри одного чата.",
+        primary_evidence=(
+            f"{APIWRAP}:2806 — курсор `largestIdPlusOne = back().id + 1` строго проходит "
+            "за уже взятый максимум, поэтому срезы дизъюнктны",
+            f"{TYPES}:3478-3486 + :30 — `AdjustMigrateMessageIds` прибавляет "
+            "`kMigratedMessagesIdShift = -1'000'000'000`, то есть уводит id мигрированной "
+            "истории в ОТРИЦАТЕЛЬНЫЙ диапазон — механизм существует именно затем, чтобы "
+            "склейка двух историй не сталкивалась по id"),
+        observed_limitations=("утверждение о пути экспорта, а не о мире: два РАЗНЫХ файла "
+                              "по-прежнему могут содержать один и тот же id",),
+        downstream_consequence="`DuplicateConflict` и `DeletionStateConflict` на этом пути "
+                               "входных данных не получают. Это не повод их удалять — они "
+                               "написаны под multi-device источники, которых здесь нет.",
+        adapter_behavior="Дедупликация остаётся включённой и обязана срабатывать НОЛЬ раз; "
+                         "ненулевой счётчик на этом источнике — сигнал, а не рутина.",
+        fixture_needed="Публичный `result.json`: повторяющиеся `id`; ожидается 0.",
     ),
 )
 
@@ -226,8 +273,13 @@ IDENTITY = (
         claim_scope=ClaimScope.ARTIFACT,
         primary_evidence=(f"{WRITER}:1545 — `{{ \"id\", NumberToString(message.id) }}`",),
         downstream_consequence="`message_identity = SOURCE_STABLE_ID`; дедупликация по id "
-                               "в принципе выразима.",
-        adapter_behavior="Никогда не синтезировать id и не использовать его как tie-break.",
+                               "в принципе выразима. И `id` здесь ЧИСЛО, включая отрицательные "
+                               "у мигрированной истории.",
+        adapter_behavior="Никогда не синтезировать id. И не передавать его голой десятичной "
+                         "строкой: `sort_key = (timestamp, message_id)` в `model.py` сравнивает "
+                         "строки, где «10» < «9». Адаптер обязан дать ключ с сохранением "
+                         "числового порядка (zero-pad со смещением под отрицательные) — иначе "
+                         "разрешение ties будет лексикографическим, то есть случайным.",
         fixture_needed="Реальный экспорт: уникальность id внутри чата.",
     ),
     _p(
@@ -426,7 +478,8 @@ ASSUMPTIONS = (
     Assumption("stable_identity", "dedup по message_id", "identity.message_id",
                "дедупликация невыразима"),
     Assumption("duplicates_can_occur", "DuplicateConflict", "ordering.multi_device",
-               "механизм конфликтов не получает входных данных"),
+               "механизм конфликтов не получает входных данных — и обязан оставаться "
+               "включённым, срабатывая ноль раз"),
     Assumption("deletion_observable", "DeletionStateConflict, deleted_dropped", "events.deleted",
                "контракт вырождается в current-state reconstruction, и это записано"),
     Assumption("actor_unambiguous", "verify_dyad_membership", "identity.actor",
@@ -441,7 +494,11 @@ ASSUMPTIONS = (
     Assumption("no_silent_gaps", "все агрегаты", "coverage.completeness",
                "пропуск в окне неотличим от молчания — и усечение выглядит как медленный ответ"),
     Assumption("input_is_valid_json", "любой будущий adapt_file", "format.strict_json",
-               "acquisition отказывает, а не чинит файл на лету"),
+               "acquisition отказывает, а не чинит файл на лету",
+               eliminated_by_refusal="Строгий разбор + `REFUSED` при ошибке: экстрактор "
+                                     "не допускает валидности, он её требует. Поэтому "
+                                     "`format.strict_json` может остаться UNKNOWN навсегда "
+                                     "и не блокировать заморозку."),
     Assumption("semantics_stable_across_versions", "весь этот ledger",
                "provenance.producer_version",
                "статусы применимы только к версии, которая их породила; версия собирается вне файла"),

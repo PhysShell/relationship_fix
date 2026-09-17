@@ -102,6 +102,12 @@ class Assumption:
     made_by: str
     supported_by: str          # Property.key
     if_unsupported: str        # what stops working, concretely
+    #: Set when the extractor stopped making the assumption at all, because the
+    #: adapter fails closed instead. Then the property behind it may stay
+    #: UNKNOWN forever without blocking a freeze: there is nothing left to be
+    #: wrong about. An unproved guarantee and an unneeded guarantee are not the
+    #: same state, and only the first one is a hole.
+    eliminated_by_refusal: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,12 +144,20 @@ class Ledger:
         format": for every assumption, either an observable property of the
         target supports it, or it is known why the feature refuses to work.
 
-        So `UNAVAILABLE` RESOLVES an assumption — "the source does not provide
-        it and here is what stops working" is an answer. `UNKNOWN` does not: it
-        is the state where the extractor keeps assuming and nobody has checked.
+        Three ways an assumption stops being a hole:
+
+        1. an observable property supports it (QUALIFIED, or PARTIAL with a
+           contract);
+        2. the source demonstrably does not provide it (UNAVAILABLE) and the
+           consequence is written down;
+        3. the extractor stopped making it — `eliminated_by_refusal`.
+
+        `UNKNOWN` alone is none of those: it is the state where the extractor
+        keeps assuming and nobody has checked.
         """
         return tuple(a for a in self.assumptions
-                     if self.property(a.supported_by).effective_status is Status.UNKNOWN)
+                     if not a.eliminated_by_refusal
+                     and self.property(a.supported_by).effective_status is Status.UNKNOWN)
 
     def summary(self) -> str:
         counts = {s: len(self.by_status(s)) for s in Status}
