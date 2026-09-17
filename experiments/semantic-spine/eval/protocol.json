@@ -1,0 +1,52 @@
+{
+  "schema_version": "rf.spine-protocol.v1",
+  "protocol_version": 1,
+  "status": "immutable",
+  "name": "selection protocol v1",
+  "harness_v0_commit": "88f6dfb87e089aa3dd14964fea1067ce362d69ec",
+  "frozen_at_commit": "2ef1e5c44c13e9efaa9d063d7ffdee08ae6e7931",
+  "note": "88f6dfb — development harness v0 (без anchor-level ground truth). 2ef1e5c — Phase-2.5 evaluation protocol freeze: якоря, pinned subject, BM25 и oracle-sections появились именно здесь, а не в v0. Позднейшие коммиты вправе менять CI, документацию и метаданные протокола, но не его поверхность: её стережёт surface_digest.",
+  "frozen_surface": [
+    "eval/tasks/*.json (prompts, seeds, oracle_files, oracle_targets, base_commit)",
+    "spec/*.md (граф: сущности и типизированные рёбра)",
+    "spine.selector.SPINE_RELATION_ORDER (порядок обхода)"
+  ],
+  "behaviour_frozen_by": "byte-identical snapshots in eval/results/ (node rendering, budget packing, strategy formulas)",
+  "subject_commits": {
+    "add-exchange-unit": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "confusable-drift": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "evidence-required-enforcement": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "golden-contract-label": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "label-registry-drift": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "naturalness-register-leak": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "ontology-version-bump": "c6cf909bd96759c3974f5427f72baaf29a749f09",
+    "pressure-missing-implementation": "c6cf909bd96759c3974f5427f72baaf29a749f09"
+  },
+  "tasks": 8,
+  "surface_digest": "a2a7e7eb7839b557c338fca186b4700d2206bcc17addbb9ea46bb4d75a9522ce",
+  "recorded_result": {
+    "budget_tokens": 8000,
+    "semantic-spine": {
+      "target_recall": 0.5417,
+      "file_recall": 0.8333
+    },
+    "oracle": {
+      "target_recall": 0.6354,
+      "file_recall": 0.625
+    },
+    "oracle-sections": {
+      "target_recall": 0.9688,
+      "file_recall": 0.9583
+    },
+    "bm25": {
+      "target_recall": 0.3021,
+      "file_recall": 0.3542
+    }
+  },
+  "properties": {
+    "spine_loses_to_whole_file_oracle_on_targets": "Инверсия: file recall 0.83 > 0.62, target recall 0.54 < 0.64. Свойство ИМЕННО v1. В v2 его архивируют вместе с протоколом, а не чинят до зелёного: постоянная запись — снимки eval/results/.",
+    "typed_edges_bind_only_while_the_budget_binds": "Верно при 4000-8000, ложно при 16000, где абляция -typed-edges догоняет spine.",
+    "rationale_does_not_improve_retrieval": "-rationale не хуже и дешевле. Влияние на ПОНИМАНИЕ не измерено."
+  },
+  "unfreezes_on": "held-out задачи, которых harness при проектировании не видел. Вместе с ними поднимается protocol_version до 2, чинится рендеринг materialized_in и проверяется записанное заранее предсказание (target recall 0.54 -> 0.85-0.95)."
+}

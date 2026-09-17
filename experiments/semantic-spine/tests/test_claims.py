@@ -19,6 +19,11 @@ from spine.targets import covers, locate_all
 
 from ._harness import REPO_ROOT, SPEC_DIR, SPINE_ROOT
 
+import sys
+
+sys.path.insert(0, str(SPINE_ROOT))
+from eval.protocol import version as protocol_version  # noqa: E402
+
 BUDGET = 8000
 
 
@@ -75,11 +80,24 @@ class ReadmeClaims(unittest.TestCase):
                 )
 
     def test_spine_loses_to_whole_file_oracle_on_targets(self) -> None:
-        """Заявленная инверсия: файл находит лучше, нужное место — хуже.
+        """Инверсия v1: файл находит лучше, нужное место — хуже.
 
-        Если это перестанет держаться, README врёт в обе стороны сразу:
-        и про честное поражение, и про причину file-level преимущества.
+        Свойство ИМЕННО протокола v1, а не вечная истина. В v2 рендеринг
+        `materialized_in` чинится легально, и тогда этот тест АРХИВИРУЕТСЯ
+        вместе с протоколом, а не правится до зелёного: иначе CI станет
+        требовать сохранять известный retrieval-баг на том основании, что
+        когда-то мы честно доказали его существование. Машины тоже умеют
+        цепляться за прошлое.
+
+        Постоянная запись отрицательного результата — побайтно замороженные
+        снимки в eval/results/ и eval/protocol.json, а не этот тест.
         """
+
+        if protocol_version() != 1:
+            self.skipTest(
+                "archived with selection protocol v1; the permanent record is "
+                "eval/results/selection-8000.json and eval/protocol.json"
+            )
 
         self.assertGreater(
             self.score["semantic-spine"]["file"], self.score["oracle"]["file"]

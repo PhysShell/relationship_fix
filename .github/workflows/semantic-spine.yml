@@ -54,7 +54,6 @@ jobs:
     env:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
-      SPINE_WORKTREE_DIR: ${{ runner.temp }}/spine-worktrees
     steps:
       # fetch-depth: 0 обязателен. Задачи объявляют base_commit, и harness
       # раскладывает его в отдельный git worktree. При shallow checkout коммит
@@ -64,6 +63,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Контекст `runner` недоступен в jobs.<job_id>.env — workflow с таким
+      # ключом падает мгновенно, не создав ни одного job'а. Поэтому переменная
+      # выставляется шагом: $GITHUB_ENV виден всем последующим шагам.
+      - name: Configure the worktree cache
+        run: echo "SPINE_WORKTREE_DIR=$RUNNER_TEMP/spine-worktrees" >> "$GITHUB_ENV"
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
