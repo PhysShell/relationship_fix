@@ -332,6 +332,8 @@ power & estimand design                       ← reactivity-power-design.md
               ↓
 SESOI + burden/retention gates                ← продуктовое решение, ДО пилота
               ↓
+extractor implementation + exact fixtures   ← research/python/extractor/
+              ↓
 instrumentation qualification (5–10 человек, в оценки не входят)
               ↓
 variance / feasibility pilot (без treatment, 2 недели, обе страты)
@@ -345,7 +347,7 @@ minimal real product surface
 A/B/C randomized study
 ```
 
-Документов больше не будет: следующий артефакт — не markdown, а первые 5–10 человек и ручная сверка того, что извлекает экстрактор.
+Документов больше не будет. Следующий артефакт — не markdown: сначала исполняемый локальный extractor (`research/python/extractor/`, reference-реализация и оракул для exact diff), затем первые 5–10 человек и ручная сверка того, что он извлекает. Qualification без работающего экстрактора проверяла бы воображаемую систему.
 
 | | |
 |---|---|
