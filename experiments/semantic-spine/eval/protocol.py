@@ -39,6 +39,16 @@ PHASES = (
     "v2_experiment_complete",
 )
 
+# Фазы протокола v2. Версия обязана быть 2 во всех — state machine должна быть
+# настоящей, а не набором отдельных веток.
+V2_PHASES = PHASES[1:]
+
+# Фазы ПОСЛЕ раскрытия задач. Проверки монотонны: то, что обязано выполняться
+# в v2_tasks_revealed, обязано выполняться и в v2_experiment_complete. Иначе
+# заморозка treatment исчезает ровно в момент завершения эксперимента — очень
+# милый способ уничтожить provenance уже после того, как потратили деньги.
+REVEALED_PHASES = ("v2_tasks_revealed", "v2_experiment_complete")
+
 # Treatment — всё, что превращает (spec + репозиторий) в ContextBundle.
 # Именно это в Phase 3 становится частью воздействия, а не измерения, поэтому
 # хешируется отдельно от surface_digest и преригистрируется ДО раскрытия задач.
@@ -76,8 +86,26 @@ def surface_digest(root: Path | None = None) -> str:
     return digest.hexdigest()
 
 
+def _digest_treatment(read) -> str:
+    """Общая раскладка байт для обоих способов чтения.
+
+    Дайджест рабочего дерева и дайджест git-дерева обязаны строиться одной
+    функцией: если раскладки разойдутся, сравнение перестанет что-либо значить,
+    а выглядеть будет так же убедительно.
+    """
+
+    digest = hashlib.sha256()
+    for relative in TREATMENT_FILES:
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        blob = read(relative)
+        digest.update(blob if blob is not None else b"<missing>")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def treatment_digest(root: Path | None = None) -> str:
-    """Дайджест кода воздействия.
+    """Дайджест кода воздействия в рабочем дереве.
 
     В v1 байт-равенство снимков прекрасно фиксирует НАБЛЮДАВШЕЕСЯ поведение.
     В v2 этого мало: измеряется поведение агента, и семантика реализации
@@ -87,15 +115,34 @@ def treatment_digest(root: Path | None = None) -> str:
     который внезапно меняет условие D.
     """
 
-    root = root or SPINE_ROOT
-    digest = hashlib.sha256()
-    for relative in TREATMENT_FILES:
-        path = root / relative
-        digest.update(relative.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(path.read_bytes() if path.is_file() else b"<missing>")
-        digest.update(b"\0")
-    return digest.hexdigest()
+    base = root or SPINE_ROOT
+
+    def read(relative: str) -> bytes | None:
+        path = base / relative
+        return path.read_bytes() if path.is_file() else None
+
+    return _digest_treatment(read)
+
+
+def treatment_digest_at(root: Path, commit: str) -> str | None:
+    """Дайджест кода воздействия В ДЕРЕВЕ указанного коммита.
+
+    Без этого `preregistered_at_commit` доказывает только «когда-то раньше
+    задач ещё не было», а не «вот этот treatment был заморожен раньше задач».
+    Хитрый монолит указывает на любой старый коммит, записывает хеш НОВОГО кода
+    и проходит все остальные проверки.
+    """
+
+    toplevel = _git(root, "rev-parse", "--show-toplevel")
+    if not toplevel:
+        return None
+    top = Path(toplevel).resolve()
+
+    def read(relative: str) -> bytes | None:
+        in_repo = (root / relative).resolve().relative_to(top)
+        return _git_bytes(top, "show", f"{commit}:{in_repo}")
+
+    return _digest_treatment(read)
 
 
 def phase(root: Path | None = None) -> str:
@@ -124,6 +171,25 @@ def _git(root: Path, *args: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def _git_bytes(root: Path, *args: str) -> bytes | None:
+    """Сырые байты объекта. None — объекта нет, и это НЕ то же, что пустой файл."""
+
+    import subprocess
+
+    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, timeout=30)
+    return result.stdout if result.returncode == 0 else None
+
+
+def _git_ok(root: Path, *args: str) -> bool:
+    """Успех по коду возврата. `_git` возвращает "" и при успехе без вывода."""
+
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, timeout=30
+    ).returncode == 0
+
+
 def transition_problems(root: Path | None = None) -> list[str]:
     """Проверки ступенчатого перехода v1 -> v2. Пустой список — всё законно.
 
@@ -139,17 +205,23 @@ def transition_problems(root: Path | None = None) -> list[str]:
     if current not in PHASES:
         return [f"unknown phase {current!r}; known: {', '.join(PHASES)}"]
 
+    declared_version = int(protocol["protocol_version"])
     tasks_on_disk = len(list((root / "eval" / "tasks").glob("*.json")))
     v1_tasks = protocol.get("v1_record", {}).get("tasks")
     if v1_tasks is None:
         problems.append("v1_record.tasks is missing; the historical record must survive v2")
 
     if current == "v1_closed":
-        if int(protocol["protocol_version"]) != 1:
+        if declared_version != 1:
             problems.append("phase is v1_closed but protocol_version is not 1")
         if v1_tasks is not None and tasks_on_disk != v1_tasks:
             problems.append(f"v1 task set changed: {tasks_on_disk} on disk, {v1_tasks} recorded")
         return problems
+
+    if current in V2_PHASES and declared_version != 2:
+        problems.append(f"phase is {current} but protocol_version is {declared_version}, not 2")
+
+    recorded = protocol.get("preregistered_treatment_digest")
 
     if current == "v2_implementation_frozen":
         if v1_tasks is not None and tasks_on_disk != v1_tasks:
@@ -157,13 +229,11 @@ def transition_problems(root: Path | None = None) -> list[str]:
                 "held-out tasks appeared before the treatment was preregistered "
                 f"({tasks_on_disk} on disk, {v1_tasks} at v1)"
             )
-        recorded = protocol.get("preregistered_treatment_digest")
         if recorded is not None and recorded != treatment_digest(root):
             problems.append("preregistered_treatment_digest does not match the treatment code")
         return problems
 
-    if current == "v2_tasks_revealed":
-        recorded = protocol.get("preregistered_treatment_digest")
+    if current in REVEALED_PHASES:
         if recorded is None:
             problems.append("tasks revealed without a preregistered treatment")
         elif recorded != treatment_digest(root):
@@ -175,29 +245,44 @@ def transition_problems(root: Path | None = None) -> list[str]:
         commit = protocol.get("preregistered_at_commit")
         if commit is None:
             problems.append("preregistration must name the commit that froze the treatment")
-        else:
-            head = _git(root, "rev-parse", "HEAD")
-            resolved = _git(root, "rev-parse", f"{commit}^{{commit}}")
-            if not resolved:
-                problems.append(f"preregistration commit {commit} is not in this clone")
-            elif resolved == head:
+            return problems
+
+        head = _git(root, "rev-parse", "HEAD")
+        resolved = _git(root, "rev-parse", f"{commit}^{{commit}}")
+        if not resolved:
+            problems.append(f"preregistration commit {commit} is not in this clone")
+            return problems
+        if resolved == head:
+            problems.append(
+                "preregistration cannot be the same commit that reveals the tasks: "
+                "a digest written by that commit matches by construction"
+            )
+        if not _git_ok(root, "merge-base", "--is-ancestor", resolved, head):
+            problems.append("the preregistration commit must be an ancestor of HEAD")
+            return problems
+
+        # Главное. Без этого preregistered_at_commit доказывает только «когда-то
+        # раньше задач ещё не было», а не «вот ЭТОТ treatment был тогда заморожен»:
+        # хитрый монолит указывает на любой старый коммит, пишет хеш нового кода
+        # и проходит всё остальное.
+        at_commit = treatment_digest_at(root, resolved)
+        if at_commit is None:
+            problems.append("cannot read the treatment tree at the preregistration commit")
+        elif recorded is not None and at_commit != recorded:
+            problems.append(
+                "treatment at the preregistration commit does not match the recorded digest; "
+                "the named commit froze a different treatment than the one being run"
+            )
+
+        toplevel = _git(root, "rev-parse", "--show-toplevel")
+        if toplevel:
+            relative = (root / "eval" / "tasks").resolve().relative_to(Path(toplevel).resolve())
+            listing = _git(Path(toplevel), "ls-tree", "--name-only", f"{resolved}:{relative}")
+            at_prereg = len([line for line in listing.split("\n") if line.endswith(".json")])
+            if v1_tasks is not None and at_prereg != v1_tasks:
                 problems.append(
-                    "preregistration cannot be the same commit that reveals the tasks: "
-                    "a digest written by that commit matches by construction"
+                    "the held-out tasks already existed at the preregistration commit; "
+                    "the treatment was frozen after seeing them"
                 )
-            else:
-                # Путь к каталогу задач вычисляется от корня репозитория, а не
-                # хардкодится: `git -C <подкаталог>` разрешает <rev>:<path>
-                # иначе, чем от корня, и хардкод молча давал пустой листинг.
-                toplevel = _git(root, "rev-parse", "--show-toplevel")
-                relative = (root / "eval" / "tasks").resolve().relative_to(Path(toplevel).resolve())
-                listing = _git(Path(toplevel), "ls-tree", "--name-only", f"{resolved}:{relative}")
-                at_prereg = len([line for line in listing.split("\n") if line.endswith(".json")])
-                if v1_tasks is not None and at_prereg != v1_tasks:
-                    problems.append(
-                        "the held-out tasks already existed at the preregistration commit; "
-                        "the treatment was frozen after seeing them"
-                    )
-        return problems
 
     return problems

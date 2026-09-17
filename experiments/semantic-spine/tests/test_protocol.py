@@ -21,6 +21,7 @@ from eval.protocol import (  # noqa: E402
     surface_digest,
     transition_problems,
     treatment_digest,
+    treatment_digest_at,
     version,
 )
 
@@ -178,21 +179,27 @@ class StagedTransition(unittest.TestCase):
         self.assertEqual(len(list((SPINE_ROOT / "eval/tasks").glob("*.json"))), 8)
 
     def test_the_v2_phase_machine_is_declared(self) -> None:
-        phases = load()["v2_plan"]["phases"]
-        self.assertEqual(sorted(phases), ["commit_A", "commit_B", "commit_C"])
-        self.assertIn("must_not_contain", phases["commit_A"])
-        self.assertIn("invariant", phases["commit_C"])
+        """Обязательна граница B/C. Отдельность A и B — нет: разделять «написали
+        код» и «записали его хеш» не добавляет независимости, пока и то и другое
+        скрыто от curator'а."""
+
+        plan = load()["v2_plan"]
+        phases = plan["phases"]
+        self.assertEqual(sorted(k for k in phases if k != "note"), ["A_and_B", "C"])
+        self.assertIn("must_not_contain", phases["A_and_B"])
+        self.assertIn("enforced_boundary", phases["C"])
+        self.assertGreaterEqual(len(plan["closed_bypasses"]), 5)
 
 
-class StagedTransitionIsSatisfiable(unittest.TestCase):
-    """Барьер обязан пропускать легальную последовательность.
+class TransitionBarrier(unittest.TestCase):
+    """Барьер проверяется попыткой построить неправильную историю.
 
-    Зеркало мутационного набора: там каждая мутация обязана быть поймана, здесь
-    правильный путь обязан пройти. Барьер, который блокирует всё, ошибается
-    просто в другую сторону.
+    Метод, который уже несколько раз спасал этот harness: не спрашивать «есть
+    ли проверка?», а попробовать пройти мимо неё. Каждая симуляция строит
+    настоящий git-репозиторий.
 
-    Симуляция строит настоящий git-репозиторий и проходит A -> B -> C, а затем
-    пробует «безобидный рефакторинг» после раскрытия задач.
+    Зеркало обязательно: барьер, который блокирует всё, ошибается просто в
+    другую сторону, поэтому легальный путь обязан проходить.
     """
 
     def _git(self, repo: Path, *args: str) -> str:
@@ -202,104 +209,160 @@ class StagedTransitionIsSatisfiable(unittest.TestCase):
             ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True, timeout=30
         ).stdout.strip()
 
-    def test_the_three_stage_path_passes_and_a_late_refactor_does_not(self) -> None:
+    def _fresh(self, tmp: str):
         import shutil
+
+        repo = Path(tmp) / "repo"
+        spine = repo / "experiments/semantic-spine"
+        spine.parent.mkdir(parents=True)
+        shutil.copytree(SPINE_ROOT, spine, ignore=shutil.ignore_patterns("__pycache__"))
+        self._git(repo.parent, "init", "--quiet", str(repo))
+        self._git(repo, "config", "user.email", "t@t")
+        self._git(repo, "config", "user.name", "t")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "--quiet", "-m", "v1")
+        return repo, spine
+
+    def _edit(self, spine: Path, **changes) -> None:
+        path = spine / "eval/protocol.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload.update(changes)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def _add_held_out_task(self, spine: Path) -> None:
+        task = json.loads((spine / "eval/tasks/confusable-drift.json").read_text(encoding="utf-8"))
+        task["task_id"] = "heldout-01"
+        (spine / "eval/tasks/heldout-01.json").write_text(
+            json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _touch_treatment(self, spine: Path, note: str) -> None:
+        target = spine / "spine/selector.py"
+        target.write_text(target.read_text(encoding="utf-8") + f"\n# {note}\n", encoding="utf-8")
+
+    def _commit(self, repo: Path, message: str) -> str:
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "--quiet", "-m", message)
+        return self._git(repo, "rev-parse", "HEAD")
+
+    def _walk_to_reveal(self, repo: Path, spine: Path) -> str:
+        """Легальный путь до раскрытия задач включительно."""
+
+        self._edit(spine, protocol_version=2, phase="v2_implementation_frozen")
+        self._touch_treatment(spine, "v2: materialized_in renders the label's own entry")
+        self._commit(repo, "A: implementation frozen")
+        self.assertEqual(transition_problems(spine), [], "stage A must pass")
+
+        self._edit(spine, preregistered_treatment_digest=treatment_digest(spine))
+        stage_b = self._commit(repo, "B: treatment preregistered")
+        self.assertEqual(transition_problems(spine), [], "stage B must pass")
+
+        self._add_held_out_task(spine)
+        self._edit(spine, phase="v2_tasks_revealed", preregistered_at_commit=stage_b)
+        self._commit(repo, "C: held-out tasks revealed")
+        return stage_b
+
+    def test_the_legitimate_path_passes(self) -> None:
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp) / "repo"
-            spine = repo / "experiments/semantic-spine"
-            spine.parent.mkdir(parents=True)
-            shutil.copytree(SPINE_ROOT, spine, ignore=shutil.ignore_patterns("__pycache__"))
-            repo.mkdir(exist_ok=True)
-            self._git(repo, "init", "--quiet")
-            self._git(repo, "config", "user.email", "t@t")
-            self._git(repo, "config", "user.name", "t")
-
-            protocol_file = spine / "eval/protocol.json"
-
-            def edit(**changes) -> None:
-                payload = json.loads(protocol_file.read_text(encoding="utf-8"))
-                payload.update(changes)
-                protocol_file.write_text(
-                    json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-                )
-
-            def commit(message: str) -> str:
-                self._git(repo, "add", "-A")
-                self._git(repo, "commit", "--quiet", "-m", message)
-                return self._git(repo, "rev-parse", "HEAD")
-
-            def touch_treatment(note: str) -> None:
-                target = spine / "spine/selector.py"
-                target.write_text(target.read_text(encoding="utf-8") + f"\n# {note}\n", encoding="utf-8")
-
-            commit("v1")
-            self.assertEqual(transition_problems(spine), [], "the copied v1 must be clean")
-
-            # Ступень A: версия 2 и починка, ни одной новой задачи.
-            edit(protocol_version=2, phase="v2_implementation_frozen")
-            touch_treatment("v2: materialized_in renders the label's own entry")
-            commit("A: implementation frozen")
-            self.assertEqual(transition_problems(spine), [], "stage A must pass")
-
-            # Ступень B: преригистрация кода воздействия; задач по-прежнему нет.
-            edit(preregistered_treatment_digest=treatment_digest(spine))
-            stage_b = commit("B: treatment preregistered")
-            self.assertEqual(transition_problems(spine), [], "stage B must pass")
-
-            # Ступень C: раскрытие задач; дайджест обязан совпасть с B.
-            task = json.loads((spine / "eval/tasks/confusable-drift.json").read_text(encoding="utf-8"))
-            task["task_id"] = "heldout-01"
-            (spine / "eval/tasks/heldout-01.json").write_text(
-                json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-            )
-            edit(phase="v2_tasks_revealed", preregistered_at_commit=stage_b)
-            commit("C: held-out tasks revealed")
+            repo, spine = self._fresh(tmp)
+            self._walk_to_reveal(repo, spine)
             self.assertEqual(transition_problems(spine), [], "the legitimate path must pass")
 
-            # Зеркало: «безобидный рефакторинг» после раскрытия обязан быть отвергнут.
-            touch_treatment("innocent refactor")
-            commit("D: refactor after the reveal")
-            problems = transition_problems(spine)
-            self.assertTrue(problems, "a treatment change after the reveal must be refused")
-            self.assertIn("innocent refactor", problems[0])
-
-    def test_a_monolithic_v2_commit_is_refused(self) -> None:
-        """Всё разом: версия, починка, преригистрация и задачи в одном коммите."""
-
-        import shutil
+    def test_a_late_refactor_is_refused(self) -> None:
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp) / "repo"
-            spine = repo / "experiments/semantic-spine"
-            spine.parent.mkdir(parents=True)
-            shutil.copytree(SPINE_ROOT, spine, ignore=shutil.ignore_patterns("__pycache__"))
-            repo.mkdir(exist_ok=True)
-            self._git(repo, "init", "--quiet")
-            self._git(repo, "config", "user.email", "t@t")
-            self._git(repo, "config", "user.name", "t")
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "--quiet", "-m", "v1")
+            repo, spine = self._fresh(tmp)
+            self._walk_to_reveal(repo, spine)
+            self._touch_treatment(spine, "innocent refactor")
+            self._commit(repo, "D: refactor after the reveal")
+            problems = transition_problems(spine)
+            self.assertTrue(problems)
+            self.assertIn("innocent refactor", problems[0])
 
-            task = json.loads((spine / "eval/tasks/confusable-drift.json").read_text(encoding="utf-8"))
-            task["task_id"] = "heldout-01"
-            (spine / "eval/tasks/heldout-01.json").write_text(
-                json.dumps(task, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-            )
-            payload = json.loads((spine / "eval/protocol.json").read_text(encoding="utf-8"))
-            payload.update(
+    def test_completing_the_experiment_does_not_lift_the_freeze(self) -> None:
+        """Иначе provenance уничтожается ровно после того, как потратили деньги."""
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, spine = self._fresh(tmp)
+            self._walk_to_reveal(repo, spine)
+            self._touch_treatment(spine, "late change")
+            self._edit(spine, phase="v2_experiment_complete")
+            self._commit(repo, "escape via experiment_complete")
+            problems = transition_problems(spine)
+            self.assertTrue(problems, "the freeze must be monotonic across v2 phases")
+            self.assertIn("changed after the held-out tasks were revealed", problems[0])
+
+    def test_a_naive_monolith_is_refused(self) -> None:
+        """Всё разом и без указания преригистрационного коммита."""
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, spine = self._fresh(tmp)
+            self._add_held_out_task(spine)
+            self._edit(
+                spine,
                 protocol_version=2,
                 phase="v2_tasks_revealed",
                 preregistered_treatment_digest=treatment_digest(spine),
             )
-            (spine / "eval/protocol.json").write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-            )
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "--quiet", "-m", "monolithic v2")
-
+            self._commit(repo, "monolithic v2")
             problems = transition_problems(spine)
-            self.assertTrue(problems, "a monolithic v2 commit must be refused")
+            self.assertTrue(problems)
             self.assertIn("preregistration must name the commit", problems[0])
+
+    def test_a_sneaky_monolith_pointing_at_an_older_commit_is_refused(self) -> None:
+        """Самый интересный нарушитель.
+
+        Меняет treatment, добавляет задачи, записывает хеш НОВОГО кода и
+        указывает на любой старый коммит, в котором задач ещё не было. Все
+        прежние проверки он проходил: коммит существует, не равен HEAD, задач в
+        нём восемь, текущий дайджест совпадает с записанным. Не совпадало
+        только одно — treatment в самом названном коммите.
+        """
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, spine = self._fresh(tmp)
+            old = self._git(repo, "rev-parse", "HEAD")
+            self._touch_treatment(spine, "v2 rendering change")
+            self._add_held_out_task(spine)
+            self._edit(
+                spine,
+                protocol_version=2,
+                phase="v2_tasks_revealed",
+                preregistered_treatment_digest=treatment_digest(spine),
+                preregistered_at_commit=old,
+            )
+            self._commit(repo, "sneaky monolith")
+            problems = transition_problems(spine)
+            self.assertTrue(problems, "pointing at an older commit must not be enough")
+            self.assertIn("treatment at the preregistration commit", problems[0])
+
+    def test_a_v2_phase_requires_version_two(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, spine = self._fresh(tmp)
+            self._edit(spine, phase="v2_implementation_frozen")
+            self._commit(repo, "phase without a version bump")
+            problems = transition_problems(spine)
+            self.assertTrue(problems)
+            self.assertIn("protocol_version is 1, not 2", problems[0])
+
+    def test_the_tree_digest_matches_the_working_tree_digest(self) -> None:
+        """Обе раскладки байт обязаны совпадать, иначе сравнение бессмысленно."""
+
+        import subprocess
+
+        head = subprocess.run(
+            ["git", "-C", str(SPINE_ROOT), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+        self.assertEqual(treatment_digest(), treatment_digest_at(SPINE_ROOT, head))
