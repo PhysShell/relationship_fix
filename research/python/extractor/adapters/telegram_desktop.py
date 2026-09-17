@@ -201,8 +201,9 @@ ORDERING = (
                                "превращает одну передачу хода в две, и вторая вносит полный H.",
         adapter_behavior="Топология допустима, только пока доля неоднозначных cross-actor ties "
                          "измерена и мала; иначе — тот же отказ, что у Seufert.",
-        fixture_needed="Реальный экспорт: доля соседних cross-actor пар с равным "
-                       "`date_unixtime`.",
+        fixture_needed="ИЗМЕРЕНО частично: в корпусе 235 записей cross-actor tie встретился "
+                       "1 раз (`bot_chat`, 87 записей) — то есть явление реально и редко. "
+                       "Нужна доля на `personal_chat`.",
     ),
     _p(
         key="ordering.exported_position",
@@ -544,6 +545,11 @@ class CorpusRow:
 
     source: str
     url: str
+    #: `downloaded_artifact` — the bytes were fetched and hashed.
+    #: `rendered_page` — a page displays the JSON; the file itself is not
+    #: available. These two states get glued together enthusiastically, and
+    #: gluing them is how a screenshot becomes a dataset.
+    source_kind: str
     sha256_prefix: str
     size_bytes: int
     chat_type: str
@@ -552,12 +558,17 @@ class CorpusRow:
     equal_timestamp_pairs: int
     equal_timestamp_cross_actor_pairs: int
     note: str
+    #: False means the numbers above are REPORTED, not measured here.
+    verified_by_scan: bool = True
 
     @property
     def qualifies_target_type(self) -> bool:
-        """Only a dyadic `personal_chat` qualifies the pilot's own target.
-        Everything else qualifies the EXPORTER, which is useful and different."""
-        return self.chat_type == "personal_chat"
+        """Only a dyadic `personal_chat` qualifies the pilot's own target, and
+        only if we actually ran the scanner over the bytes. Everything else
+        qualifies the EXPORTER, which is useful and different."""
+        return (self.chat_type == "personal_chat"
+                and self.verified_by_scan
+                and self.source_kind == "downloaded_artifact")
 
 
 CORPUS = (
@@ -566,6 +577,7 @@ CORPUS = (
         url="https://code.organicdesign.nz/organicdesign/4qx-holarchy/raw/commit/"
             "4403e558490bcf5c436cf85895b52ebe22e5b35a/OpenClaw/Discussion/"
             "epic4-constitutional-substrate/telegram-export.json",
+        source_kind="downloaded_artifact",
         sha256_prefix="bbe61b1c23936eff", size_bytes=362830,
         chat_type="private_group", entries=127,
         chronology_counterexamples=0, equal_timestamp_pairs=4,
@@ -578,11 +590,41 @@ CORPUS = (
         source="innerdvations/telegram-chat-parser@main",
         url="https://raw.githubusercontent.com/innerdvations/telegram-chat-parser/main/"
             "tests/data/saved.json",
+        source_kind="downloaded_artifact",
         sha256_prefix="c3c556504921a813", size_bytes=7064,
         chat_type="saved_messages", entries=21,
         chronology_counterexamples=0, equal_timestamp_pairs=0,
         equal_timestamp_cross_actor_pairs=0,
         note="Тестовая фикстура парсера, и по типу это `saved_messages` — заметка себе, "
              "а не разговор. Проверка инструмента, не свойства.",
+    ),
+    CorpusRow(
+        source="organicdesign/4qx-holarchy@49abafc",
+        url="https://code.organicdesign.nz/organicdesign/4qx-holarchy/raw/commit/"
+            "49abafce035357817c4a11698e5cf454a7e69d77/OpenClaw/workspace/"
+            "tg-chat-export-2026-03-28.json",
+        source_kind="downloaded_artifact",
+        sha256_prefix="19c5d221371d3657", size_bytes=151478,
+        chat_type="bot_chat", entries=87,
+        chronology_counterexamples=0, equal_timestamp_pairs=1,
+        equal_timestamp_cross_actor_pairs=1,
+        note="Третий файл, третий не-целевой тип: `bot_chat`, два отправителя. Зато первый "
+             "наблюдённый CROSS-ACTOR tie во всём корпусе — 1 на 87 записей. Именно этот "
+             "случай способен изменить ЧИСЛО передач хода, а не только латентность.",
+    ),
+    CorpusRow(
+        source="worldprobes.com/dumplinggate/impact",
+        url="https://worldprobes.com/dumplinggate/impact",
+        source_kind="rendered_page",
+        sha256_prefix="-" * 16, size_bytes=1128,
+        chat_type="personal_chat", entries=4,
+        chronology_counterexamples=-1, equal_timestamp_pairs=-1,
+        equal_timestamp_cross_actor_pairs=-1,
+        note="ЕДИНСТВЕННАЯ строка целевого типа — и она НЕ засчитывается: страница показывает "
+             "JSON, файла у нас нет, сканер по нему не проходил (HTTP 429 при попытке). "
+             "Числа заявленные, а не измеренные; счётчики помечены -1, чтобы их нельзя было "
+             "случайно просуммировать. «Страница показывает JSON» и «у нас есть файл» — "
+             "разные состояния, и склеивание их превращает скриншот в датасет.",
+        verified_by_scan=False,
     ),
 )

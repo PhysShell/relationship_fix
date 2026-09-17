@@ -244,23 +244,50 @@ class CorpusTests(unittest.TestCase):
         self.assertEqual(set(tg.CorpusRow.__dataclass_fields__) & self.FORBIDDEN, set())
 
     def test_no_row_qualifies_the_target_type_yet(self):
-        """Both scanned files are an exporter sample, not a dyad: a
-        private_group with three senders, and someone's saved messages. The
+        """Three scanned files, three non-target chat types: a private_group
+        with three senders, someone's saved messages, and a bot chat. The
         ledger says so rather than letting "a real Telegram export" stand in
         for "the thing the pilot will see"."""
         self.assertEqual([r for r in tg.CORPUS if r.qualifies_target_type], [])
-        self.assertEqual({r.chat_type for r in tg.CORPUS},
-                         {"private_group", "saved_messages"})
+        self.assertEqual({r.chat_type for r in tg.CORPUS if r.verified_by_scan},
+                         {"private_group", "saved_messages", "bot_chat"})
+
+    def test_a_page_showing_json_is_not_a_file_we_have(self):
+        """The only personal_chat row is a rendered page. It is target-type
+        evidence and it does not qualify: nothing was hashed and the scanner
+        never ran. Gluing those two states together is how a screenshot
+        becomes a dataset."""
+        rendered = [r for r in tg.CORPUS if r.source_kind == "rendered_page"]
+        self.assertEqual(len(rendered), 1)
+        row = rendered[0]
+        self.assertEqual(row.chat_type, "personal_chat")
+        self.assertFalse(row.verified_by_scan)
+        self.assertFalse(row.qualifies_target_type)
+
+    def test_unverified_counters_cannot_be_summed_by_accident(self):
+        """Reported numbers are stored as -1 so a careless sum goes negative
+        and visibly wrong rather than quietly optimistic."""
+        for row in tg.CORPUS:
+            if not row.verified_by_scan:
+                self.assertEqual(row.chronology_counterexamples, -1)
+                self.assertEqual(row.equal_timestamp_cross_actor_pairs, -1)
 
     def test_the_corpus_is_far_too_small_to_license_a_partial(self):
-        total = sum(r.entries for r in tg.CORPUS)
-        self.assertLess(total, 1000)
-        self.assertEqual(sum(r.chronology_counterexamples for r in tg.CORPUS), 0)
+        scanned = [r for r in tg.CORPUS if r.verified_by_scan]
+        self.assertLess(sum(r.entries for r in scanned), 1000)
+        self.assertEqual(sum(r.chronology_counterexamples for r in scanned), 0)
 
-    def test_every_row_carries_a_hash_and_a_url(self):
+    def test_a_cross_actor_tie_has_actually_been_observed(self):
+        """The case that can change how many times the ball changed hands, not
+        merely the latency. One in 235 scanned entries: real, and rare."""
+        scanned = [r for r in tg.CORPUS if r.verified_by_scan]
+        self.assertEqual(sum(r.equal_timestamp_cross_actor_pairs for r in scanned), 1)
+
+    def test_every_downloaded_row_carries_a_hash_and_a_url(self):
         for row in tg.CORPUS:
             self.assertTrue(row.url.startswith("https://"), row.source)
-            self.assertEqual(len(row.sha256_prefix), 16, row.source)
+            if row.source_kind == "downloaded_artifact":
+                self.assertRegex(row.sha256_prefix, r"^[0-9a-f]{16}$", row.source)
 
     def test_no_adapter_exists_yet(self):
         """The corpus rule, applied to targets: not one line of adapter until
