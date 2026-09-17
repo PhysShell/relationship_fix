@@ -30,6 +30,7 @@ EXPORT_KEYS = frozenset({
 })
 EXPORT_HORIZON_KEYS = frozenset({
     "horizon_hours", "opportunities_eligible", "sum_min_latency_seconds", "replied_within",
+    "sum_reply_speed_seconds", "sum_run_span_seconds", "sum_run_messages",
 })
 
 #: Exported fields whose scope is the WHOLE input stream and therefore partly
@@ -169,12 +170,17 @@ def find_opportunities(stream: list[NormalizedMessage], participant: str) -> lis
             continue
         if index > 0 and stream[index - 1].actor != participant:
             continue                      # still inside the partner's run
-        reply = next((m for m in stream[index + 1:] if m.actor == participant), None)
+        end = index
+        while end + 1 < len(stream) and stream[end + 1].actor != participant:
+            end += 1
+        reply = next((m for m in stream[end + 1:] if m.actor == participant), None)
         opportunities.append(Opportunity(
             opener_id=message.message_id,
             opened_at=message.timestamp,
             reply_id=reply.message_id if reply else None,
             reply_at=reply.timestamp if reply else None,
+            run_end_at=stream[end].timestamp,
+            run_message_count=end - index + 1,
         ))
     return opportunities
 
@@ -242,11 +248,15 @@ def extract(
     for hours in horizons_hours:
         seconds = hours * 3600.0
         eligible = [o for o in opportunities if o.eligible_for(seconds, period_end)]
+        replied = [o for o in eligible if o.replied_within(seconds)]
         horizons.append(HorizonAggregate(
             horizon_hours=hours,
             opportunities_eligible=len(eligible),
             sum_min_latency_seconds=sum(o.restricted_latency(seconds) for o in eligible),
-            replied_within=sum(1 for o in eligible if o.replied_within(seconds)),
+            replied_within=len(replied),
+            sum_reply_speed_seconds=sum(o.reply_speed_seconds for o in replied),
+            sum_run_span_seconds=sum(o.run_span_seconds for o in eligible),
+            sum_run_messages=sum(o.run_message_count for o in eligible),
         ))
 
     own = [m for m in stream
@@ -280,6 +290,9 @@ def production_export(aggregate: PeriodAggregate) -> dict:
                 "opportunities_eligible": h.opportunities_eligible,
                 "sum_min_latency_seconds": h.sum_min_latency_seconds,
                 "replied_within": h.replied_within,
+                "sum_reply_speed_seconds": h.sum_reply_speed_seconds,
+                "sum_run_span_seconds": h.sum_run_span_seconds,
+                "sum_run_messages": h.sum_run_messages,
             }
             for h in aggregate.horizons
         ],
@@ -302,6 +315,9 @@ def qualification_trace(result: ExtractionResult) -> list[dict]:
             "reply_id": o.reply_id,
             "reply_at": o.reply_at,
             "latency_seconds": o.latency_seconds,
+            "run_span_seconds": o.run_span_seconds,
+            "reply_speed_seconds": o.reply_speed_seconds,
+            "run_message_count": o.run_message_count,
         }
         for o in result.export_trace()
     ]

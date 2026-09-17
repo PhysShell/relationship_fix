@@ -86,23 +86,67 @@ class NormalizedMessage:
 
 @dataclass(frozen=True, slots=True)
 class Opportunity:
-    """One moment where the ball passed to the participant.
+    """One partner run and the participant's return to it, if any.
 
     Opens on the FIRST message of the partner's consecutive run: a burst of
-    three partner messages is one opportunity, not three, because the ball
-    changed hands once.
+    three partner messages is one opportunity, not three.
+
+    Deliberately NOT called a hand-over. "The partner handed the floor over"
+    is an interpretation timestamps do not support — the first message of a run
+    may be the partner TAKING the floor and holding it for twenty minutes. What
+    is observable is: a run started, a run ended, the participant re-entered.
+
+    Three durations live here, and on a completed transition they satisfy an
+    exact identity (verified on 2,942 MaiChat transitions, 2,942 exact):
+
+        partner_run_start_to_reentry = partner_run_span + conditional_reply_speed
+
+        Q 10:00 ─┐
+        Q 10:10  │ run_span = 20 min
+        Q 10:20 ─┘
+        P 10:21    reply_speed = 1 min     start_to_reentry = 21 min
+
+    That identity is why the middle term matters: `start_to_reentry` alone mixes
+    how long the partner went on writing with how long the participant took to
+    come back. On MaiChat the run span is 0 for 58% of transitions (single
+    message runs, where the two coincide) and 54% of the total at p75.
     """
 
     opener_id: str
     opened_at: float
     reply_id: str | None
     reply_at: float | None
+    #: Last message of the partner run, and how many messages it held.
+    run_end_at: float | None = None
+    run_message_count: int = 1
 
     @property
     def latency_seconds(self) -> float | None:
+        """partner_run_start_to_reentry. The primary quantity."""
         if self.reply_at is None:
             return None
         return self.reply_at - self.opened_at
+
+    @property
+    def run_span_seconds(self) -> float:
+        """How long the partner kept writing. Zero for a single-message run."""
+        if self.run_end_at is None:
+            return 0.0
+        return self.run_end_at - self.opened_at
+
+    @property
+    def reply_speed_seconds(self) -> float | None:
+        """Last partner message → participant's return.
+
+        This is what the messaging literature generally calls response time: it
+        collapses consecutive same-author messages and measures from the last of
+        them. Kept as a DESCRIPTIVE companion, never as the primary — it is
+        undefined for non-responses, so a metric built on it would silently drop
+        exactly the cases that matter most.
+        """
+        if self.reply_at is None:
+            return None
+        return self.reply_at - (self.run_end_at if self.run_end_at is not None else self.opened_at)
 
     def eligible_for(self, horizon_seconds: float, period_end: float) -> bool:
         """Calendar censoring: the whole window must fit inside the period.
@@ -128,12 +172,40 @@ class Opportunity:
 
 @dataclass(frozen=True, slots=True)
 class HorizonAggregate:
-    """The three sufficient statistics, per horizon. Nothing per-opportunity."""
+    """Sufficient statistics, per horizon. Nothing per-opportunity.
+
+    The first three carry the primary quantity. The last three carry the
+    descriptive decomposition, and are sums so that they stay aggregate-only and
+    hand-checkable: reply speed is summed over REPLIED opportunities (it is
+    undefined otherwise), run span and run length over all eligible ones.
+    """
 
     horizon_hours: float
     opportunities_eligible: int
     sum_min_latency_seconds: float
     replied_within: int
+    sum_reply_speed_seconds: float = 0.0
+    sum_run_span_seconds: float = 0.0
+    sum_run_messages: int = 0
+
+    @property
+    def mean_reply_speed_seconds(self) -> float | None:
+        """Descriptive. Defined only where the participant actually returned."""
+        if self.replied_within == 0:
+            return None
+        return self.sum_reply_speed_seconds / self.replied_within
+
+    @property
+    def mean_run_span_seconds(self) -> float | None:
+        if self.opportunities_eligible == 0:
+            return None
+        return self.sum_run_span_seconds / self.opportunities_eligible
+
+    @property
+    def mean_run_messages(self) -> float | None:
+        if self.opportunities_eligible == 0:
+            return None
+        return self.sum_run_messages / self.opportunities_eligible
 
     @property
     def rmtr_seconds(self) -> float | None:

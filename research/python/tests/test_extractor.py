@@ -79,6 +79,84 @@ class BurstTests(unittest.TestCase):
         self.assertEqual(len(ex.qualification_trace(result)), 1)
 
 
+class DecompositionTests(unittest.TestCase):
+    """start_to_reentry = run_span + reply_speed, exactly, on every completed
+    transition. Verified on 2,942 MaiChat transitions; pinned here on the shapes
+    that make the terms differ."""
+
+    def test_a_single_message_run_makes_the_two_latencies_coincide(self):
+        result = run([msg("a", Q, 0.0), msg("b", P, 1.0)],
+                     mode=Mode.QUALIFICATION, consent=True)
+        row, = ex.qualification_trace(result)
+        self.assertEqual(row["run_span_seconds"], 0.0)
+        self.assertEqual(row["reply_speed_seconds"], row["latency_seconds"])
+        self.assertEqual(row["run_message_count"], 1)
+
+    def test_a_long_run_separates_them(self):
+        """Partner writes for twenty minutes, participant answers in one."""
+        result = run([msg("a", Q, 0.0), msg("b", Q, 10 / 60), msg("c", Q, 20 / 60),
+                      msg("d", P, 21 / 60)], mode=Mode.QUALIFICATION, consent=True)
+        row, = ex.qualification_trace(result)
+        self.assertAlmostEqual(row["run_span_seconds"], 20 * 60, places=6)
+        self.assertAlmostEqual(row["reply_speed_seconds"], 60, places=6)
+        self.assertAlmostEqual(row["latency_seconds"], 21 * 60, places=6)
+        self.assertEqual(row["run_message_count"], 3)
+
+    def test_the_identity_holds_on_every_completed_transition(self):
+        result = run([msg("a", Q, 0.0), msg("b", Q, 0.5), msg("c", P, 1.0),
+                      msg("d", Q, 2.0), msg("e", P, 4.0),
+                      msg("f", Q, 5.0), msg("g", Q, 5.5), msg("h", Q, 6.0)],
+                     mode=Mode.QUALIFICATION, consent=True)
+        completed = [r for r in ex.qualification_trace(result)
+                     if r["latency_seconds"] is not None]
+        self.assertEqual(len(completed), 2)
+        for row in completed:
+            self.assertAlmostEqual(
+                row["latency_seconds"],
+                row["run_span_seconds"] + row["reply_speed_seconds"], places=6)
+
+    def test_reply_speed_is_undefined_for_a_non_response(self):
+        """Which is exactly why it cannot be the primary: a metric built on it
+        silently drops the cases that matter most."""
+        result = run([msg("a", Q, 0.0), msg("b", Q, 1.0)],
+                     mode=Mode.QUALIFICATION, consent=True)
+        row, = ex.qualification_trace(result)
+        self.assertIsNone(row["reply_speed_seconds"])
+        self.assertIsNone(row["latency_seconds"])
+        self.assertEqual(row["run_span_seconds"], HOUR)
+        self.assertEqual(horizon(result, 6.0).sum_reply_speed_seconds, 0.0)
+        self.assertIsNone(horizon(result, 6.0).mean_reply_speed_seconds)
+
+    def test_the_descriptive_sums_are_aggregate_only_and_hand_checkable(self):
+        result = run([msg("a", Q, 0.0), msg("b", Q, 1.0), msg("c", P, 2.0),
+                      msg("d", Q, 3.0), msg("e", P, 3.5)])
+        agg = horizon(result, 6.0)
+        self.assertEqual(agg.opportunities_eligible, 2)
+        self.assertEqual(agg.sum_run_span_seconds, HOUR)          # 1h + 0
+        self.assertEqual(agg.sum_run_messages, 3)                 # 2 + 1
+        self.assertEqual(agg.sum_reply_speed_seconds, HOUR + 0.5 * HOUR)
+        self.assertEqual(agg.mean_run_messages, 1.5)
+
+
+class RightCensoringTests(unittest.TestCase):
+    """Assigning H to a non-response is only sound when the whole window was
+    observed. That rule already exists as calendar censoring; named here in
+    survival terms so nobody re-derives it as a new concern."""
+
+    def test_an_unobserved_window_is_excluded_rather_than_scored_as_H(self):
+        """Opportunity at 20:00, H=12h, coverage ends at 01:00. We know only
+        T > 5h — so the opportunity is not eligible, not a 12h non-response."""
+        result = run([msg("a", Q, 20.0)], start=0.0, end=25.0 * HOUR)
+        self.assertEqual(horizon(result, 12.0).opportunities_eligible, 0)
+        self.assertEqual(horizon(result, 12.0).sum_min_latency_seconds, 0.0)
+        self.assertEqual(horizon(result, 6.0).opportunities_eligible, 0)
+
+    def test_a_fully_observed_window_does_score_the_horizon(self):
+        result = run([msg("a", Q, 0.0)], start=0.0, end=25.0 * HOUR)
+        self.assertEqual(horizon(result, 12.0).opportunities_eligible, 1)
+        self.assertEqual(horizon(result, 12.0).sum_min_latency_seconds, 12 * HOUR)
+
+
 class HorizonTests(unittest.TestCase):
     def test_a_reply_lands_on_each_side_of_the_grid(self):
         """Opened at 0, replied at 8h: late for 6h, in time for 12h and 24h."""
@@ -413,6 +491,8 @@ class ExportBoundaryTests(unittest.TestCase):
         self.assertEqual(ex.qualification_trace(result), [{
             "opener_id": "a", "opened_at": 0.0,
             "reply_id": "b", "reply_at": HOUR, "latency_seconds": HOUR,
+            "run_span_seconds": 0.0, "reply_speed_seconds": HOUR,
+            "run_message_count": 1,
         }])
 
     def test_no_type_in_the_package_can_hold_message_text(self):

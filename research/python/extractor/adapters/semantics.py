@@ -68,14 +68,26 @@ class OrderingEvidence(str, Enum):
     """
 
     TIMESTAMP = "timestamp"                # the clock is fine enough to order everything
-    SOURCE_SEQUENCE = "source_sequence"    # the source guarantees its own emission order
     STABLE_ORDER_KEY = "stable_order_key"  # a monotone key independent of the clock
+    #: The order the export happens to print. Observable, and NOT a guarantee:
+    #: tooling that keeps display order and time order separately does so
+    #: precisely because they sometimes disagree, and which one is the true
+    #: chronology is undocumented. Supports claims about the EXPORTED SEQUENCE,
+    #: not about physical send order.
+    EXPORTED_POSITION = "exported_position"
     NONE = "none"
 
 
 class MessageIdentity(str, Enum):
-    STABLE_ID = "stable_id"          # the source gives a real per-message identity
-    CONTENT_HASH = "content_hash"    # repeats collapse; "ок" and "ок" are one value
+    """Identity, which is a different question from order.
+
+    `DERIVED_FINGERPRINT` rather than `content_hash`: calling a content hash an
+    identity is how deduplication cheerfully deletes reality and then passes CI.
+    Two genuine messages reading "ок" are two messages, not one.
+    """
+
+    SOURCE_STABLE_ID = "source_stable_id"        # a real per-message identity
+    DERIVED_FINGERPRINT = "derived_fingerprint"  # computed by us or by the exporter
     NONE = "none"
 
 
@@ -127,7 +139,22 @@ class SourceSemantics:
     @property
     def deduplication_possible(self) -> bool:
         """The other question, answered by identity rather than by order."""
-        return self.message_identity is MessageIdentity.STABLE_ID
+        return self.message_identity is MessageIdentity.SOURCE_STABLE_ID
+
+    @property
+    def topology_claim_scope(self) -> str:
+        """WHAT an ordered source lets us claim about — not always the same thing.
+
+        A fine clock or a monotone key orders physical events. An exported
+        position orders the export, and whether that matches the wire is
+        undocumented, so the claim narrows rather than disappearing:
+        "topology according to the exported sequence".
+        """
+        if not self.usable_as_topology_oracle:
+            return "none"
+        if self.ordering_evidence is OrderingEvidence.EXPORTED_POSITION:
+            return "exported_sequence"
+        return "physical_chronology"
 
     @property
     def boundary_uncertainty_seconds(self) -> float:

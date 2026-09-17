@@ -215,7 +215,8 @@ class SourceSemanticsTests(unittest.TestCase):
 
         self.assertIs(SEMANTICS.timestamp_resolution, TimestampResolution.MILLISECOND)
         self.assertIs(SEMANTICS.ordering, OrderingSemantics.TOTAL)
-        self.assertIs(SEMANTICS.message_identity, MessageIdentity.STABLE_ID)
+        self.assertIs(SEMANTICS.message_identity, MessageIdentity.SOURCE_STABLE_ID)
+        self.assertEqual(SEMANTICS.topology_claim_scope, "physical_chronology")
         self.assertTrue(SEMANTICS.usable_as_topology_oracle)
 
     def test_the_declaration_rides_along_with_every_claim(self):
@@ -273,20 +274,22 @@ class SourceSemanticsTests(unittest.TestCase):
             timestamp_meaning=TimestampSemantics.EXPORT_RENDERED,
             timestamp_resolution=TimestampResolution.MINUTE,
             ordering=OrderingSemantics.TOTAL,
-            ordering_evidence=OrderingEvidence.SOURCE_SEQUENCE,
+            ordering_evidence=OrderingEvidence.EXPORTED_POSITION,
             message_identity=MessageIdentity.NONE,
             deduplication=Deduplication.DISABLED,
             length=LengthSemantics.TEXT_CHARS,
         )
         self.assertTrue(ordered_but_anonymous.usable_as_topology_oracle)
         self.assertFalse(ordered_but_anonymous.deduplication_possible)
+        # ordered by the EXPORT, so the claim narrows rather than disappearing
+        self.assertEqual(ordered_but_anonymous.topology_claim_scope, "exported_sequence")
 
         identified_but_unordered = SourceSemantics(
             timestamp_meaning=TimestampSemantics.UNKNOWN,
             timestamp_resolution=TimestampResolution.MINUTE,
             ordering=OrderingSemantics.PARTIAL_WITHIN_EQUAL_TIMESTAMP,
             ordering_evidence=OrderingEvidence.NONE,
-            message_identity=MessageIdentity.STABLE_ID,
+            message_identity=MessageIdentity.SOURCE_STABLE_ID,
             deduplication=Deduplication.BY_STABLE_ID,
             length=LengthSemantics.TEXT_CHARS,
         )
