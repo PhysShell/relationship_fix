@@ -20,6 +20,8 @@ import argparse
 import json
 import sys
 from dataclasses import asdict, dataclass
+from decimal import ROUND_HALF_UP, Decimal
+from fractions import Fraction
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -34,6 +36,29 @@ from spine.subject import subject_worktree  # noqa: E402
 from spine.targets import covers, locate_all  # noqa: E402
 
 DEFAULT_BUDGET = 8000
+QUANTUM = Decimal("0.0001")
+
+
+def ratio(numerator: int, denominator: int) -> Fraction:
+    return Fraction(0) if denominator == 0 else Fraction(numerator, denominator)
+
+
+def quantize(value: Fraction) -> float:
+    """Точная дробь -> 4 знака, одним детерминированным правилом.
+
+    Раньше здесь было round() поверх уже округлённых float'ов, и это молча
+    зависело от версии Python: CPython 3.12 добавил компенсированное
+    суммирование в sum() для float'ов, поэтому 3.11 и 3.13 расходились в
+    четвёртом знаке на значениях, попадающих на десятичную границу (5/6 ->
+    0.83335). Сложение float'ов вдобавок не ассоциативно, так что результат
+    зависел и от порядка задач.
+
+    Байт-равенство, которое держится на том, с какой стороны от границы легло
+    двоичное представление, — это не воспроизводимость, а везение.
+    """
+
+    exact = Decimal(value.numerator) / Decimal(value.denominator)
+    return float(exact.quantize(QUANTUM, rounding=ROUND_HALF_UP))
 
 
 @dataclass
@@ -55,6 +80,9 @@ class Row:
     truncated: bool
     missed_files: list[str]
     missed_targets: list[str]
+    # Целые числители: агрегаты считаются от них, а не от округлённых долей.
+    oracle_file_tokens: int = 0
+    on_target_tokens: int = 0
 
 
 def load_tasks() -> list[TaskSpec]:
@@ -99,17 +127,19 @@ def score(budget_tokens: int, fill: str = FILL_PREFIX) -> tuple[list[Row], dict[
                     files=len(selected),
                     oracle_files_total=len(task.oracle_files),
                     oracle_files_found=len(found),
-                    file_recall=round(len(found) / len(task.oracle_files), 4),
-                    file_precision=round(bundle.tokens_on(task.oracle_files) / tokens, 4) if tokens else 0.0,
+                    file_recall=quantize(ratio(len(found), len(task.oracle_files))),
+                    file_precision=quantize(ratio(bundle.tokens_on(task.oracle_files), tokens)),
                     oracle_targets_total=len(locations),
                     oracle_targets_covered=len(covered),
-                    target_recall=round(len(covered) / len(locations), 4) if locations else 0.0,
-                    target_precision=round(on_target_tokens / tokens, 4) if tokens else 0.0,
+                    target_recall=quantize(ratio(len(covered), len(locations))),
+                    target_precision=quantize(ratio(on_target_tokens, tokens)),
                     truncated=bundle.truncated,
                     missed_files=[p for p in task.oracle_files if p not in selected],
                     missed_targets=[
                         location.target.raw for location in locations if location not in covered
                     ],
+                    oracle_file_tokens=bundle.tokens_on(task.oracle_files),
+                    on_target_tokens=on_target_tokens,
                 )
             )
     return rows, subjects
@@ -120,21 +150,34 @@ def aggregate(rows: list[Row]) -> list[dict]:
     for row in rows:
         by_strategy.setdefault(row.strategy, []).append(row)
 
-    def mean(group: list[Row], attribute: str) -> float:
-        return round(sum(getattr(r, attribute) for r in group) / len(group), 4)
+    def macro(group: list[Row], numerator: str, denominator: str) -> float:
+        """Macro-среднее по точным дробям: ни порядок, ни платформа не влияют."""
+
+        total = sum(
+            (ratio(getattr(r, numerator), getattr(r, denominator)) for r in group),
+            Fraction(0),
+        )
+        return quantize(total / len(group))
 
     out = []
     for strategy, group in by_strategy.items():
+        token_total = sum(r.context_tokens for r in group)
         out.append(
             {
                 "strategy": strategy,
                 "tasks": len(group),
-                "mean_file_recall": mean(group, "file_recall"),
-                "mean_file_precision": mean(group, "file_precision"),
-                "mean_target_recall": mean(group, "target_recall"),
-                "mean_target_precision": mean(group, "target_precision"),
-                "mean_context_tokens": round(sum(r.context_tokens for r in group) / len(group), 1),
-                "tasks_with_full_target_recall": sum(1 for r in group if r.target_recall == 1.0),
+                "mean_file_recall": macro(group, "oracle_files_found", "oracle_files_total"),
+                "mean_file_precision": macro(group, "oracle_file_tokens", "context_tokens"),
+                "mean_target_recall": macro(group, "oracle_targets_covered", "oracle_targets_total"),
+                "mean_target_precision": macro(group, "on_target_tokens", "context_tokens"),
+                "mean_context_tokens": float(
+                    (Decimal(token_total) / Decimal(len(group))).quantize(
+                        Decimal("0.1"), rounding=ROUND_HALF_UP
+                    )
+                ),
+                "tasks_with_full_target_recall": sum(
+                    1 for r in group if r.oracle_targets_covered == r.oracle_targets_total
+                ),
             }
         )
     out.sort(key=lambda i: (-i["mean_target_recall"], -i["mean_file_recall"], i["strategy"]))

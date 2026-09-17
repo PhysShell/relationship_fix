@@ -48,5 +48,15 @@
     "typed_edges_bind_only_while_the_budget_binds": "Верно при 4000-8000, ложно при 16000, где абляция -typed-edges догоняет spine.",
     "rationale_does_not_improve_retrieval": "-rationale не хуже и дешевле. Влияние на ПОНИМАНИЕ не измерено."
   },
-  "unfreezes_on": "held-out задачи, которых harness при проектировании не видел. Вместе с ними поднимается protocol_version до 2, чинится рендеринг materialized_in и проверяется записанное заранее предсказание (target recall 0.54 -> 0.85-0.95)."
+  "unfreezes_on": "held-out задачи, которых harness при проектировании не видел. Вместе с ними поднимается protocol_version до 2, чинится рендеринг materialized_in и проверяется записанное заранее предсказание (target recall 0.54 -> 0.85-0.95).",
+  "amendments": [
+    {
+      "what": "aggregate means switched from float round() to exact Fraction + Decimal ROUND_HALF_UP",
+      "why": "CPython 3.12 добавил компенсированное суммирование в sum() для float'ов, поэтому 3.11 и 3.13 расходились в четвёртом знаке на значениях у десятичной границы (5/6 -> 0.83335). Локально зелено, в CI красно; байт-равенство держалось на везении.",
+      "behaviour_changed": false,
+      "evidence": "96 строк снимка при 8000: ноль расхождений в context_tokens, chunks, files, счётчиках oracle, missed_files, missed_targets и truncated; ноль расхождений в округлении на уровне строк. Изменились только macro-средние в summary.",
+      "surface_digest_changed": false,
+      "recorded_in": "git history; the protocol surface digest is unaffected"
+    }
+  ]
 }

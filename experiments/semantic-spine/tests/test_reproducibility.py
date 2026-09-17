@@ -49,3 +49,58 @@ class FrozenResults(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExactArithmetic(unittest.TestCase):
+    """Агрегаты не имеют права зависеть от порядка и от версии Python.
+
+    Исходный дефект: round() поверх уже округлённых float'ов. CPython 3.12
+    добавил компенсированное суммирование в sum() для float'ов, поэтому 3.11 и
+    3.13 расходились в четвёртом знаке на значениях у десятичной границы
+    (5/6 -> 0.83335). CI краснел, локально было зелено, и «побайтная
+    воспроизводимость» держалась на том, с какой стороны границы легло
+    двоичное представление.
+    """
+
+    def setUp(self) -> None:
+        self.rows, _ = score(FROZEN_BUDGET)
+
+    def test_aggregate_is_independent_of_row_order(self) -> None:
+        import random
+
+        baseline = aggregate(self.rows)
+        for seed in (1, 7, 42):
+            with self.subTest(seed=seed):
+                shuffled = list(self.rows)
+                random.Random(seed).shuffle(shuffled)
+                self.assertEqual(
+                    {item["strategy"]: item for item in aggregate(shuffled)},
+                    {item["strategy"]: item for item in baseline},
+                )
+
+    def test_means_come_from_exact_ratios(self) -> None:
+        from fractions import Fraction
+
+        from score import quantize, ratio
+
+        # 5/6 лежит ровно на границе четвёртого знака; float-путь давал 0.8333
+        # или 0.8334 в зависимости от платформы, точный путь — всегда одно.
+        self.assertEqual(quantize(Fraction(5, 6)), 0.8333)
+        self.assertEqual(quantize(Fraction(1, 2)), 0.5)
+        self.assertEqual(quantize(ratio(0, 0)), 0.0)
+        # HALF_UP, а не банковское округление: 0.00005 -> 0.0001, всегда.
+        self.assertEqual(quantize(Fraction(1, 20000)), 0.0001)
+
+    def test_no_summary_value_sits_on_a_rounding_tie(self) -> None:
+        """Диагностика: если значение точно на границе, ищите его в снимке."""
+
+        from decimal import Decimal
+        from fractions import Fraction
+
+        for item in aggregate(self.rows):
+            for key, value in item.items():
+                if not key.startswith("mean_") or key == "mean_context_tokens":
+                    continue
+                with self.subTest(strategy=item["strategy"], metric=key):
+                    scaled = Decimal(str(value)) * 10000
+                    self.assertEqual(scaled, scaled.to_integral_value())

@@ -59,7 +59,7 @@
       "strategy": "semantic-spine/-rationale",
       "tasks": 8,
       "mean_file_recall": 0.9583,
-      "mean_file_precision": 0.0673,
+      "mean_file_precision": 0.0672,
       "mean_target_recall": 0.6667,
       "mean_target_precision": 0.0546,
       "mean_context_tokens": 15796.6,
@@ -72,7 +72,7 @@
       "mean_file_precision": 0.0674,
       "mean_target_recall": 0.6667,
       "mean_target_precision": 0.0547,
-      "mean_context_tokens": 15763.2,
+      "mean_context_tokens": 15763.3,
       "tasks_with_full_target_recall": 2
     },
     {
@@ -91,7 +91,7 @@
       "mean_file_recall": 0.6667,
       "mean_file_precision": 0.1921,
       "mean_target_recall": 0.5,
-      "mean_target_precision": 0.0924,
+      "mean_target_precision": 0.0923,
       "mean_context_tokens": 14989.0,
       "tasks_with_full_target_recall": 0
     },
@@ -99,7 +99,7 @@
       "strategy": "lexical",
       "tasks": 8,
       "mean_file_recall": 0.6458,
-      "mean_file_precision": 0.1463,
+      "mean_file_precision": 0.1462,
       "mean_target_recall": 0.4792,
       "mean_target_precision": 0.0754,
       "mean_context_tokens": 15216.0,
@@ -160,7 +160,9 @@
       "missed_targets": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate"
-      ]
+      ],
+      "oracle_file_tokens": 3834,
+      "on_target_tokens": 3834
     },
     {
       "task_id": "add-exchange-unit",
@@ -187,7 +189,9 @@
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "add-exchange-unit",
@@ -206,7 +210,9 @@
       "target_precision": 0.103,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 2659,
+      "on_target_tokens": 1613
     },
     {
       "task_id": "add-exchange-unit",
@@ -229,7 +235,9 @@
       ],
       "missed_targets": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate"
-      ]
+      ],
+      "oracle_file_tokens": 1985,
+      "on_target_tokens": 1090
     },
     {
       "task_id": "add-exchange-unit",
@@ -253,7 +261,9 @@
       "missed_targets": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#Validate",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1522,
+      "on_target_tokens": 203
     },
     {
       "task_id": "add-exchange-unit",
@@ -277,7 +287,9 @@
       "missed_targets": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 839,
+      "on_target_tokens": 762
     },
     {
       "task_id": "add-exchange-unit",
@@ -301,7 +313,9 @@
       "missed_targets": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 839,
+      "on_target_tokens": 762
     },
     {
       "task_id": "add-exchange-unit",
@@ -325,7 +339,9 @@
       "missed_targets": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 839,
+      "on_target_tokens": 762
     },
     {
       "task_id": "add-exchange-unit",
@@ -349,7 +365,9 @@
       "missed_targets": [
         "src/RelationshipFix.Domain/Ontology/UnitOfAnalysis.cs#Exchange",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 839,
+      "on_target_tokens": 762
     },
     {
       "task_id": "add-exchange-unit",
@@ -368,7 +386,9 @@
       "target_precision": 0.3288,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 5186,
+      "on_target_tokens": 5186
     },
     {
       "task_id": "add-exchange-unit",
@@ -387,7 +407,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 5186,
+      "on_target_tokens": 5186
     },
     {
       "task_id": "add-exchange-unit",
@@ -406,7 +428,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 2142,
+      "on_target_tokens": 2142
     },
     {
       "task_id": "confusable-drift",
@@ -431,7 +455,9 @@
       "missed_targets": [
         "docs/annotation-protocol-v0.md#3. Решения разметчика",
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
-      ]
+      ],
+      "oracle_file_tokens": 3834,
+      "on_target_tokens": 3834
     },
     {
       "task_id": "confusable-drift",
@@ -459,7 +485,9 @@
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT",
         "docs/annotation-protocol-v0.md#3. Решения разметчика",
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "confusable-drift",
@@ -483,7 +511,9 @@
       "missed_targets": [
         "docs/annotation-protocol-v0.md#3. Решения разметчика",
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
-      ]
+      ],
+      "oracle_file_tokens": 2643,
+      "on_target_tokens": 1593
     },
     {
       "task_id": "confusable-drift",
@@ -505,7 +535,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
-      ]
+      ],
+      "oracle_file_tokens": 5351,
+      "on_target_tokens": 2656
     },
     {
       "task_id": "confusable-drift",
@@ -531,7 +563,9 @@
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT",
         "docs/annotation-protocol-v0.md#3. Решения разметчика",
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
-      ]
+      ],
+      "oracle_file_tokens": 1398,
+      "on_target_tokens": 1398
     },
     {
       "task_id": "confusable-drift",
@@ -553,7 +587,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1357,
+      "on_target_tokens": 709
     },
     {
       "task_id": "confusable-drift",
@@ -575,7 +611,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1357,
+      "on_target_tokens": 709
     },
     {
       "task_id": "confusable-drift",
@@ -597,7 +635,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1357,
+      "on_target_tokens": 709
     },
     {
       "task_id": "confusable-drift",
@@ -619,7 +659,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1357,
+      "on_target_tokens": 709
     },
     {
       "task_id": "confusable-drift",
@@ -642,7 +684,9 @@
       ],
       "missed_targets": [
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
-      ]
+      ],
+      "oracle_file_tokens": 6658,
+      "on_target_tokens": 6658
     },
     {
       "task_id": "confusable-drift",
@@ -665,7 +709,9 @@
       ],
       "missed_targets": [
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика"
-      ]
+      ],
+      "oracle_file_tokens": 6658,
+      "on_target_tokens": 6658
     },
     {
       "task_id": "confusable-drift",
@@ -684,7 +730,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 8338,
+      "on_target_tokens": 8338
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -709,7 +757,9 @@
       "missed_targets": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation",
         "docs/annotation-protocol-v0.md#3. Решения разметчика"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -734,7 +784,9 @@
       "missed_targets": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation",
         "docs/annotation-protocol-v0.md#3. Решения разметчика"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -753,7 +805,9 @@
       "target_precision": 0.1498,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 2918,
+      "on_target_tokens": 2244
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -776,7 +830,9 @@
       ],
       "missed_targets": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation"
-      ]
+      ],
+      "oracle_file_tokens": 2825,
+      "on_target_tokens": 1775
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -801,7 +857,9 @@
       "missed_targets": [
         "src/RelationshipFix.Evaluation/Ontology/OntologyValidator.cs#ValidateAnnotation",
         "docs/annotation-protocol-v0.md#3. Решения разметчика"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -820,7 +878,9 @@
       "target_precision": 0.0625,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 1561,
+      "on_target_tokens": 990
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -839,7 +899,9 @@
       "target_precision": 0.0625,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 1561,
+      "on_target_tokens": 990
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -858,7 +920,9 @@
       "target_precision": 0.0636,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 1561,
+      "on_target_tokens": 990
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -877,7 +941,9 @@
       "target_precision": 0.1369,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 1561,
+      "on_target_tokens": 990
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -896,7 +962,9 @@
       "target_precision": 0.2599,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 3967,
+      "on_target_tokens": 3967
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -915,7 +983,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 3967,
+      "on_target_tokens": 3967
     },
     {
       "task_id": "evidence-required-enforcement",
@@ -934,7 +1004,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 2550,
+      "on_target_tokens": 2550
     },
     {
       "task_id": "golden-contract-label",
@@ -957,7 +1029,9 @@
       ],
       "missed_targets": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization"
-      ]
+      ],
+      "oracle_file_tokens": 3834,
+      "on_target_tokens": 3834
     },
     {
       "task_id": "golden-contract-label",
@@ -982,7 +1056,9 @@
       "missed_targets": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
         "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "golden-contract-label",
@@ -1006,7 +1082,9 @@
       "missed_targets": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
         "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
-      ]
+      ],
+      "oracle_file_tokens": 484,
+      "on_target_tokens": 0
     },
     {
       "task_id": "golden-contract-label",
@@ -1030,7 +1108,9 @@
       "missed_targets": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
         "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
-      ]
+      ],
+      "oracle_file_tokens": 484,
+      "on_target_tokens": 0
     },
     {
       "task_id": "golden-contract-label",
@@ -1055,7 +1135,9 @@
       "missed_targets": [
         "tests/RelationshipFix.DataContracts.Tests/GoldenContractTests.cs#Golden_fixture_matches_canonical_serialization",
         "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "golden-contract-label",
@@ -1076,7 +1158,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
-      ]
+      ],
+      "oracle_file_tokens": 553,
+      "on_target_tokens": 476
     },
     {
       "task_id": "golden-contract-label",
@@ -1097,7 +1181,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
-      ]
+      ],
+      "oracle_file_tokens": 553,
+      "on_target_tokens": 476
     },
     {
       "task_id": "golden-contract-label",
@@ -1118,7 +1204,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
-      ]
+      ],
+      "oracle_file_tokens": 553,
+      "on_target_tokens": 476
     },
     {
       "task_id": "golden-contract-label",
@@ -1139,7 +1227,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.BLAME_CRITICISM"
-      ]
+      ],
+      "oracle_file_tokens": 553,
+      "on_target_tokens": 476
     },
     {
       "task_id": "golden-contract-label",
@@ -1158,7 +1248,9 @@
       "target_precision": 0.5717,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 7154,
+      "on_target_tokens": 7154
     },
     {
       "task_id": "golden-contract-label",
@@ -1177,7 +1269,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 7154,
+      "on_target_tokens": 7154
     },
     {
       "task_id": "golden-contract-label",
@@ -1196,7 +1290,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 1801,
+      "on_target_tokens": 1801
     },
     {
       "task_id": "label-registry-drift",
@@ -1221,7 +1317,9 @@
       "missed_targets": [
         "src/annotation-web/src/Domain.hs#parseBehaviorLabel",
         "src/annotation-web/test/PilotSpec.hs#activeLabels"
-      ]
+      ],
+      "oracle_file_tokens": 3834,
+      "on_target_tokens": 3834
     },
     {
       "task_id": "label-registry-drift",
@@ -1248,7 +1346,9 @@
         "src/annotation-web/src/Domain.hs#parseBehaviorLabel",
         "src/annotation-web/test/PilotSpec.hs#activeLabels",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "label-registry-drift",
@@ -1274,7 +1374,9 @@
         "src/annotation-web/src/Domain.hs#parseBehaviorLabel",
         "src/annotation-web/test/PilotSpec.hs#activeLabels",
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1081,
+      "on_target_tokens": 0
     },
     {
       "task_id": "label-registry-drift",
@@ -1297,7 +1399,9 @@
       ],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1842,
+      "on_target_tokens": 761
     },
     {
       "task_id": "label-registry-drift",
@@ -1316,7 +1420,9 @@
       "target_precision": 0.2123,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 2631,
+      "on_target_tokens": 2631
     },
     {
       "task_id": "label-registry-drift",
@@ -1337,7 +1443,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1294,
+      "on_target_tokens": 1217
     },
     {
       "task_id": "label-registry-drift",
@@ -1358,7 +1466,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1294,
+      "on_target_tokens": 1217
     },
     {
       "task_id": "label-registry-drift",
@@ -1379,7 +1489,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1294,
+      "on_target_tokens": 1217
     },
     {
       "task_id": "label-registry-drift",
@@ -1400,7 +1512,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 1294,
+      "on_target_tokens": 1217
     },
     {
       "task_id": "label-registry-drift",
@@ -1423,7 +1537,9 @@
       ],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 14817,
+      "on_target_tokens": 14817
     },
     {
       "task_id": "label-registry-drift",
@@ -1446,7 +1562,9 @@
       ],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.REPAIR_ATTEMPT"
-      ]
+      ],
+      "oracle_file_tokens": 14817,
+      "on_target_tokens": 14817
     },
     {
       "task_id": "label-registry-drift",
@@ -1465,7 +1583,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 2502,
+      "on_target_tokens": 2502
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1490,7 +1610,9 @@
       "missed_targets": [
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
         "docs/item-authoring-v0.1.md#Главное правило"
-      ]
+      ],
+      "oracle_file_tokens": 3834,
+      "on_target_tokens": 3834
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1517,7 +1639,9 @@
         "docs/research/dialogue-naturalness-gate.md#1.3 Почему это не косметика",
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "docs/item-authoring-v0.1.md#Главное правило"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1540,7 +1664,9 @@
       ],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION"
-      ]
+      ],
+      "oracle_file_tokens": 6204,
+      "on_target_tokens": 3062
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1563,7 +1689,9 @@
       ],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION"
-      ]
+      ],
+      "oracle_file_tokens": 7849,
+      "on_target_tokens": 3062
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1588,7 +1716,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "docs/item-authoring-v0.1.md#Главное правило"
-      ]
+      ],
+      "oracle_file_tokens": 2845,
+      "on_target_tokens": 2845
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1609,7 +1739,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION"
-      ]
+      ],
+      "oracle_file_tokens": 782,
+      "on_target_tokens": 705
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1630,7 +1762,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION"
-      ]
+      ],
+      "oracle_file_tokens": 782,
+      "on_target_tokens": 705
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1651,7 +1785,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION"
-      ]
+      ],
+      "oracle_file_tokens": 782,
+      "on_target_tokens": 705
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1675,7 +1811,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "docs/item-authoring-v0.1.md#Главное правило"
-      ]
+      ],
+      "oracle_file_tokens": 558,
+      "on_target_tokens": 481
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1700,7 +1838,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "docs/item-authoring-v0.1.md#Главное правило"
-      ]
+      ],
+      "oracle_file_tokens": 14137,
+      "on_target_tokens": 14137
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1725,7 +1865,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.VALIDATION",
         "docs/item-authoring-v0.1.md#Главное правило"
-      ]
+      ],
+      "oracle_file_tokens": 14137,
+      "on_target_tokens": 14137
     },
     {
       "task_id": "naturalness-register-leak",
@@ -1744,7 +1886,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 6755,
+      "on_target_tokens": 6755
     },
     {
       "task_id": "ontology-version-bump",
@@ -1769,7 +1913,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
         "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
-      ]
+      ],
+      "oracle_file_tokens": 3834,
+      "on_target_tokens": 3834
     },
     {
       "task_id": "ontology-version-bump",
@@ -1796,7 +1942,9 @@
         "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
         "data/ontology/behavior-v0.1.json#behavior-v0.1",
         "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "ontology-version-bump",
@@ -1821,7 +1969,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
         "data/ontology/behavior-v0.1.json#behavior-v0.1"
-      ]
+      ],
+      "oracle_file_tokens": 553,
+      "on_target_tokens": 441
     },
     {
       "task_id": "ontology-version-bump",
@@ -1846,7 +1996,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.2-candidate.json#behavior-v0.2-candidate",
         "data/ontology/behavior-v0.1.json#behavior-v0.1"
-      ]
+      ],
+      "oracle_file_tokens": 441,
+      "on_target_tokens": 441
     },
     {
       "task_id": "ontology-version-bump",
@@ -1871,7 +2023,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#behavior-v0.1",
         "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
-      ]
+      ],
+      "oracle_file_tokens": 1151,
+      "on_target_tokens": 1151
     },
     {
       "task_id": "ontology-version-bump",
@@ -1890,7 +2044,9 @@
       "target_precision": 0.0548,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 862,
+      "on_target_tokens": 862
     },
     {
       "task_id": "ontology-version-bump",
@@ -1909,7 +2065,9 @@
       "target_precision": 0.0555,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 862,
+      "on_target_tokens": 862
     },
     {
       "task_id": "ontology-version-bump",
@@ -1928,7 +2086,9 @@
       "target_precision": 0.0548,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 862,
+      "on_target_tokens": 862
     },
     {
       "task_id": "ontology-version-bump",
@@ -1951,7 +2111,9 @@
       ],
       "missed_targets": [
         "data/pilot/v0.1/pilot-manifest.json#behavior-v0.1"
-      ]
+      ],
+      "oracle_file_tokens": 249,
+      "on_target_tokens": 249
     },
     {
       "task_id": "ontology-version-bump",
@@ -1970,7 +2132,9 @@
       "target_precision": 0.6385,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 9464,
+      "on_target_tokens": 9464
     },
     {
       "task_id": "ontology-version-bump",
@@ -1989,7 +2153,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 9464,
+      "on_target_tokens": 9464
     },
     {
       "task_id": "ontology-version-bump",
@@ -2008,7 +2174,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 3082,
+      "on_target_tokens": 3082
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2033,7 +2201,9 @@
       "missed_targets": [
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
         "src/annotation-web/src/Domain.hs#labelCode"
-      ]
+      ],
+      "oracle_file_tokens": 3834,
+      "on_target_tokens": 3834
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2060,7 +2230,9 @@
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
         "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE",
         "src/annotation-web/src/Domain.hs#labelCode"
-      ]
+      ],
+      "oracle_file_tokens": 0,
+      "on_target_tokens": 0
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2084,7 +2256,9 @@
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE",
         "src/annotation-web/src/Domain.hs#labelCode"
-      ]
+      ],
+      "oracle_file_tokens": 1530,
+      "on_target_tokens": 449
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2105,7 +2279,9 @@
       "missed_files": [],
       "missed_targets": [
         "src/annotation-web/src/Domain.hs#labelCode"
-      ]
+      ],
+      "oracle_file_tokens": 2436,
+      "on_target_tokens": 1355
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2126,7 +2302,9 @@
       "missed_files": [],
       "missed_targets": [
         "src/annotation-web/src/Domain.hs#labelCode"
-      ]
+      ],
+      "oracle_file_tokens": 3566,
+      "on_target_tokens": 2040
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2147,7 +2325,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE"
-      ]
+      ],
+      "oracle_file_tokens": 1252,
+      "on_target_tokens": 1175
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2168,7 +2348,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE"
-      ]
+      ],
+      "oracle_file_tokens": 1252,
+      "on_target_tokens": 1175
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2189,7 +2371,9 @@
       "missed_files": [],
       "missed_targets": [
         "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE"
-      ]
+      ],
+      "oracle_file_tokens": 1252,
+      "on_target_tokens": 1175
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2213,7 +2397,9 @@
       "missed_targets": [
         "src/RelationshipFix.Evaluation/Slice/RuleStubAnnotator.cs#Rules",
         "data/ontology/behavior-v0.1.json#B.PRESSURE_FOR_CHANGE"
-      ]
+      ],
+      "oracle_file_tokens": 500,
+      "on_target_tokens": 423
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2232,7 +2418,9 @@
       "target_precision": 0.6177,
       "truncated": true,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 8658,
+      "on_target_tokens": 8658
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2251,7 +2439,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 8658,
+      "on_target_tokens": 8658
     },
     {
       "task_id": "pressure-missing-implementation",
@@ -2270,7 +2460,9 @@
       "target_precision": 1.0,
       "truncated": false,
       "missed_files": [],
-      "missed_targets": []
+      "missed_targets": [],
+      "oracle_file_tokens": 2335,
+      "on_target_tokens": 2335
     }
   ]
 }
