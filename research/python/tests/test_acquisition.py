@@ -17,6 +17,7 @@ from calibration.acquisition import (
     MAX_PROMPTS_PER_DAY,
     MAX_RECALL_AGE_HOURS,
     UNPRODUCTIVE_ANSWER_LIMIT,
+    UNPRODUCTIVE_BACKOFF_DAYS,
     AcquisitionMode,
     CalibrationCandidate,
     ConversationState,
@@ -27,13 +28,15 @@ from calibration.acquisition import (
     RequestDecision,
     evaluate,
     information_value,
-    issue,
     may_disclose_to_partner,
     produces_observation,
     register_outcome,
+    try_issue,
+    unproductive_for,
 )
 from calibration.model import (
     EstimatorKind,
+    UnproductiveReason,
     ObserverEstimate,
     RecipientFeedback,
     ReferenceFrame,
@@ -97,7 +100,7 @@ class NoPromptChangesBeliefTests(unittest.TestCase):
     def test_issuing_a_prompt_creates_no_observation(self):
         state = RecipientState("r")
         before = build_profile("r", [])
-        issue(candidate(), state, 10.0)
+        try_issue(candidate(), state, CALM, None, 10.0)
         self.assertEqual(build_profile("r", []).signals, before.signals)
 
     def test_three_of_four_outcomes_produce_nothing(self):
@@ -109,7 +112,7 @@ class NoPromptChangesBeliefTests(unittest.TestCase):
         records = [diverge(f"e{i}", at=float(i)) for i in range(4)]
         state = RecipientState("r")
         for hour in (100.0, 130.0):
-            issue(candidate(f"ignored{hour}", at=hour), state, hour)
+            try_issue(candidate(f"ignored{hour}", at=hour), state, CALM, None, hour)
             register_outcome(state, PromptOutcome.IGNORED, hour)
         self.assertEqual(build_profile("r", records).signals,
                          build_profile("r", records).signals)
@@ -132,13 +135,15 @@ class NoPromptChangesBeliefTests(unittest.TestCase):
 class SamplingOnceTests(unittest.TestCase):
     def test_the_same_event_cannot_be_asked_about_twice(self):
         state = RecipientState("r")
-        issue(candidate("e1"), state, 2.0)
-        with self.assertRaises(ValueError):
-            issue(candidate("e1"), state, 40.0)
+        _, first = try_issue(candidate("e1"), state, CALM, None, 2.0)
+        self.assertIsNotNone(first)
+        _, second = try_issue(candidate("e1"), state, CALM, None, 40.0)
+        self.assertIsNone(second)
+        self.assertEqual(len(state.prompts_sent_at), 1)
 
     def test_an_already_sampled_event_is_denied_not_deferred(self):
         state = RecipientState("r")
-        issue(candidate("e1"), state, 2.0)
+        try_issue(candidate("e1"), state, CALM, None, 2.0)
         verdict = evaluate(candidate("e1"), state, CALM, None, 30.0)
         self.assertIs(verdict.decision, RequestDecision.DO_NOT_ASK)
         self.assertIn(DenyReason.ALREADY_SAMPLED, verdict.reasons)
@@ -191,7 +196,7 @@ class HardDenyTests(unittest.TestCase):
 class BudgetTests(unittest.TestCase):
     def test_one_prompt_a_day(self):
         state = RecipientState("r")
-        issue(candidate("e1"), state, 9.0)
+        try_issue(candidate("e1"), state, CALM, None, 9.0)
         verdict = evaluate(candidate("e2"), state, CALM, None, 14.0)
         self.assertIs(verdict.decision, RequestDecision.ASK_LATER)
         self.assertIn(DenyReason.PROMPT_BUDGET_SPENT, verdict.reasons)
@@ -199,7 +204,7 @@ class BudgetTests(unittest.TestCase):
 
     def test_the_next_day_reopens_the_budget(self):
         state = RecipientState("r")
-        issue(candidate("e1"), state, 9.0)
+        try_issue(candidate("e1"), state, CALM, None, 9.0)
         verdict = evaluate(candidate("e2", at=33.0), state, CALM, None, 34.0)
         self.assertIs(verdict.decision, RequestDecision.ELIGIBLE_NOW)
 
@@ -219,13 +224,16 @@ class BudgetTests(unittest.TestCase):
         self.assertIsNone(state.backoff_until)
         self.assertEqual(state.answered_count, 1)
 
-    def test_answers_that_teach_nothing_stop_the_asking(self):
-        """The flat responder: prompted daily, answers every time, yields no evidence."""
-        state = RecipientState("r", answered_count=UNPRODUCTIVE_ANSWER_LIMIT)
-        empty = build_profile("r", [])
-        verdict = evaluate(candidate("e9", at=50.0), state, CALM, empty, 51.0)
-        self.assertIs(verdict.decision, RequestDecision.DO_NOT_ASK)
-        self.assertIn(DenyReason.NO_LEARNABLE_SIGNAL, verdict.reasons)
+    def test_a_prompt_created_only_through_the_atomic_operation(self):
+        """A caller cannot skip evaluate's gates, safety included."""
+        self.assertFalse(hasattr(acquisition, "issue"))
+        state = RecipientState("r")
+        verdict, prompt = try_issue(candidate(), state, ConversationState(safety_flag=True),
+                                    None, 2.0)
+        self.assertIsNone(prompt)
+        self.assertIn(DenyReason.SAFETY_CONCERN, verdict.reasons)
+        self.assertEqual(state.prompts_sent_at, [])
+        self.assertEqual(state.sampled_event_ids, set())
 
     def test_a_prompt_carries_at_most_two_items(self):
         self.assertEqual(Prompt("p", "r", "e1", 0.0).items, 2)
@@ -261,6 +269,112 @@ class InformationValueTests(unittest.TestCase):
         profile = build_profile("r", [diverge(f"e{i}", at=float(i)) for i in range(2)])
         value, _ = information_value(candidate(), profile)
         self.assertGreater(value, acquisition.INFORMATION_VALUE_FLOOR)
+
+
+class UnproductiveTests(unittest.TestCase):
+    """The v0 rule was permanent, global and blind to which side was missing."""
+
+    def _flat_recipient_profile(self):
+        estimate = lambda i: ObserverEstimate(f"e{i}", "r", "terse_acknowledgement",
+                                              float(1 + i), "m", EstimatorKind.MODEL, float(i))
+        records = []
+        seen = []
+        for i in range(6):
+            fb = RecipientFeedback(f"e{i}", "r", "FELT_HEARD", 6.0, (1.0, 7.0), float(i), True)
+            records.append(record_divergence(estimate(i), fb, ReferenceFrame("m", SPREAD),
+                                             ReferenceFrame("r", tuple(seen))))
+            seen.append(6.0)
+        return build_profile("r", records)
+
+    def test_a_flat_recipient_frame_stops_every_signature(self):
+        """The recipient's frame is global by construction: one person, one set
+        of their own answers. Stopping on it is a statement about that
+        distribution, not about a personality."""
+        profile = self._flat_recipient_profile()
+        self.assertIs(profile.dominant_insufficiency_reason(), UnproductiveReason.RECIPIENT_FRAME_FLAT)
+        state = RecipientState("r", answered_count=UNPRODUCTIVE_ANSWER_LIMIT)
+        stopped, reason = unproductive_for("apology", state, profile, 100.0)
+        self.assertTrue(stopped)
+        self.assertIs(reason, UnproductiveReason.RECIPIENT_FRAME_FLAT)
+
+    def test_a_flat_observer_frame_stops_only_that_signature(self):
+        records = [diverge(f"e{i}", at=float(i)) for i in range(4)]
+        estimate = ObserverEstimate("f0", "r", "apology", 5.5, "m", EstimatorKind.MODEL, 20.0)
+        fb = RecipientFeedback("f0", "r", "FELT_HEARD", 5.0, (1.0, 7.0), 20.0, True)
+        records.append(record_divergence(estimate, fb, ReferenceFrame("m", (2.0, 2.0, 2.0, 2.0)),
+                                         ReferenceFrame("r", SPREAD)))
+        profile = build_profile("r", records)
+        self.assertIsNone(profile.dominant_insufficiency_reason())   # there IS evidence
+        state = RecipientState("r", answered_by_signature={"apology": UNPRODUCTIVE_ANSWER_LIMIT})
+        stopped, reason = unproductive_for("apology", state, profile, 100.0)
+        self.assertTrue(stopped)
+        self.assertIs(reason, UnproductiveReason.OBSERVER_FRAME_FLAT)
+        self.assertFalse(unproductive_for("terse_acknowledgement", state, profile, 100.0)[0])
+
+    def test_the_stop_expires_and_leaves_one_probe(self):
+        profile = self._flat_recipient_profile()
+        state = RecipientState("r", answered_count=UNPRODUCTIVE_ANSWER_LIMIT)
+        verdict, prompt = try_issue(candidate("e9", at=100.0), state, CALM, profile, 100.0)
+        self.assertIsNone(prompt)
+        self.assertIn(DenyReason.NO_LEARNABLE_SIGNAL, verdict.reasons)
+        self.assertEqual(state.unproductive_until[acquisition.ALL_SIGNATURES],
+                         100.0 + UNPRODUCTIVE_BACKOFF_DAYS * 24)
+
+        still = 100.0 + UNPRODUCTIVE_BACKOFF_DAYS * 24 - 1
+        self.assertTrue(unproductive_for("terse_acknowledgement", state, profile, still)[0])
+
+        later = 100.0 + UNPRODUCTIVE_BACKOFF_DAYS * 24 + 1
+        self.assertFalse(unproductive_for("terse_acknowledgement", state, profile, later)[0])
+        _, probe = try_issue(candidate("e10", at=later - 1), state, CALM, profile, later)
+        self.assertIsNotNone(probe)
+
+    def test_one_more_unproductive_answer_re_arms_the_stop(self):
+        profile = self._flat_recipient_profile()
+        state = RecipientState("r", answered_count=UNPRODUCTIVE_ANSWER_LIMIT)
+        try_issue(candidate("e9", at=100.0), state, CALM, profile, 100.0)
+        self.assertEqual(state.answered_count, UNPRODUCTIVE_ANSWER_LIMIT - 1)
+        register_outcome(state, PromptOutcome.ANSWERED, 200.0, "terse_acknowledgement")
+        self.assertEqual(state.answered_count, UNPRODUCTIVE_ANSWER_LIMIT)
+
+    def test_a_person_never_asked_again_forever_is_not_possible(self):
+        """The v0 rule was self-sealing: passive prompts off means evidence_count
+        can never leave zero on its own."""
+        profile = self._flat_recipient_profile()
+        state = RecipientState("r", answered_count=UNPRODUCTIVE_ANSWER_LIMIT)
+        try_issue(candidate("e9", at=100.0), state, CALM, profile, 100.0)
+        self.assertTrue(all(v != float("inf") for v in state.unproductive_until.values()))
+
+
+class ProvenanceTests(unittest.TestCase):
+    """Closing outcome-dependent SELECTION does not close outcome-dependent
+    RESPONSE. v0 stores enough to see the problem, and corrects for nothing."""
+
+    def test_the_selection_and_the_response_are_both_recorded(self):
+        state = RecipientState("r", mode=AcquisitionMode.END_OF_DAY_SAMPLE)
+        try_issue(candidate("e1", at=1.0), state, CALM, None, 3.0)
+        register_outcome(state, PromptOutcome.ANSWERED, 9.0, "terse_acknowledgement", "e1")
+        entry, = state.acquisition_log
+        self.assertEqual(entry.mode, AcquisitionMode.END_OF_DAY_SAMPLE)
+        self.assertEqual(entry.information_value_at_selection, 1.0)
+        self.assertEqual(entry.move_signature, "terse_acknowledgement")
+        self.assertEqual((entry.occurred_at, entry.selected_at, entry.prompt_sent_at), (1.0, 3.0, 3.0))
+        self.assertIs(entry.outcome, PromptOutcome.ANSWERED)
+        self.assertEqual(entry.response_latency_hours, 6.0)
+
+    def test_an_unanswered_prompt_has_no_latency_rather_than_a_zero(self):
+        state = RecipientState("r")
+        try_issue(candidate("e1", at=1.0), state, CALM, None, 3.0)
+        register_outcome(state, PromptOutcome.IGNORED, 30.0, "terse_acknowledgement", "e1")
+        entry, = state.acquisition_log
+        self.assertIs(entry.outcome, PromptOutcome.IGNORED)
+        self.assertIsNone(entry.response_latency_hours)
+
+    def test_provenance_is_stored_and_never_weighs_anything(self):
+        for module in (policy, model):
+            source = Path(module.__file__).read_text(encoding="utf-8")
+            for field_name in ("information_value_at_selection", "response_latency",
+                               "acquisition_log", "AcquisitionRecord"):
+                self.assertNotIn(field_name, source)
 
 
 class OwnershipTests(unittest.TestCase):
@@ -349,7 +463,18 @@ class SimulationTests(unittest.TestCase):
         run = budget_demo.simulate(scenario, AcquisitionMode.END_OF_DAY_SAMPLE)
         self.assertEqual(run.answered, run.prompts)
         self.assertEqual(build_profile(scenario.name, run.records).evidence_count, 0)
-        self.assertLessEqual(run.prompts, UNPRODUCTIVE_ANSWER_LIMIT + 1)
+        # stopped early, but nowhere near the 21 daily prompts of the first version
+        self.assertLess(run.prompts, 12)
+
+    def test_the_stop_does_not_fire_where_the_observer_side_is_the_flat_one(self):
+        """active_chat keeps learning; only the burden-without-information case
+        is cut short."""
+        from calibration import budget_demo
+
+        scenario = next(s for s in budget_demo.SCENARIOS if s.name == "active_chat")
+        run = budget_demo.simulate(scenario, AcquisitionMode.END_OF_DAY_SAMPLE)
+        self.assertEqual(run.prompts, 21)
+        self.assertGreater(build_profile(scenario.name, run.records).evidence_count, 10)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from .model import (
     PROVENANCE,
+    SkippedObservation,
     CalibrationHypothesis,
     CalibrationSignal,
     DivergenceDirection,
@@ -167,7 +168,8 @@ def build_profile(
     used = []
     for record in sorted(records, key=lambda r: (r.observed_at, r.event_id)):
         if not record.is_evidence:
-            skipped.append(record.event_id)
+            skipped.append(SkippedObservation(record.event_id, record.move_signature,
+                                              record.insufficiency_reason))
             continue
         by_signature.setdefault(record.move_signature, []).append(record)
         used.append(record.event_id)

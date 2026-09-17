@@ -89,6 +89,33 @@ class DivergenceDirection(str, Enum):
     INSUFFICIENT_REFERENCE = "insufficient_reference"
 
 
+class UnproductiveReason(str, Enum):
+    """WHY a comparison could not be made. Never collapsed into one verdict.
+
+    `evidence_count == 0` does not mean "this person is flat". A missing
+    position can come from either side, and folding all of them into "asking
+    this person is pointless" draws a conclusion about a personality from four
+    missing numbers -- exactly the move this architecture exists to refuse.
+    """
+
+    RECIPIENT_FRAME_FLAT = "recipient_frame_flat"
+    OBSERVER_FRAME_FLAT = "observer_frame_flat"
+    BOTH_FRAMES_INSUFFICIENT = "both_frames_insufficient"
+
+
+@dataclass(frozen=True, slots=True)
+class SkippedObservation:
+    """A comparison that could not be made, with its reason kept.
+
+    The v0 profile stored bare event ids here, which threw away the one thing a
+    later decision needs: whose side was missing.
+    """
+
+    event_id: str
+    move_signature: str
+    reason: UnproductiveReason
+
+
 class Tier(str, Enum):
     """How much a body of evidence is allowed to be used for.
 
@@ -223,6 +250,17 @@ class DivergenceRecord:
         """Only a resolved comparison is evidence. INSUFFICIENT_REFERENCE is not."""
         return self.direction is not DivergenceDirection.INSUFFICIENT_REFERENCE
 
+    @property
+    def insufficiency_reason(self) -> UnproductiveReason | None:
+        """Which side had no distribution. None when the comparison was made."""
+        if self.is_evidence:
+            return None
+        if self.observer_position is None and self.recipient_position is None:
+            return UnproductiveReason.BOTH_FRAMES_INSUFFICIENT
+        if self.observer_position is None:
+            return UnproductiveReason.OBSERVER_FRAME_FLAT
+        return UnproductiveReason.RECIPIENT_FRAME_FLAT
+
 
 def record_divergence(
     observer: ObserverEstimate,
@@ -347,8 +385,8 @@ class PersonalCalibrationProfile:
     recipient: str
     signals: tuple[CalibrationSignal, ...]
     hypotheses: tuple[CalibrationHypothesis, ...] = ()
-    built_from: tuple[str, ...] = ()          # event ids of every record used
-    skipped_insufficient: tuple[str, ...] = ()  # seen, but no established frame
+    built_from: tuple[str, ...] = ()                       # event ids of every record used
+    skipped_insufficient: tuple[SkippedObservation, ...] = ()  # seen, no established frame
 
     # -- the brief's fields, as views -------------------------------------
 
@@ -387,6 +425,32 @@ class PersonalCalibrationProfile:
         """Widest band across signals. No single number stands for the person."""
         return max((s.uncertainty_width for s in self.signals), default=None)
 
+    def evidence_for(self, move_signature: str) -> int:
+        signal = self.signal_for(move_signature)
+        if signal is None:
+            return 0
+        return len(signal.supporting) + len(signal.contradicting)
+
+    def dominant_insufficiency_reason(self) -> UnproductiveReason | None:
+        """The reason across ALL signatures, when there is no evidence at all."""
+        if self.evidence_count > 0 or not self.skipped_insufficient:
+            return None
+        reasons = [s.reason for s in self.skipped_insufficient]
+        return max(sorted(set(reasons), key=lambda r: r.value), key=reasons.count)
+
+    def unproductive_reason(self, move_signature: str) -> UnproductiveReason | None:
+        """Why this move signature has produced nothing, if it has produced nothing.
+
+        None means either that it HAS produced evidence, or that we have never
+        seen it -- two different things, neither of which is "unproductive".
+        """
+        if self.evidence_for(move_signature) > 0:
+            return None
+        reasons = [s.reason for s in self.skipped_insufficient if s.move_signature == move_signature]
+        if not reasons:
+            return None
+        return max(sorted(set(reasons), key=lambda r: r.value), key=reasons.count)
+
     def signal_for(self, move_signature: str) -> CalibrationSignal | None:
         for signal in self.signals:
             if signal.move_signature == move_signature:
@@ -398,7 +462,10 @@ class PersonalCalibrationProfile:
             "recipient": self.recipient,
             "evidence_count": self.evidence_count,
             "built_from": list(self.built_from),
-            "skipped_insufficient": list(self.skipped_insufficient),
+            "skipped_insufficient": [
+                {"event_id": s.event_id, "move_signature": s.move_signature, "reason": s.reason.value}
+                for s in self.skipped_insufficient
+            ],
             "policy_provenance": PROVENANCE,
             "signals": [
                 {

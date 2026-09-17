@@ -143,7 +143,8 @@ class ReferenceFrameTests(unittest.TestCase):
 class SkippingTests(unittest.TestCase):
     def test_insufficient_records_are_skipped_not_counted_as_agreement(self):
         profile = build_profile("r", [diverge("e1", recipient_frame=FLAT), diverge("e2", at=1.0)])
-        self.assertEqual(profile.skipped_insufficient, ("e1",))
+        self.assertEqual([s.event_id for s in profile.skipped_insufficient], ["e1"])
+        self.assertEqual(profile.skipped_insufficient[0].reason.value, "recipient_frame_flat")
         self.assertEqual(profile.built_from, ("e2",))
         self.assertEqual(profile.evidence_count, 1)
 
@@ -307,6 +308,31 @@ class ReadingTests(unittest.TestCase):
         payload = build_profile("r", [diverge("e0")]).to_jsonable()
         self.assertEqual(payload["policy_provenance"], model.PROVENANCE)
         self.assertEqual(payload["policy_provenance"], "synthetic_placeholder")
+
+
+class InsufficiencyReasonTests(unittest.TestCase):
+    """evidence_count == 0 does not mean the person is flat."""
+
+    def test_the_missing_side_is_named(self):
+        recipient_flat = diverge("e1", recipient_frame=FLAT)
+        observer_flat = diverge("e2", observer_frame=FLAT)
+        both = diverge("e3", observer_frame=FLAT, recipient_frame=FLAT)
+        self.assertEqual(recipient_flat.insufficiency_reason.value, "recipient_frame_flat")
+        self.assertEqual(observer_flat.insufficiency_reason.value, "observer_frame_flat")
+        self.assertEqual(both.insufficiency_reason.value, "both_frames_insufficient")
+        self.assertIsNone(diverge("e4").insufficiency_reason)
+
+    def test_a_flat_observer_is_not_a_fact_about_the_person(self):
+        profile = build_profile("r", [diverge(f"e{i}", observer_frame=FLAT, at=float(i))
+                                      for i in range(4)])
+        self.assertEqual(profile.evidence_count, 0)
+        self.assertEqual(profile.dominant_insufficiency_reason().value, "observer_frame_flat")
+
+    def test_a_signature_never_seen_is_not_unproductive(self):
+        profile = build_profile("r", [diverge(f"e{i}", at=float(i)) for i in range(4)])
+        self.assertIsNone(profile.unproductive_reason("apology"))
+        self.assertIsNone(profile.unproductive_reason("terse_acknowledgement"))
+        self.assertEqual(profile.evidence_for("terse_acknowledgement"), 4)
 
 
 class ProfileViewTests(unittest.TestCase):

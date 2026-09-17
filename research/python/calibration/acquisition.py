@@ -48,7 +48,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .model import PROVENANCE, ObserverEstimate, PersonalCalibrationProfile, Tier
+from .model import (
+    PROVENANCE,
+    ObserverEstimate,
+    PersonalCalibrationProfile,
+    Tier,
+    UnproductiveReason,
+)
 
 # ---------------------------------------------------------------------------
 # product-spike constants
@@ -73,12 +79,22 @@ BACKOFF_DAYS = 7
 MAX_ITEMS_PER_PROMPT = 2
 #: Below this, asking costs the person more than it buys the calibration.
 INFORMATION_VALUE_FLOOR = 0.3
-#: If this many answers have produced no usable evidence at all, stop asking.
-#: Found by the simulation rather than designed: a recipient whose own reference
-#: frame never establishes (see budget_demo's `flat_responder`) can be prompted
-#: every day for three weeks, answer every time, and teach the system nothing.
-#: Burden without information is the worst cell in the table.
+#: If this many answers about ONE move signature have produced no usable
+#: evidence, stop asking about THAT signature. Found by the simulation rather
+#: than designed: a recipient whose reference frame never establishes (see
+#: budget_demo's `flat_responder`) can be prompted every day for three weeks,
+#: answer every time, and teach the system nothing. Burden without information
+#: is the worst cell in the table.
 UNPRODUCTIVE_ANSWER_LIMIT = 6
+#: …and then we wait this long and try ONCE more. The v0 rule was permanent and
+#: self-sealing: with passive prompts switched off, evidence_count could never
+#: leave zero on its own, so a person who happened to start flat was retired
+#: from calibration forever by four missing numbers.
+UNPRODUCTIVE_BACKOFF_DAYS = 30
+#: Key under which a stop applies to every signature at once. Used only when the
+#: RECIPIENT's own frame is what is flat, because that frame is global by
+#: construction: one person, one set of their own prior answers.
+ALL_SIGNATURES = "*"
 
 # ---------------------------------------------------------------------------
 # what a person is actually shown
@@ -174,10 +190,19 @@ class RecipientState:
     mode: AcquisitionMode = AcquisitionMode.DELAYED_EVENT_SAMPLE
     prompts_sent_at: list[float] = field(default_factory=list)
     answered_count: int = 0
+    #: Answers per move signature. Global counting would conclude from six rows
+    #: that a person is uninformative in general, when they may simply answer
+    #: every terse acknowledgement the same way and distinguish apologies fine.
+    answered_by_signature: dict[str, int] = field(default_factory=dict)
     ignored_streak: int = 0
     snoozed_until: float | None = None
     sampled_event_ids: set[str] = field(default_factory=set)
     backoff_until: float | None = None
+    #: move signature -> when we may probe it again, and why we stopped.
+    unproductive_until: dict[str, float] = field(default_factory=dict)
+    unproductive_reason: dict[str, UnproductiveReason] = field(default_factory=dict)
+    #: Full selection/response provenance. Stored, never used as a weight.
+    acquisition_log: list = field(default_factory=list)
 
     def prompts_on_day(self, hour: float) -> int:
         day = int(hour // 24)
@@ -199,6 +224,40 @@ class RequestVerdict:
     @property
     def eligible(self) -> bool:
         return self.decision is RequestDecision.ELIGIBLE_NOW
+
+
+def unproductive_for(
+    move_signature: str,
+    state: RecipientState,
+    profile: PersonalCalibrationProfile | None,
+    now: float,
+) -> tuple[bool, UnproductiveReason | None]:
+    """Is asking about THIS signature currently pointless, and why.
+
+    Pure: reads state, never writes it. Three properties the v0 rule lacked —
+    it is per signature, it carries the reason, and it expires.
+    """
+    for key in (ALL_SIGNATURES, move_signature):
+        until = state.unproductive_until.get(key)
+        if until is not None:
+            if now < until:
+                return True, state.unproductive_reason.get(key)
+            return False, None                # probe window is open again
+
+    # A flat RECIPIENT frame is the one genuinely global fact here: a person has
+    # ONE distribution of their own answers, shared by every signature. So a
+    # global stop is a statement about that distribution, not about a
+    # personality. A flat OBSERVER frame is not about the person at all, and is
+    # scoped to the signature it showed up in.
+    if (profile is not None
+            and state.answered_count >= UNPRODUCTIVE_ANSWER_LIMIT
+            and profile.dominant_insufficiency_reason() is UnproductiveReason.RECIPIENT_FRAME_FLAT):
+        return True, UnproductiveReason.RECIPIENT_FRAME_FLAT
+
+    if state.answered_by_signature.get(move_signature, 0) < UNPRODUCTIVE_ANSWER_LIMIT:
+        return False, None
+    reason = profile.unproductive_reason(move_signature) if profile else None
+    return (reason is not None), reason
 
 
 def information_value(
@@ -264,7 +323,7 @@ def evaluate(
         deny.append(DenyReason.EVENT_TOO_OLD)
     if value < INFORMATION_VALUE_FLOOR:
         deny.append(DenyReason.NO_INFORMATION_VALUE)
-    if state.answered_count >= UNPRODUCTIVE_ANSWER_LIMIT and (profile is None or profile.evidence_count == 0):
+    if unproductive_for(candidate.estimate.move_signature, state, profile, now)[0]:
         deny.append(DenyReason.NO_LEARNABLE_SIGNAL)
 
     # --- timing: these say "not yet", which is a different answer ---
@@ -317,8 +376,45 @@ class Prompt:
             raise ValueError(f"a check-in carries at most {MAX_ITEMS_PER_PROMPT} items")
 
 
-def issue(candidate: CalibrationCandidate, state: RecipientState, now: float) -> Prompt:
-    """Record that we asked. Mutates only the asking state, never any belief."""
+@dataclass
+class AcquisitionRecord:
+    """How one observation came to exist, or failed to.
+
+    Kept because closing outcome-dependent SELECTION does not close
+    outcome-dependent RESPONSE: we control P(selected | eventual feedback), and
+    we do not control P(answered | latent impact, selected). Somebody may be
+    likelier to rate an exchange precisely because it went badly, or likelier to
+    skip it for the same reason.
+
+    v0 does not correct for this and should not: it stores enough to SEE the
+    problem later. None of these fields is ever used as an evidence weight.
+    """
+
+    event_id: str
+    recipient: str
+    move_signature: str
+    mode: AcquisitionMode
+    information_value_at_selection: float
+    occurred_at: float
+    selected_at: float
+    prompt_sent_at: float
+    outcome: PromptOutcome | None = None
+    answered_at: float | None = None
+
+    @property
+    def response_latency_hours(self) -> float | None:
+        if self.answered_at is None:
+            return None
+        return self.answered_at - self.prompt_sent_at
+
+
+def _issue_unchecked(candidate: CalibrationCandidate, state: RecipientState, now: float) -> Prompt:
+    """Mutate the asking state and build the prompt. Private on purpose.
+
+    Callers go through `try_issue`, which evaluates and issues atomically. A
+    public issue() let a caller skip every gate in `evaluate` — safety included —
+    and also left a TOCTOU window between deciding and asking.
+    """
     if candidate.event_id in state.sampled_event_ids:
         raise ValueError("an event is asked about once; a second ask is a second sample of one answer")
     state.sampled_event_ids.add(candidate.event_id)
@@ -331,7 +427,60 @@ def issue(candidate: CalibrationCandidate, state: RecipientState, now: float) ->
     )
 
 
-def register_outcome(state: RecipientState, outcome: PromptOutcome, now: float) -> None:
+def try_issue(
+    candidate: CalibrationCandidate,
+    state: RecipientState,
+    conversation: ConversationState,
+    profile: PersonalCalibrationProfile | None,
+    now: float,
+) -> tuple[RequestVerdict, Prompt | None]:
+    """Evaluate and ask in one operation. The only way a prompt is created.
+
+    On a NO_LEARNABLE_SIGNAL denial this also arms the reversible backoff, so
+    the rule that stops the asking is the same rule that schedules the retry.
+    """
+    verdict = evaluate(candidate, state, conversation, profile, now)
+    signature = candidate.estimate.move_signature
+
+    if DenyReason.NO_LEARNABLE_SIGNAL in verdict.reasons:
+        _, reason = unproductive_for(signature, state, profile, now)
+        key = ALL_SIGNATURES if reason is UnproductiveReason.RECIPIENT_FRAME_FLAT else signature
+        if key not in state.unproductive_until:
+            state.unproductive_until[key] = now + UNPRODUCTIVE_BACKOFF_DAYS * 24
+            if reason is not None:
+                state.unproductive_reason[key] = reason
+            # one probe when the window opens, not another six
+            if key is ALL_SIGNATURES:
+                state.answered_count = UNPRODUCTIVE_ANSWER_LIMIT - 1
+            else:
+                state.answered_by_signature[key] = UNPRODUCTIVE_ANSWER_LIMIT - 1
+
+    if not verdict.eligible:
+        return verdict, None
+
+    prompt = _issue_unchecked(candidate, state, now)
+    state.unproductive_until.pop(signature, None)
+    state.unproductive_until.pop(ALL_SIGNATURES, None)
+    state.acquisition_log.append(AcquisitionRecord(
+        event_id=candidate.event_id,
+        recipient=candidate.recipient,
+        move_signature=signature,
+        mode=state.mode,
+        information_value_at_selection=verdict.information_value,
+        occurred_at=candidate.occurred_at,
+        selected_at=now,
+        prompt_sent_at=prompt.sent_at,
+    ))
+    return verdict, prompt
+
+
+def register_outcome(
+    state: RecipientState,
+    outcome: PromptOutcome,
+    now: float,
+    move_signature: str | None = None,
+    event_id: str | None = None,
+) -> None:
     """Silence is information about the prompting, never about the partner."""
     if outcome in (PromptOutcome.IGNORED, PromptOutcome.EXPIRED):
         state.ignored_streak += 1
@@ -342,6 +491,16 @@ def register_outcome(state: RecipientState, outcome: PromptOutcome, now: float) 
         state.ignored_streak = 0
         if outcome is PromptOutcome.ANSWERED:
             state.answered_count += 1
+            if move_signature is not None:
+                state.answered_by_signature[move_signature] = (
+                    state.answered_by_signature.get(move_signature, 0) + 1)
+
+    for record in reversed(state.acquisition_log):
+        if event_id is None or record.event_id == event_id:
+            if record.outcome is None:
+                record.outcome = outcome
+                record.answered_at = now if outcome is PromptOutcome.ANSWERED else None
+            break
 
 
 def produces_observation(outcome: PromptOutcome) -> bool:

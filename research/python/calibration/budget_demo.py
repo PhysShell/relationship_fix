@@ -25,9 +25,9 @@ from .acquisition import (
     RequestDecision,
     evaluate,
     information_value,
-    issue,
     produces_observation,
     register_outcome,
+    try_issue,
 )
 from .demo import OBSERVER_READING, PERSONAS, RECIPIENT_SCALE
 from .model import (
@@ -158,6 +158,7 @@ def simulate(scenario: Scenario, mode: AcquisitionMode) -> Run:
             pool = [(marker, scenario.events[marker])]
 
         best = None
+        best_conversation = None
         for index, event in pool:
             candidate = CalibrationCandidate(
                 event_id=f"{scenario.name}-e{index:03d}",
@@ -169,18 +170,32 @@ def simulate(scenario: Scenario, mode: AcquisitionMode) -> Run:
                 occurred_at=event.hour,
                 recipient_participated=event.participated,
             )
-            verdict = evaluate(candidate, state, _conversation_at(scenario.events, index, now),
-                               profile, now)
+            conversation = _conversation_at(scenario.events, index, now)
+            verdict = evaluate(candidate, state, conversation, profile, now)
             if verdict.decision is not RequestDecision.ELIGIBLE_NOW:
                 continue
             value, _ = information_value(candidate, profile)
             if best is None or value > best[0]:
                 best = (value, candidate)
+                best_conversation = conversation
 
         if best is None:
+            # nothing eligible: still let the policy arm any reversible backoff
+            # it owes, which only try_issue may do.
+            for index, event in pool:
+                probe = CalibrationCandidate(
+                    event_id=f"{scenario.name}-e{index:03d}", recipient=scenario.name,
+                    estimate=ObserverEstimate(
+                        f"{scenario.name}-e{index:03d}", scenario.name, event.move_signature,
+                        OBSERVER_READING[event.move_signature], "spike-reader-v0",
+                        EstimatorKind.MODEL, event.hour),
+                    occurred_at=event.hour, recipient_participated=event.participated)
+                try_issue(probe, state, _conversation_at(scenario.events, index, now), profile, now)
             continue
 
-        prompt = issue(best[1], state, now)
+        _, prompt = try_issue(best[1], state, best_conversation, profile, now)
+        if prompt is None:
+            continue
         run.prompts += 1
         day = int(now // 24)
         run.prompt_days.add(day)
@@ -189,7 +204,9 @@ def simulate(scenario: Scenario, mode: AcquisitionMode) -> Run:
 
         outcome = _outcome(scenario.responder, sequence)
         sequence += 1
-        register_outcome(state, outcome, now)
+        register_outcome(state, outcome, now,
+                         move_signature=best[1].estimate.move_signature,
+                         event_id=best[1].event_id)
 
         if not produces_observation(outcome):
             if outcome is PromptOutcome.OPTED_OUT:
