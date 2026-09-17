@@ -113,9 +113,43 @@ class TelegramVerdictTests(unittest.TestCase):
         for entry in tg.LEDGER.properties:
             self.assertFalse(entry.demoted, f"{entry.key} was written PARTIAL without a contract")
 
-    def test_the_two_unavailable_properties_are_the_expected_ones(self):
+    def test_the_unavailable_properties_are_the_expected_ones(self):
         keys = {p.key for p in tg.LEDGER.by_status(Status.UNAVAILABLE)}
-        self.assertEqual(keys, {"coverage.window_provenance", "events.deleted"})
+        self.assertEqual(keys, {
+            "coverage.window_provenance", "coverage.completeness",
+            "coverage.requested_range_honored", "provenance.producer_version",
+            "events.deleted",
+        })
+
+    def test_edited_is_not_an_edit_flag(self):
+        """Regression against re-promotion. tdesktop#30647: a reaction creates
+        `edited` on an unedited message and overwrites a real edit time, so the
+        field means "touched after sending" and nothing narrower."""
+        entry = tg.LEDGER.property("events.edited")
+        self.assertIs(entry.status, Status.PARTIAL)
+        self.assertIn("30647", " ".join(entry.primary_evidence))
+        self.assertIn("не попадает во временную шкалу", entry.adapter_behavior)
+
+    def test_the_requested_date_range_is_not_a_coverage_statement(self):
+        entry = tg.LEDGER.property("coverage.requested_range_honored")
+        self.assertIs(entry.status, Status.UNAVAILABLE)
+        for issue in ("5854", "27183"):
+            self.assertIn(issue, " ".join(entry.primary_evidence))
+
+    def test_completeness_has_a_counterexample_not_merely_an_absence(self):
+        """One verified counterexample beats a hundred pages of "usually fine":
+        tdesktop#31328 truncates at exactly 10000 messages in JSON and HTML."""
+        entry = tg.LEDGER.property("coverage.completeness")
+        self.assertIs(entry.status, Status.UNAVAILABLE)
+        self.assertIn("31328", " ".join(entry.primary_evidence))
+        self.assertIn("10000", entry.adapter_behavior)
+
+    def test_the_producer_version_is_required_and_absent(self):
+        """Semantics change between versions, and the file does not say which
+        version wrote it. So the source is not "Telegram Desktop JSON"."""
+        entry = tg.LEDGER.property("provenance.producer_version")
+        self.assertIs(entry.status, Status.UNAVAILABLE)
+        self.assertIn("ВНЕ файла", entry.adapter_behavior)
 
     def test_the_window_cannot_be_taken_from_the_file(self):
         entry = tg.LEDGER.property("coverage.window_provenance")
@@ -131,7 +165,7 @@ class TelegramVerdictTests(unittest.TestCase):
         self.assertEqual(
             {a.key for a in tg.LEDGER.unresolved_assumptions()},
             {"ties_resolvable", "stream_order_is_chronological",
-             "duplicates_can_occur", "no_silent_gaps"},
+             "duplicates_can_occur", "input_is_valid_json"},
         )
 
     def test_every_open_question_names_the_observation_that_would_close_it(self):

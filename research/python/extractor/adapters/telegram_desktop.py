@@ -32,6 +32,11 @@ WRITER = "telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export
 SETTINGS = "telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_settings.h"
 OFFSETS = "core.telegram.org/api/offsets"
 BLOG = "telegram.org/blog/export-and-more"
+#: Verified defect corpus — each opened and read, not taken from a summary.
+I_EDITED = "tdesktop#30647 (2026-05-03, v6.7.8, result.json attached)"
+I_RANGE = "tdesktop#5854 (2019-03-27, v1.6.2, closed) — «ALL the messages are exported»"
+I_LASTDAY = "tdesktop#27183 (2023-12-03, v4.12.2, closed as NOT PLANNED) — последний выбранный день отсутствует"
+I_CAP = "tdesktop#31328 (2026-09-16, v7.2.8, OPEN) — ровно 10000 сообщений, JSON и HTML"
 
 
 def _p(**kw) -> Property:
@@ -49,7 +54,9 @@ COVERAGE = (
         claim_scope=ClaimScope.ARTIFACT,
         primary_evidence=(f"{SETTINGS}:88-89 — `TimeId singlePeerFrom` / `singlePeerTill`",
                           f"{BLOG} — «export some (or all) of your chats»"),
-        observed_limitations=("границы диапазона задаёт человек в момент экспорта",),
+        observed_limitations=("границы диапазона задаёт человек в момент экспорта",
+                              "настройка существует — её соблюдение отдельный вопрос, "
+                              "см. `coverage.requested_range_honored`"),
         downstream_consequence="Содержимое файла — функция выбора пользователя, а не истории.",
         adapter_behavior="Адаптер обязан получать окно извне и не выводить его из файла.",
         fixture_needed="Экспорт одного чата с заданным диапазоном + экспорт без него.",
@@ -74,15 +81,70 @@ COVERAGE = (
     _p(
         key="coverage.completeness",
         question="Можно ли доказать, что в окне нет пропусков?",
-        claim="Не установлено.",
+        claim="Нет, и это не «не установлено»: молчаливое усечение экспорта наблюдалось.",
+        status=Status.UNAVAILABLE,
+        claim_scope=ClaimScope.ARTIFACT,
+        primary_evidence=(I_CAP, I_LASTDAY, f"{BLOG} — о полноте не сказано ничего"),
+        observed_limitations=("#31328 — про private supergroups с отключённой пересылкой; "
+                              "для диадического чата тот же потолок НЕ показан",
+                              "один контрпример опровергает гарантию, но не измеряет частоту"),
+        downstream_consequence="Гарантии полноты нет ни при каком чтении файла. Пропуск в окне "
+                               "неотличим от молчания, а молчание у нас вносит полный H — то есть "
+                               "усечение экспорта выглядит как медленный ответ.",
+        adapter_behavior="Никогда не выводить покрытие из содержимого. Помечать экспорт "
+                         "подозрительным при круглом числе сообщений (10000) и при совпадении "
+                         "первого сообщения с началом окна; отказ, а не тихая обработка.",
+        fixture_needed="Два экспорта одного чата и окна: diff множества id (частота, не гарантия).",
+    ),
+    _p(
+        key="coverage.requested_range_honored",
+        question="Соблюдается ли выбранный диапазон дат?",
+        claim="Не надёжно. Подтверждены отказы обоих краёв в разных версиях.",
+        status=Status.UNAVAILABLE,
+        claim_scope=ClaimScope.ARTIFACT,
+        primary_evidence=(I_RANGE, I_LASTDAY),
+        observed_limitations=("#5854 закрыт, #27183 закрыт как not planned — то есть "
+                              "не «починено», а «не будет»",
+                              "поведение версионно и наблюдалось с 1.6.2 по 4.12.2"),
+        downstream_consequence="UI-диапазон не является утверждением о покрытии — ни слева "
+                               "(могут прийти все сообщения), ни справа (может пропасть "
+                               "последний день). Окно `reentry_burden_H` берётся ТОЛЬКО из "
+                               "протокола, и это теперь не осторожность, а следствие.",
+        adapter_behavior="Игнорировать диапазон экспорта как источник окна; отбор по периоду "
+                         "делает `extract()` из протокольных границ, как сейчас.",
+        fixture_needed="Экспорт с заданным диапазоном: есть ли сообщения вне его.",
+    ),
+    _p(
+        key="provenance.producer_version",
+        question="Известно ли, какая версия клиента произвела файл?",
+        claim="Из файла — нет. Поля версии в выводе не существует.",
+        status=Status.UNAVAILABLE,
+        claim_scope=ClaimScope.ARTIFACT,
+        primary_evidence=(f"{WRITER} — в выводе только свободные строки `about`, поля версии нет",
+                          I_EDITED),
+        observed_limitations=("а семантика между версиями наблюдаемо меняется — #30647",),
+        downstream_consequence="Все статусы этого ledger'а версионно-зависимы, а файл не говорит, "
+                               "к какой версии относится. «Telegram Desktop JSON» — недостаточное "
+                               "имя источника; нужны `producer_version` и платформа.",
+        adapter_behavior="Версия и платформа собираются ВНЕ файла, в момент acquisition, и входят "
+                         "в provenance наравне с согласием. Файл без версии — незаявленная "
+                         "семантика; адаптер обязан это пометить, а не додумать.",
+        fixture_needed="Экспорты с двух разных версий: различимы ли они по содержимому вообще.",
+    ),
+    _p(
+        key="format.strict_json",
+        question="Гарантированно ли валиден выходной JSON?",
+        claim="Не установлено; гарантии в документации нет.",
         status=Status.UNKNOWN,
         claim_scope=ClaimScope.ARTIFACT,
-        primary_evidence=(f"{BLOG} — о полноте не сказано ничего",),
-        observed_limitations=("официальный текст говорит о удобстве доступа к старым "
-                              "сообщениям, а не о гарантии полноты",),
+        primary_evidence=(f"{WRITER} — сериализация ручная, через конкатенацию байтовых блоков, "
+                          "а не через JSON-библиотеку",),
+        observed_limitations=("ручной сериализатор — это класс, в котором ошибки квотирования "
+                              "и дублирующиеся ключи возможны в принципе",),
         downstream_consequence="",
-        adapter_behavior="",
-        fixture_needed="Два экспорта одного чата и окна: посимвольный diff множества id.",
+        adapter_behavior="Строгий разбор; отказ разбора = отказ acquisition, без починки "
+                          "«почти JSON» на лету.",
+        fixture_needed="Строгий разбор всех публичных result.json из багрепортов.",
     ),
 )
 
@@ -228,17 +290,25 @@ EVENTS = (
     _p(
         key="events.edited",
         question="Видны ли правки и меняют ли они время события?",
-        claim="`edited`/`edited_unixtime` присутствуют только у правленых; `date` остаётся "
-              "исходным временем отправки.",
-        status=Status.QUALIFIED,
+        claim="Поля присутствуют, но НЕ означают «контент был отредактирован»: в 6.7.8 "
+              "реакция создаёт `edited` у неправленого сообщения и затирает время настоящей "
+              "правки. `date` при этом остаётся исходным временем отправки.",
+        status=Status.PARTIAL,
         claim_scope=ClaimScope.ARTIFACT,
         primary_evidence=(f"{WRITER}:1568-1571 — `if (message.edited) {{ pushBare(\"edited\", "
-                          "...); }}`, отдельно от `date` на строке 1552",),
-        observed_limitations=("исходный текст и его длина невосстановимы",),
-        downstream_consequence="Топология и латентности не искажаются правкой; `char_count` — "
+                          "...); }}`, отдельно от `date` на строке 1552",
+                          I_EDITED + " — «an edited field appears in result.json for the message "
+                          "to which the reaction was set, but the edit action is not performed»"),
+        observed_limitations=("исходный текст и его длина невосстановимы",
+                              "`edited_unixtime` может быть временем РЕАКЦИИ, а не правки",
+                              "наблюдалось на 6.7.8; на какие версии распространяется — открыто"),
+        downstream_consequence="Топология и латентности не затронуты: `date` реакция не трогает. "
+                               "Но `edited` пригоден только как «сообщение трогали после отправки», "
+                               "а `edited_unixtime` — не событие и не время правки. `char_count` — "
                                "величина ПОСЛЕ правки, и `LengthSemantics` обязана это сказать.",
-        adapter_behavior="Считать `edited` как диагностику; длину помечать post-edit.",
-        fixture_needed="Фикстура с правленым сообщением: латентность не меняется.",
+        adapter_behavior="`edited` читается как touched-after-send, никогда как edit-флаг; "
+                         "`edited_unixtime` не попадает во временную шкалу ни под каким видом.",
+        fixture_needed="Публичный result.json из #30647: сообщение с реакцией и без правки.",
     ),
     _p(
         key="events.reactions",
@@ -369,7 +439,12 @@ ASSUMPTIONS = (
                "coverage.window_provenance",
                "окно пришлось бы выводить из файла, а burden требует общего окна"),
     Assumption("no_silent_gaps", "все агрегаты", "coverage.completeness",
-               "пропуск в окне неотличим от молчания"),
+               "пропуск в окне неотличим от молчания — и усечение выглядит как медленный ответ"),
+    Assumption("input_is_valid_json", "любой будущий adapt_file", "format.strict_json",
+               "acquisition отказывает, а не чинит файл на лету"),
+    Assumption("semantics_stable_across_versions", "весь этот ledger",
+               "provenance.producer_version",
+               "статусы применимы только к версии, которая их породила; версия собирается вне файла"),
 )
 
 LEDGER = Ledger(
