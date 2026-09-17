@@ -288,11 +288,19 @@ class DescriptiveStatisticsTests(unittest.TestCase):
 
 
 class AggregateShapeTests(unittest.TestCase):
-    """`frozen=True, slots=True` are not decoration.
+    """`frozen=True, slots=True` are guardrails, not the boundary.
 
     Frozen: an exported aggregate must not be editable after the fact. Slots:
-    nothing can be stapled onto it later — which is exactly how a `text` field
-    would arrive on an object whose whole purpose is not to carry one.
+    nothing can be stapled on later, which is one way a `text` field would
+    arrive on an object whose whole purpose is not to carry one.
+
+    They are worth testing and they are not a security boundary. Slots does not
+    stop anyone DECLARING a field, passing sensitive data alongside, putting a
+    trace in a collection, or serialising a different object entirely. The
+    actual boundary is the export schema plus the allowlist plus the test that
+    proves nothing else crosses it — `ExportBoundaryTests` and `EXPORT_KEYS`.
+    Guardrails deserve mutation coverage; they do not deserve a promotion to
+    cryptographic police for good behaviour.
     """
 
     def setUp(self):
@@ -367,9 +375,13 @@ class BoundaryGapsFoundByMutationTests(unittest.TestCase):
         self.assertEqual(stream[0].sync_lag_seconds, 3 * HOUR)
 
     def test_the_trace_stays_out_of_the_repr(self):
-        """`repr=False` is the difference between a privacy boundary and a
-        privacy intention: an f-string in a log line calls repr, and a repr that
-        carries per-opportunity timings has published them."""
+        """A guardrail with a narrow blast radius, tested because it is cheap.
+
+        An f-string in a log line calls repr, and a repr carrying
+        per-opportunity timings has published them. What `repr=False` does NOT
+        cover: `str`, `dataclasses.asdict`, a custom serialiser, a JSON encoder,
+        a debugger, or a person logging the field directly. The boundary is the
+        export allowlist; this only closes the accidental path."""
         result = run([msg("a", Q, 0.0), msg("b", P, 1.0)],
                      mode=Mode.QUALIFICATION, consent=True)
         text = repr(result)

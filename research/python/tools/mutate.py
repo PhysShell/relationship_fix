@@ -27,10 +27,12 @@ import atexit
 import copy
 import os
 import shutil
+import re
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -152,36 +154,170 @@ class _Apply(ast.NodeTransformer):
         return node
 
 
-def mutants_for(path: str) -> list[Mutant]:
-    tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
+def mutants_for(path: str, root: Path = None) -> list[Mutant]:
+    tree = ast.parse(((root or ROOT) / path).read_text(encoding="utf-8"))
     collector = _Collect()
     collector.visit(tree)
     # _Collect and _Apply walk in the same order, so index i is the same point
     return [Mutant(path, i, line, text) for i, (line, text) in enumerate(collector.points)]
 
 
-def _source_with(path: str, index: int) -> str:
-    tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
+def _source_with(path: str, index: int, root: Path = None) -> str:
+    tree = ast.parse(((root or ROOT) / path).read_text(encoding="utf-8"))
     mutated = _Apply(index).visit(copy.deepcopy(tree))
     ast.fix_missing_locations(mutated)
     return ast.unparse(mutated)
 
 
-def _clear_bytecode() -> None:
-    for cache in ROOT.rglob("__pycache__"):
+def _clear_bytecode(root: Path = None) -> None:
+    for cache in (root or ROOT).rglob("__pycache__"):
         shutil.rmtree(cache, ignore_errors=True)
 
 
-def _run_tests() -> bool:
+class Verdict(Enum):
+    """What happened to a mutant. Three of these are NOT "killed".
+
+    A score that counts crashes, timeouts and collection failures as kills
+    looks magnificent and certifies the state of the electricity supply. The
+    whole point of the harness is to distinguish "a test noticed the change"
+    from "the change stopped the tests from running".
+    """
+
+    KILLED = "killed"          # the suite ran in full and something failed
+    SURVIVED = "survived"      # the suite ran in full and passed
+    NOT_VIABLE = "not_viable"  # the mutant broke import/collection: no evidence
+    TIMED_OUT = "timed_out"    # the suite hung: no evidence either
+    CRASHED = "crashed"        # the runner itself died: no evidence at all
+
+
+_RAN = re.compile(r"^Ran (\d+) tests?", re.MULTILINE)
+_IMPORT_FAILURE = re.compile(r"Failed to import test module|ImportError|SyntaxError")
+
+
+def classify(returncode: int | None, output: str, *, baseline_tests: int,
+             timed_out: bool = False) -> Verdict:
+    """Pure, so it can be tested without running anything.
+
+    `returncode is None` means the runner never produced one.
+    """
+    if timed_out:
+        return Verdict.TIMED_OUT
+    if returncode is None:
+        return Verdict.CRASHED
+    ran = _RAN.search(output)
+    if ran is None:
+        return Verdict.CRASHED
+    if int(ran.group(1)) != baseline_tests or _IMPORT_FAILURE.search(output):
+        # fewer tests than the baseline means something did not get collected,
+        # which is not the same as a test objecting to the mutation
+        return Verdict.NOT_VIABLE
+    return Verdict.SURVIVED if returncode == 0 else Verdict.KILLED
+
+
+def _run_tests(tests, root: Path, baseline_tests: int | None) -> tuple[Verdict | None, int]:
+    """Returns (verdict, tests_run). `baseline_tests=None` means: measure it."""
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
     try:
         proc = subprocess.run(
-            [sys.executable, "-B", "-m", "unittest", "-q", *TESTS],
-            cwd=ROOT, env=env, capture_output=True, text=True, timeout=120,
+            [sys.executable, "-B", "-m", "unittest", "-q", *tests],
+            cwd=root, env=env, capture_output=True, text=True, timeout=180,
         )
     except subprocess.TimeoutExpired:
-        return False        # a mutant that hangs the suite is caught, not survived
-    return proc.returncode == 0
+        return Verdict.TIMED_OUT, 0
+    except OSError:
+        return Verdict.CRASHED, 0
+    output = proc.stdout + proc.stderr
+    ran = _RAN.search(output)
+    count = int(ran.group(1)) if ran else 0
+    if baseline_tests is None:
+        return (None if proc.returncode == 0 else Verdict.KILLED), count
+    return classify(proc.returncode, output, baseline_tests=baseline_tests), count
+
+
+@dataclass
+class Report:
+    """Every mutant lands in exactly one bucket, and three of them are not
+    evidence about the test suite at all."""
+
+    verdicts: dict[Verdict, list[Mutant]]
+    seconds: float
+
+    def of(self, verdict: Verdict) -> list[Mutant]:
+        return self.verdicts.get(verdict, [])
+
+    @property
+    def total(self) -> int:
+        return sum(len(v) for v in self.verdicts.values())
+
+    @property
+    def conclusive(self) -> int:
+        """Killed + survived. The denominator of any honest score."""
+        return len(self.of(Verdict.KILLED)) + len(self.of(Verdict.SURVIVED))
+
+    @property
+    def score(self) -> float | None:
+        """killed / conclusive — NOT killed / total.
+
+        Reads as: every mutant THIS operator set produces is detected by the
+        current suite. It does not read as: the implementation is correct. A
+        mutator does not invent algorithmic mistakes, a wrong estimand, or a new
+        class of source semantics; it measures the suite's sensitivity to one
+        space of perturbations.
+        """
+        return None if self.conclusive == 0 else len(self.of(Verdict.KILLED)) / self.conclusive
+
+    def summary(self) -> str:
+        parts = [f"{len(self.of(v))} {v.value}" for v in Verdict if self.of(v)]
+        score = "n/a" if self.score is None else f"{self.score:.1%}"
+        return (f"{len(self.of(Verdict.KILLED))}/{self.conclusive} conclusive mutants killed "
+                f"({score}); {' · '.join(parts)}; {self.seconds:.0f}s")
+
+
+def evaluate(files, tests, *, root: Path = None, progress: bool = False) -> Report:
+    """Run every mutant of `files` against `tests`. Restores sources always."""
+    root = root or ROOT
+    all_mutants = [m for path in files for m in mutants_for(path, root)]
+    _clear_bytecode(root)
+    baseline_verdict, baseline_tests = _run_tests(tests, root, None)
+    if baseline_verdict is not None or baseline_tests == 0:
+        raise RuntimeError(
+            f"baseline is not green ({baseline_tests} tests) — fix the suite "
+            f"before asking it to catch anything"
+        )
+
+    originals = {path: (root / path).read_text(encoding="utf-8") for path in files}
+
+    def restore():
+        for path, text in originals.items():
+            target = root / path
+            if target.parent.is_dir():      # a temporary root may already be gone
+                target.write_text(text, encoding="utf-8")
+        _clear_bytecode(root)
+
+    # last-resort guard for a SIGINT between write and restore; unregistered on
+    # the way out so repeated calls do not stack closures that fire at exit
+    # against directories that no longer exist
+    atexit.register(restore)
+    verdicts: dict[Verdict, list[Mutant]] = {}
+    started = time.time()
+    try:
+        for n, mutant in enumerate(all_mutants, 1):
+            target = root / mutant.path
+            try:
+                target.write_text(_source_with(mutant.path, mutant.index, root), encoding="utf-8")
+                _clear_bytecode(root)
+                verdict, _ = _run_tests(tests, root, baseline_tests)
+            finally:
+                target.write_text(originals[mutant.path], encoding="utf-8")
+            verdicts.setdefault(verdict, []).append(mutant)
+            if progress and verdict is not Verdict.KILLED:
+                print(f"  {verdict.value.upper():<11} {mutant.path}:{mutant.line}  {mutant.description}")
+            if progress and n % 25 == 0:
+                print(f"  ... {n}/{len(all_mutants)}")
+    finally:
+        restore()
+        atexit.unregister(restore)
+    return Report(verdicts=verdicts, seconds=time.time() - started)
 
 
 def main() -> int:
@@ -190,48 +326,23 @@ def main() -> int:
     parser.add_argument("--files", nargs="*", default=list(SURFACE))
     args = parser.parse_args()
 
-    all_mutants = [m for path in args.files for m in mutants_for(path)]
-    print(f"surface: {', '.join(args.files)}")
-    print(f"mutants: {len(all_mutants)}")
     if args.list:
+        mutants = [m for path in args.files for m in mutants_for(path)]
+        print(f"surface: {', '.join(args.files)}")
+        print(f"mutants: {len(mutants)}")
         return 0
 
-    _clear_bytecode()
-    if not _run_tests():
-        print("BASELINE IS RED — fix the suite before asking it to catch anything")
-        return 2
-
-    survivors, started = [], time.time()
-    originals = {path: (ROOT / path).read_text(encoding="utf-8") for path in args.files}
-
-    def restore():
-        for path, text in originals.items():
-            (ROOT / path).write_text(text, encoding="utf-8")
-        _clear_bytecode()
-
-    atexit.register(restore)
+    print(f"surface: {', '.join(args.files)}")
     try:
-        for n, mutant in enumerate(all_mutants, 1):
-            target = ROOT / mutant.path
-            try:
-                target.write_text(_source_with(mutant.path, mutant.index), encoding="utf-8")
-                _clear_bytecode()
-                if _run_tests():
-                    survivors.append(mutant)
-                    print(f"  SURVIVED  {mutant.path}:{mutant.line}  {mutant.description}")
-            finally:
-                target.write_text(originals[mutant.path], encoding="utf-8")
-            if n % 25 == 0:
-                print(f"  ... {n}/{len(all_mutants)}  survivors so far: {len(survivors)}")
-    finally:
-        restore()
-
-    killed = len(all_mutants) - len(survivors)
-    print(f"\nkilled {killed}/{len(all_mutants)} "
-          f"({killed / len(all_mutants):.1%}) in {time.time() - started:.0f}s")
-    for mutant in survivors:
-        print(f"  survivor: {mutant.path}:{mutant.line}  {mutant.description}")
-    return 1 if survivors else 0
+        report = evaluate(args.files, TESTS, progress=True)
+    except RuntimeError as failure:
+        print(failure)
+        return 2
+    print(f"\n{report.summary()}")
+    for verdict in (Verdict.SURVIVED, Verdict.NOT_VIABLE, Verdict.TIMED_OUT, Verdict.CRASHED):
+        for mutant in report.of(verdict):
+            print(f"  {verdict.value}: {mutant.path}:{mutant.line}  {mutant.description}")
+    return 1 if report.of(Verdict.SURVIVED) else 0
 
 
 if __name__ == "__main__":
