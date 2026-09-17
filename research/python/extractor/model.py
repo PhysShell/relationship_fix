@@ -231,7 +231,15 @@ class HorizonAggregate:
 
         REQUIRES a common fixed window across persons and arms — see
         docs/research/reactivity-power-design.md §1.6. A burden summed over
-        per-person spans of different lengths is not comparable between arms.
+        per-person spans of different lengths is not comparable between arms;
+        `PeriodAggregate.observation_window_seconds` exists so that this is
+        checked rather than assumed.
+
+        DIRECTION MATTERS. `B = N x R` holds in the reals, but B is the
+        primitive and R is the quotient: B survives N = 0, R does not. Do not
+        reconstruct B from N and R — measured on MaiChat, `N * (B / N) != B` in
+        11 of 300 person-period cells (all 1 ulp, so the error is irrelevant and
+        the exact-equality invariant check is not).
         """
         return self.sum_min_latency_seconds
 
@@ -282,6 +290,13 @@ class PeriodAggregate:
     horizons: tuple[HorizonAggregate, ...]
     own_messages: LengthSummary
     own_episode_returns: int
+    #: `period_end - period_start`. Not a statistic about anybody: it is the
+    #: protocol's own window, exported so that the common-window requirement of
+    #: `reentry_burden_seconds` is CHECKABLE rather than remembered. A burden
+    #: summed over windows of different length is not comparable between arms,
+    #: and without this number the analysis cannot tell that it happened. Only
+    #: the length travels, never the absolute boundaries.
+    observation_window_seconds: float
     # diagnostics about the extraction itself, not about anybody's behaviour
     deleted_dropped: int = 0
     duplicates_dropped: int = 0

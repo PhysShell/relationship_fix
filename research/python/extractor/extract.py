@@ -26,6 +26,7 @@ from .model import (
 EXPORT_KEYS = frozenset({
     "participant_id", "period_id", "horizons",
     "own_message_count", "own_total_chars", "own_episode_returns",
+    "observation_window_seconds",
     "deleted_dropped", "duplicates_dropped", "max_sync_lag_seconds",
 })
 EXPORT_HORIZON_KEYS = frozenset({
@@ -267,6 +268,7 @@ def extract(
         horizons=tuple(horizons),
         own_messages=LengthSummary(count=len(own), total_chars=sum(m.char_count for m in own)),
         own_episode_returns=_episode_returns(stream, participant, period_start, period_end),
+        observation_window_seconds=period_end - period_start,
         deleted_dropped=deleted_dropped,
         duplicates_dropped=duplicates_dropped,
         max_sync_lag_seconds=max_sync_lag,
@@ -299,6 +301,7 @@ def production_export(aggregate: PeriodAggregate) -> dict:
         "own_message_count": aggregate.own_messages.count,
         "own_total_chars": aggregate.own_messages.total_chars,
         "own_episode_returns": aggregate.own_episode_returns,
+        "observation_window_seconds": aggregate.observation_window_seconds,
         "deleted_dropped": aggregate.deleted_dropped,
         "duplicates_dropped": aggregate.duplicates_dropped,
         "max_sync_lag_seconds": aggregate.max_sync_lag_seconds,
