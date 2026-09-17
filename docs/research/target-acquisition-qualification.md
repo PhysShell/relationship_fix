@@ -67,7 +67,7 @@ BLOG      telegram.org/blog/export-and-more
 | `coverage.completeness`<br>Можно ли доказать, что в окне нет пропусков? | **UNAVAILABLE** | Нет, и это не «не установлено»: молчаливое усечение экспорта наблюдалось.<br>_ограничения:_ #31328 — про private supergroups с отключённой пересылкой; для диадического чата тот же потолок НЕ показан · один контрпример опровергает гарантию, но не измеряет частоту | tdesktop#31328 (2026-09-16, v7.2.8, OPEN) — ровно 10000 сообщений, JSON и HTML · tdesktop#27183 (2023-12-03, v4.12.2, closed as NOT PLANNED) — последний выбранный день отсутствует · telegram.org/blog/export-and-more — о полноте не сказано ничего | Гарантии полноты нет ни при каком чтении файла. Пропуск в окне неотличим от молчания, а молчание у нас вносит полный H — то есть усечение экспорта выглядит как медленный ответ.<br>**adapter:** Никогда не выводить покрытие из содержимого. Помечать экспорт подозрительным при круглом числе сообщений (10000) и при совпадении первого сообщения с началом окна; отказ, а не тихая обработка. | Два экспорта одного чата и окна: diff множества id (частота, не гарантия). |
 | `coverage.requested_range_honored`<br>Соблюдается ли выбранный диапазон дат? | **UNAVAILABLE** | Не надёжно. Подтверждены отказы обоих краёв в разных версиях.<br>_ограничения:_ #5854 закрыт, #27183 закрыт как not planned, #30412 и #31082 закрыты как duplicate — то есть класс признан, а не опровергнут · наблюдалось на 1.6.2 (2019), 4.12.2 (2023), 6.6.2 и 7.0.6 (2026) — семь лет одного и того же симптома | tdesktop#5854 (2019-03-27, v1.6.2, closed) — «ALL the messages are exported» · tdesktop#27183 (2023-12-03, v4.12.2, closed as NOT PLANNED) — последний выбранный день отсутствует · tdesktop#30412 (2026-03-07, v6.6.2, closed as duplicate) — «It exports whole channels messages from oldest message» · tdesktop#31082 (2026-07-30, v7.0.6, closed as duplicate) — «The exported JSON file contains messages from the entire history, including messages sent before the selected start date» · telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_api_wrap.cpp:2282-2290 — механизм: `MTPmessages_GetHistory` уходит с `offset_date = 0`, а в ветке `messages.Search` `min_date`/`max_date` передаются как `MTP_int(0)`. Диапазон в запрос НЕ входит вообще — он применяется на клиенте позже, и именно поэтому ломается | UI-диапазон не является утверждением о покрытии — ни слева (могут прийти все сообщения), ни справа (может пропасть последний день). Окно `reentry_burden_H` берётся ТОЛЬКО из протокола, и это теперь не осторожность, а следствие.<br>**adapter:** Игнорировать диапазон экспорта как источник окна; отбор по периоду делает `extract()` из протокольных границ, как сейчас. | Экспорт с заданным диапазоном: есть ли сообщения вне его. |
 | `provenance.producer_version`<br>Известно ли, какая версия клиента произвела файл? | **UNAVAILABLE** | Из файла — нет. Поля версии в выводе не существует.<br>_ограничения:_ а семантика между версиями наблюдаемо меняется — #30647 | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp — в выводе только свободные строки `about`, поля версии нет · tdesktop#30647 (2026-05-03, v6.7.8, result.json attached) | Все статусы этого ledger'а версионно-зависимы, а файл не говорит, к какой версии относится. «Telegram Desktop JSON» — недостаточное имя источника; нужны `producer_version` и платформа.<br>**adapter:** Версия и платформа собираются ВНЕ файла, в момент acquisition, и входят в provenance наравне с согласием. Файл без версии — незаявленная семантика; адаптер обязан это пометить, а не додумать. | Экспорты с двух разных версий: различимы ли они по содержимому вообще. |
-| `format.strict_json`<br>Гарантированно ли валиден выходной JSON? | UNKNOWN | Не установлено; гарантии в документации нет.<br>_ограничения:_ ручная часть — это класс, в котором ошибки квотирования и дублирующиеся ключи возможны в принципе · существование валидных файлов ничего не гарантирует о формате | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp — вывод строится в значительной части вручную (`SerializeString`/`SerializeObject`/`SerializeArray`, склейка байтовых блоков), а не исключительно структурным JSON-builder'ом · telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:2793 — Qt-классы JSON в файле есть, но `QJsonDocument::fromJson` стоит на пути ЧТЕНИЯ стороннего файла в `other_data`, а не на пути записи сообщений | Гарантия валидности не нужна: допущение снято поведением, а не доказательством.<br>**adapter:** Строгий разбор; отказ разбора = отказ acquisition, без починки «почти JSON» на лету. | Строгий разбор всех публичных result.json из багрепортов. |
+| `format.strict_json`<br>Гарантированно ли валиден выходной JSON? | **UNAVAILABLE** | Нет, и это не «не установлено»: существуют конкретные невалидные выгрузки, два независимых класса.<br>_ограничения:_ #27571 закрыт как not planned — то есть класс признан и не чинится · существование валидных файлов ничего не гарантирует о формате | tdesktop#24961 (2022-08-20, v4.1.1, closed) — «Export chat history» outputs illegal JSON with custom emojis: значение без кавычек там, где JSON требует строку · tdesktop#27571 (2024-03-12, v4.15.1, closed as NOT PLANNED) — `\x01` внутри строки; jq: «parse error: Invalid escape at line 2415365, column 47» · telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp — вывод строится в значительной части вручную (`SerializeString`/`SerializeObject`/`SerializeArray`, склейка байтовых блоков), а не исключительно структурным JSON-builder'ом · telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:2793 — Qt-классы JSON в файле есть, но `QJsonDocument::fromJson` стоит на пути ЧТЕНИЯ стороннего файла в `other_data`, а не на пути записи сообщений | Полагаться на валидность нельзя — это знание, а не пробел. Гарантия при этом и не нужна: допущение снято поведением.<br>**adapter:** Строгий разбор; отказ разбора = отказ acquisition, без починки «почти JSON» на лету. | `tools/export_scan.py` по публичным файлам: доля невалидных. Статус уже UNAVAILABLE, замер нужен для частоты, не для вердикта. |
 
 ### 2. Ordering
 
@@ -76,7 +76,7 @@ BLOG      telegram.org/blog/export-and-more
 | `ordering.timestamp`<br>Есть ли абсолютная временная метка? | **QUALIFIED** | `date_unixtime` — секунды эпохи, отдельным полем у каждого сообщения. | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:1553 — `{ "date_unixtime", SerializeDateRaw(message.date) }` · telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:82-84 — `SerializeDateRaw` = `QString::number(date)` | Порядок и длительности строятся на этом поле.<br>**adapter:** `ordering_evidence = TIMESTAMP`; читать только `date_unixtime`. | Реальный экспорт: доля сообщений без поля (ожидается 0). |
 | `ordering.resolution`<br>Какое разрешение? | **PARTIAL** | Секунда: `TimeId` — целые секунды, миллисекунд в экспорте нет.<br>_ограничения:_ cross-actor ties внутри одной секунды возможны | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:77-84 — `SerializeDate(TimeId)`/`SerializeDateRaw(TimeId)` | Длительности пригодны (горизонты 6/12/24 ч против секунды); ties не могут устанавливать топологию — один перевёрнутый tie превращает одну передачу хода в две, и вторая вносит полный H.<br>**adapter:** Топология допустима, только пока доля неоднозначных cross-actor ties измерена и мала; иначе — тот же отказ, что у Seufert. | Реальный экспорт: доля соседних cross-actor пар с равным `date_unixtime`. |
 | `ordering.exported_position`<br>Какой порядок у элементов массива `messages`? | **QUALIFIED** | Возрастающий `id`. Не «хронологический» — именно id, и это установлено кодом, а не наблюдением.<br>_ограничения:_ порядок по id равен хронологическому только если id монотонен по времени — а это отдельный вопрос, см. `ordering.tie_semantics` | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_api_wrap.cpp:2216-2218 — `requestChatMessages(split, largestIdPlusOne, -kMessagesSliceLimit, kMessagesSliceLimit)`: `offset_id` = курсор, `add_offset = -100`, `limit = 100` — постраничный обход ВПЕРЁД по id · telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/data/export_data_types.cpp:3470-3473 — `ParseMessagesSlice` идёт по входному вектору С КОНЦА: `for (auto i = list.size(); i != 0;) {{ list[--i] }}`, то есть разворачивает убывающий ответ сервера в возрастающий · telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_api_wrap.cpp:2806 — `largestIdPlusOne = slice.list.back().id + 1`: курсор берёт ПОСЛЕДНИЙ элемент развёрнутого среза, что подтверждает возрастание · core.telegram.org/api/offsets — «typically ... descending object ID values» на стороне API | `ordering = TOTAL`, и позиция — осмысленное свидетельство: она детерминирована и означает id-порядок. Но выдавать её за хронологию нельзя, пока не закрыт id↔время.<br>**adapter:** `ordering_evidence` объявляется как id-порядок, а не как хронология; адаптер не пересортировывает файл молча. | Публичный `result.json`: монотонность `id` по позиции и доля пар, где `date_unixtime` убывает при возрастании `id`. |
-| `ordering.tie_semantics`<br>Что разрешает равенство секунд? | UNKNOWN | Позиция в файле, то есть возрастающий `id`. Остаётся ровно один открытый вопрос: монотонен ли `id` по времени.<br>_ограничения:_ два неизвестных схлопнулись в одно: вопрос о ties — это вопрос об id↔времени и ничего сверх | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/data/export_data_types.cpp:3470-3473 и telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_api_wrap.cpp:2216 — внутри секунды порядок задаёт id, потому что весь файл задаёт id · core.telegram.org/api/offsets — «typically» гарантией монотонности не является | — | Публичный `result.json`: есть ли пара, где `id` растёт, а `date_unixtime` падает. ОДИН такой случай закрывает вопрос отрицательно. |
+| `ordering.tie_semantics`<br>Что разрешает равенство секунд? | UNKNOWN | Позиция в файле, то есть возрастающий `id`. Остаётся ровно один открытый вопрос: монотонен ли `id` по времени.<br>_ограничения:_ два неизвестных схлопнулись в одно: вопрос о ties — это вопрос об id↔времени и ничего сверх · tdesktop#30421 (локальные id дают временно неверный визуальный порядок в живом клиенте) — НЕ evidence: экспорт видит финализированные серверные id. Но хорошее предупреждение против тезиса «id по определению есть время» | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/data/export_data_types.cpp:3470-3473 и telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_api_wrap.cpp:2216 — внутри секунды порядок задаёт id, потому что весь файл задаёт id · core.telegram.org/api/offsets — «typically» гарантией монотонности не является | — | `tools/export_scan.py` по публичным файлам: пара, где `id` растёт, а `date_unixtime` падает. ОДИН такой случай закрывает вопрос отрицательно; отсутствие на конечной выборке даёт максимум PARTIAL с долей. |
 | `ordering.multi_device`<br>Могут ли в файле оказаться две копии одного сообщения? | **QUALIFIED** | Этот путь экспорта дублей по `id` не производит: срезы не перекрываются, а мигрированная история сдвинута в непересекающийся диапазон.<br>_ограничения:_ утверждение о пути экспорта, а не о мире: два РАЗНЫХ файла по-прежнему могут содержать один и тот же id | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/export_api_wrap.cpp:2806 — курсор `largestIdPlusOne = back().id + 1` строго проходит за уже взятый максимум, поэтому срезы дизъюнктны · telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/data/export_data_types.cpp:3478-3486 + :30 — `AdjustMigrateMessageIds` прибавляет `kMigratedMessagesIdShift = -1'000'000'000`, то есть уводит id мигрированной истории в ОТРИЦАТЕЛЬНЫЙ диапазон — механизм существует именно затем, чтобы склейка двух историй не сталкивалась по id | `DuplicateConflict` и `DeletionStateConflict` на этом пути входных данных не получают. Это не повод их удалять — они написаны под multi-device источники, которых здесь нет.<br>**adapter:** Дедупликация остаётся включённой и обязана срабатывать НОЛЬ раз; ненулевой счётчик на этом источнике — сигнал, а не рутина. | Публичный `result.json`: повторяющиеся `id`; ожидается 0. |
 
 ### 3. Identity
@@ -143,7 +143,8 @@ supergroups с отключённой пересылкой, для диадич�
 | ~~7.0.6 игнорирует начальную дату~~ | **ПОДТВЕРЖДЕНО, моя ошибка.** [#31082](https://github.com/telegramdesktop/tdesktop/issues/31082) (30.07.2026, 7.0.6, closed as duplicate): «The exported JSON file contains messages from the entire history, including messages sent before the selected start date». Это содержимое, а не скорость. Я нашёл соседний PR#30727 про производительность и, не найдя прямого репорта, объявил утверждение непроверенным вместо того, чтобы искать дальше. Отсутствие находки — не опровержение |
 | ~~6.6.2 — повтор того же класса~~ | **ПОДТВЕРЖДЕНО.** [#30412](https://github.com/telegramdesktop/tdesktop/issues/30412) (07.03.2026, 6.6.2, closed as duplicate): «It exports whole channels messages from oldest message» |
 | 5.5.5 — реакции не экспортировались вовсе | UNVERIFIED. В текущем писателе `reactions` есть (строка 2422); отсутствие в 5.5.5 не проверено |
-| 4.1.1 — custom emoji ломали quoting; 5.9.0 — два ключа `"text"` | UNVERIFIED. Контракт строгого разбора от них не зависит. Основание уточнено: вывод строится **в значительной части вручную** (`SerializeString`/`SerializeObject`/`SerializeArray`), но сказать «без JSON-библиотеки» было слишком сильно — Qt-классы в файле есть. Точнее: `QJsonDocument::fromJson` на строке 2793 стоит на пути **чтения** стороннего файла в `other_data`, а не на пути записи сообщений |
+| ~~4.1.1 — custom emoji ломали quoting~~ | **ПОДТВЕРЖДЕНО.** [#24961](https://github.com/telegramdesktop/tdesktop/issues/24961) (20.08.2022, 4.1.1): значение без кавычек там, где JSON требует строку |
+| 5.9.0 — два ключа `"text"` | UNVERIFIED, номер не проверен. Но статус свойства это уже не двигает |
 | HTML терял старые сообщения там, где JSON не терял | UNVERIFIED как отдельный кейс; #31328 показывает обратную симметрию — потолок виден в обоих форматах |
 
 ## 2b. History-fetch: цепочка прослежена до конца
@@ -168,10 +169,69 @@ supergroups с отключённой пересылкой, для диадич�
 
 **Побочная находка, конкретная.** `id` здесь число, включая отрицательные у мигрированной истории. А `sort_key = (timestamp, message_id)` в `extractor/model.py` сравнивает **строки**, где «10» < «9». Передать телеграмный id голой десятичной строкой значит превратить разрешение ties в лексикографический шум. Требование записано в adapter behavior свойства `identity.message_id`.
 
+## 2c. Валидность JSON: опровергнута, а не неизвестна
+
+Два независимых класса невалидного вывода, оба подтверждены по первоисточнику:
+
+| источник | что именно |
+|---|---|
+| [#24961](https://github.com/telegramdesktop/tdesktop/issues/24961) · 4.1.1 · 2022 | custom emoji → значение **без кавычек** там, где JSON требует строку |
+| [#27571](https://github.com/telegramdesktop/tdesktop/issues/27571) · 4.15.1 · 2024 · **closed as not planned** | `\x01` внутри строки; `jq`: «parse error: Invalid escape at line 2415365, column 47» |
+
+Поэтому `format.strict_json` — не `UNKNOWN`, а **UNAVAILABLE**. Это лучше незнания:
+мы знаем, что полагаться на валидность нельзя. Допущение `input_is_valid_json` при
+этом остаётся снятым через `eliminated_by_refusal` — строгий разбор, отказ при ошибке.
+Свойство опровергнуто, допущение устранено, дыры нет.
+
+## 2d. Сканер публичных экспортов
+
+`tools/export_scan.py` — **не адаптер**: он не производит `RawMessage`, ничего не
+подаёт вниз и живёт вне `extractor/`. Он отвечает на вопросы **о файле**.
+
+Смысл — закрыть последнее допущение по многим публичным файлам, не заводя вторую
+коллекцию чужой переписки. Человечество и так справляется с этой задачей без нас.
+Что сканер сохраняет: метка источника · sha256 · размер · счётчики · кортежи
+инверсий `(позиция, id₁, t₁, id₂, t₂)`. Чего не сохраняет: текст, сущности, имена,
+`from`/`from_id`, id и имя чата, пути к медиа, реакции, цели ответов. В `ScanResult`
+**нет поля, способного их удержать** — та же гарантия, что у типов экстрактора, и
+она проверяется тестом, который скармливает сканеру чат из сплошного текста и ищет
+его в сериализованном результате.
+
+Ключевое по вашей подсказке: искать **не ties**. После history-fetch сильнейший
+контрпример — это
+
+```
+id₁ < id₂   но   time₁ > time₂
+```
+
+на любом расстоянии. Часы врозь — контрпример **сильнее**, а не слабее. Сканер
+считает `chronology_counterexamples` именно так, а `equal_timestamp_pairs` ведёт
+отдельно, потому что равные секунды контрпримером не являются.
+
+Вердикт сканера намеренно трёхзначный и не умеет говорить `QUALIFIED`:
+`REFUSED` (не разобрался), `REFUTED` (найден контрпример), либо
+`no inversion observed in N entries` — формулировка, из которой `QUALIFIED`
+не выводится ни при каком N.
+
+**Первый прогон**, на публичной тестовой фикстуре парсера
+[innerdvations/telegram-chat-parser](https://github.com/innerdvations/telegram-chat-parser)
+(`tests/data/saved.json`, sha256 `c3c556504921a813…`, 7 064 байта):
+
+```
+strict JSON: valid
+entries 21  (message 20 · service 1)
+id duplicates 0 · negative 0 · unparsable 0
+id inversions 0 · time inversions 0 · equal timestamps 0
+→ no inversion observed in 21 entries
+```
+
+Двадцать одна запись не доказывает **ничего** о монотонности id — это проверка
+инструмента, а не свойства. Записано как первая строка корпуса, а не как результат.
+
 ## 3. Вердикт
 
 ```
-24 свойства:  9 QUALIFIED · 3 PARTIAL · 7 UNKNOWN · 5 UNAVAILABLE
+24 свойства:  9 QUALIFIED · 3 PARTIAL · 6 UNKNOWN · 6 UNAVAILABLE
               0 понижено из PARTIAL (то есть все три PARTIAL несут контракт)
 ```
 
@@ -236,8 +296,9 @@ public bug corpus                 ✔ 6 багрепортов проверен�
 tdesktop history-fetch source     ✔ цепочка прослежена; 2 свойства QUALIFIED,
                                     2 допущения закрыты, 1 вопрос сведён к одному
         ↓
-public result.json attachments    ← СЛЕДУЮЩЕЕ: одна пара (id ↑, date ↓) закрывает
-                                    последнее открытое допущение
+public result.json attachments    ← ИДЁТ: сканер написан и прогнан на 1 файле
+                                    (21 запись — проверка инструмента, не свойства);
+                                    нужна выборка, на которой «не найдено» что-то значит
         ↓
 actual export                     только для того, что осталось незакрытым
         ↓
@@ -261,3 +322,4 @@ qualification verdict             и только теперь — первая 
 | 2026-09-17 | Ledger заведён; 21 свойство по пяти разделам; `claim_scope` и механическое понижение `PARTIAL` без контракта; 12 допущений экстрактора сопоставлены со свойствами | Пятое человеческое состояние «ну вроде WhatsApp обычно делает так» уже стоило проекту `user_count` как фильтра членства в диаде. Два `UNAVAILABLE` найдены по первоисточникам: экспорт не записывает свой диапазон дат, и понятия удаления в формате нет вовсе |
 | 2026-09-17 | Интернет-pass до просьбы о личном экспорте: 4 багрепорта проверены по первоисточнику. `events.edited` **QUALIFIED → PARTIAL** (#30647: реакция создаёт и затирает `edited`); `coverage.completeness` **UNKNOWN → UNAVAILABLE** (#31328: ровно 10000 сообщений, JSON и HTML); добавлены `coverage.requested_range_honored` (#5854, #27183), `provenance.producer_version` и `format.strict_json`; заведён список UNVERIFIED | Заявленный баг 7.0.6 при проверке оказался другим классом — полный обход истории с клиентской фильтрацией это производительность, а не лишние сообщения в выводе; «медленно, но правильно» и «быстро, но неверно» дают противоположные контракты. Диапазонный класс подтверждают #5854 и #27183, а не 7.0.6 |
 | 2026-09-17 | Две поправки заказчика внесены: #31082 (7.0.6) и #30412 (6.6.2) подтверждены как отказ по СОДЕРЖИМОМУ — мой предыдущий вывод «это только производительность» был ошибкой поиска, а не факта; формулировка про сериализатор смягчена до «в значительной части вручную». History-fetch прослежен: `ordering.exported_position` и `ordering.multi_device` → QUALIFIED, добавлен третий путь закрытия допущения (`eliminated_by_refusal`) | Экспорт идёт возрастающим `id`: сервер отдаёт убывающий, `ParseMessagesSlice` разворачивает, курсор `back().id + 1` подтверждает. Значит «файл в хронологии» — не то же, что «файл в id-порядке», и вопрос о ties свёлся ровно к монотонности id по времени. Диапазон дат в запрос не входит вообще — отсюда семь лет одного и того же бага |
+| 2026-09-17 | `format.strict_json` **UNKNOWN → UNAVAILABLE** по двум подтверждённым классам невалидного вывода (#24961, #27571); добавлен `tools/export_scan.py` — сканер публичных экспортов, сохраняющий только метаданные и кортежи инверсий; #30421 внесён как явно **не**-evidence | Опровергнутая гарантия лучше неизвестной: мы знаем, что полагаться на валидность нельзя, и допущение всё равно снято fail-closed разбором. Искать надо не ties, а любую пару id↑/time↓ — часы врозь делают контрпример сильнее. Живой клиент (#30421) показывает временно неверный порядок по локальным id, но экспорт видит финализированные серверные — это предупреждение против тезиса «id по определению есть время», а не улика против файла |

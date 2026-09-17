@@ -41,6 +41,10 @@ I_LASTDAY = "tdesktop#27183 (2023-12-03, v4.12.2, closed as NOT PLANNED) — п�
 I_CAP = "tdesktop#31328 (2026-09-16, v7.2.8, OPEN) — ровно 10000 сообщений, JSON и HTML"
 I_RANGE66 = ("tdesktop#30412 (2026-03-07, v6.6.2, closed as duplicate) — "
              "«It exports whole channels messages from oldest message»")
+I_BADJSON1 = ("tdesktop#24961 (2022-08-20, v4.1.1, closed) — «Export chat history» outputs "
+              "illegal JSON with custom emojis: значение без кавычек там, где JSON требует строку")
+I_BADJSON2 = ("tdesktop#27571 (2024-03-12, v4.15.1, closed as NOT PLANNED) — `\\x01` внутри строки; "
+              "jq: «parse error: Invalid escape at line 2415365, column 47»")
 I_RANGE70 = ("tdesktop#31082 (2026-07-30, v7.0.6, closed as duplicate) — "
              "«The exported JSON file contains messages from the entire history, "
              "including messages sent before the selected start date»")
@@ -146,23 +150,26 @@ COVERAGE = (
     _p(
         key="format.strict_json",
         question="Гарантированно ли валиден выходной JSON?",
-        claim="Не установлено; гарантии в документации нет.",
-        status=Status.UNKNOWN,
+        claim="Нет, и это не «не установлено»: существуют конкретные невалидные выгрузки, "
+              "два независимых класса.",
+        status=Status.UNAVAILABLE,
         claim_scope=ClaimScope.ARTIFACT,
-        primary_evidence=(f"{WRITER} — вывод строится в значительной части вручную "
+        primary_evidence=(I_BADJSON1, I_BADJSON2,
+                          f"{WRITER} — вывод строится в значительной части вручную "
                           "(`SerializeString`/`SerializeObject`/`SerializeArray`, склейка "
                           "байтовых блоков), а не исключительно структурным JSON-builder'ом",
                           f"{WRITER}:2793 — Qt-классы JSON в файле есть, но `QJsonDocument::"
                           "fromJson` стоит на пути ЧТЕНИЯ стороннего файла в `other_data`, "
                           "а не на пути записи сообщений"),
-        observed_limitations=("ручная часть — это класс, в котором ошибки квотирования и "
-                              "дублирующиеся ключи возможны в принципе",
+        observed_limitations=("#27571 закрыт как not planned — то есть класс признан и "
+                              "не чинится",
                               "существование валидных файлов ничего не гарантирует о формате"),
-        downstream_consequence="Гарантия валидности не нужна: допущение снято поведением, "
-                               "а не доказательством.",
+        downstream_consequence="Полагаться на валидность нельзя — это знание, а не пробел. "
+                               "Гарантия при этом и не нужна: допущение снято поведением.",
         adapter_behavior="Строгий разбор; отказ разбора = отказ acquisition, без починки "
                           "«почти JSON» на лету.",
-        fixture_needed="Строгий разбор всех публичных result.json из багрепортов.",
+        fixture_needed="`tools/export_scan.py` по публичным файлам: доля невалидных. "
+                       "Статус уже UNAVAILABLE, замер нужен для частоты, не для вердикта.",
     ),
 )
 
@@ -233,11 +240,16 @@ ORDERING = (
                           "id, потому что весь файл задаёт id",
                           f"{OFFSETS} — «typically» гарантией монотонности не является"),
         observed_limitations=("два неизвестных схлопнулись в одно: вопрос о ties — это вопрос "
-                              "об id↔времени и ничего сверх",),
+                              "об id↔времени и ничего сверх",
+                              "tdesktop#30421 (локальные id дают временно неверный визуальный "
+                              "порядок в живом клиенте) — НЕ evidence: экспорт видит "
+                              "финализированные серверные id. Но хорошее предупреждение против "
+                              "тезиса «id по определению есть время»"),
         downstream_consequence="",
         adapter_behavior="",
-        fixture_needed="Публичный `result.json`: есть ли пара, где `id` растёт, а "
-                       "`date_unixtime` падает. ОДИН такой случай закрывает вопрос отрицательно.",
+        fixture_needed="`tools/export_scan.py` по публичным файлам: пара, где `id` растёт, а "
+                       "`date_unixtime` падает. ОДИН такой случай закрывает вопрос отрицательно; "
+                       "отсутствие на конечной выборке даёт максимум PARTIAL с долей.",
     ),
     _p(
         key="ordering.multi_device",

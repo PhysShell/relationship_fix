@@ -118,7 +118,7 @@ class TelegramVerdictTests(unittest.TestCase):
         self.assertEqual(keys, {
             "coverage.window_provenance", "coverage.completeness",
             "coverage.requested_range_honored", "provenance.producer_version",
-            "events.deleted",
+            "events.deleted", "format.strict_json",
         })
 
     def test_edited_is_not_an_edit_flag(self):
@@ -143,6 +143,24 @@ class TelegramVerdictTests(unittest.TestCase):
         self.assertIs(entry.status, Status.UNAVAILABLE)
         self.assertIn("31328", " ".join(entry.primary_evidence))
         self.assertIn("10000", entry.adapter_behavior)
+
+    def test_json_validity_is_refuted_not_merely_unproved(self):
+        """Two independent classes of syntactically invalid output exist, so
+        this is knowledge rather than a gap. The assumption stays eliminated by
+        fail-closed parsing either way."""
+        entry = tg.LEDGER.property("format.strict_json")
+        self.assertIs(entry.status, Status.UNAVAILABLE)
+        joined = " ".join(entry.primary_evidence)
+        for issue in ("24961", "27571"):
+            self.assertIn(issue, joined)
+        assumption = next(a for a in tg.LEDGER.assumptions if a.key == "input_is_valid_json")
+        self.assertTrue(assumption.eliminated_by_refusal)
+
+    def test_a_live_client_ordering_bug_is_marked_as_not_evidence(self):
+        entry = tg.LEDGER.property("ordering.tie_semantics")
+        limits = " ".join(entry.observed_limitations)
+        self.assertIn("30421", limits)
+        self.assertIn("НЕ evidence", limits)
 
     def test_the_producer_version_is_required_and_absent(self):
         """Semantics change between versions, and the file does not say which
