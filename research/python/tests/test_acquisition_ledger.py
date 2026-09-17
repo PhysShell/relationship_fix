@@ -118,7 +118,7 @@ class TelegramVerdictTests(unittest.TestCase):
         self.assertEqual(keys, {
             "coverage.window_provenance", "coverage.completeness",
             "coverage.requested_range_honored", "provenance.producer_version",
-            "events.deleted", "format.strict_json",
+            "events.deleted", "format.strict_json", "time.local_string",
         })
 
     def test_edited_is_not_an_edit_flag(self):
@@ -223,6 +223,44 @@ class TelegramVerdictTests(unittest.TestCase):
         for entry in tg.LEDGER.properties:
             if entry.effective_status is Status.UNKNOWN:
                 self.assertTrue(entry.fixture_needed, entry.key)
+
+    def test_the_date_string_is_refuted_as_utc_by_measurement(self):
+        """Measured, not inferred: on a public export the ISO string sits a
+        whole −5 h from date_unixtime across all 127 messages, with no offset
+        suffix anywhere. The string is the exporting machine's wall clock."""
+        entry = tg.LEDGER.property("time.local_string")
+        self.assertIs(entry.status, Status.UNAVAILABLE)
+        self.assertIn("−18000", " ".join(entry.primary_evidence))
+        self.assertIn("не парсится никогда", entry.adapter_behavior)
+
+
+class CorpusTests(unittest.TestCase):
+    """Rows of evidence about public files. The files themselves are not here,
+    and neither is anything anyone wrote in them."""
+
+    FORBIDDEN = {"text", "from", "from_id", "name", "chat_id", "messages"}
+
+    def test_corpus_rows_cannot_hold_conversation_content(self):
+        self.assertEqual(set(tg.CorpusRow.__dataclass_fields__) & self.FORBIDDEN, set())
+
+    def test_no_row_qualifies_the_target_type_yet(self):
+        """Both scanned files are an exporter sample, not a dyad: a
+        private_group with three senders, and someone's saved messages. The
+        ledger says so rather than letting "a real Telegram export" stand in
+        for "the thing the pilot will see"."""
+        self.assertEqual([r for r in tg.CORPUS if r.qualifies_target_type], [])
+        self.assertEqual({r.chat_type for r in tg.CORPUS},
+                         {"private_group", "saved_messages"})
+
+    def test_the_corpus_is_far_too_small_to_license_a_partial(self):
+        total = sum(r.entries for r in tg.CORPUS)
+        self.assertLess(total, 1000)
+        self.assertEqual(sum(r.chronology_counterexamples for r in tg.CORPUS), 0)
+
+    def test_every_row_carries_a_hash_and_a_url(self):
+        for row in tg.CORPUS:
+            self.assertTrue(row.url.startswith("https://"), row.source)
+            self.assertEqual(len(row.sha256_prefix), 16, row.source)
 
     def test_no_adapter_exists_yet(self):
         """The corpus rule, applied to targets: not one line of adapter until

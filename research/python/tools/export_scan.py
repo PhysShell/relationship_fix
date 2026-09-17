@@ -73,6 +73,10 @@ class ScanResult:
     strict_json_valid: bool
     #: parser message with the content stripped — position only
     parse_error: str | None = None
+    #: `type` of each chat object — a category, never a name. Needed because a
+    #: `private_group` qualifies the exporter's ORDERING and does not qualify a
+    #: dyadic `personal_chat`.
+    chat_types: tuple[str, ...] = ()
     entries: int = 0
     messages: int = 0
     service: int = 0
@@ -84,6 +88,11 @@ class ScanResult:
     adjacent_id_inversions: int = 0
     adjacent_time_inversions: int = 0
     equal_timestamp_pairs: int = 0
+    #: the subset that can actually move topology: a same-actor tie cannot
+    #: change how many times the ball changed hands, a cross-actor one can.
+    #: `from_id` is READ to compare adjacent senders and never stored.
+    equal_timestamp_cross_actor_pairs: int = 0
+    distinct_senders: int = 0
     chronology_counterexamples: int = 0
     samples: tuple[Inversion, ...] = ()
 
@@ -99,18 +108,20 @@ class ScanResult:
         return f"no inversion observed in {self.entries} entries"
 
 
-def _collect_message_arrays(node, out: list) -> None:
+def _collect_message_arrays(node, out: list, types: list) -> None:
     """Both shapes: a single-chat export is a chat object; a full export nests
     chats under `chats.list`. Anything with a `messages` array counts."""
     if isinstance(node, dict):
         messages = node.get("messages")
         if isinstance(messages, list):
             out.append(messages)
+            kind = node.get("type")
+            types.append(kind if isinstance(kind, str) else "?")
         for value in node.values():
-            _collect_message_arrays(value, out)
+            _collect_message_arrays(value, out, types)
     elif isinstance(node, list):
         for item in node:
-            _collect_message_arrays(item, out)
+            _collect_message_arrays(item, out, types)
 
 
 def _as_int(value):
@@ -141,18 +152,22 @@ def scan_bytes(raw: bytes, source: str) -> ScanResult:
         )
 
     arrays: list = []
-    _collect_message_arrays(document, arrays)
+    chat_types: list = []
+    _collect_message_arrays(document, arrays, chat_types)
 
     counts = dict(entries=0, messages=0, service=0, other_types=0,
                   missing_date_unixtime=0, unparsable_ids=0, negative_ids=0,
                   adjacent_id_inversions=0, adjacent_time_inversions=0,
-                  equal_timestamp_pairs=0, chronology_counterexamples=0)
+                  equal_timestamp_pairs=0, equal_timestamp_cross_actor_pairs=0,
+                  chronology_counterexamples=0)
+    senders: set[str] = set()
     seen_ids: set[int] = set()
     duplicates = 0
     samples: list[Inversion] = []
 
     for messages in arrays:
         previous = None
+        previous_sender = None
         for position, entry in enumerate(messages):
             if not isinstance(entry, dict):
                 continue
@@ -178,6 +193,11 @@ def scan_bytes(raw: bytes, source: str) -> ScanResult:
             if stamp is None:
                 counts["missing_date_unixtime"] += 1
 
+            sender = entry.get("from_id") or entry.get("actor_id")
+            sender = sender if isinstance(sender, (str, int)) else None
+            if sender is not None:
+                senders.add(str(sender))
+
             if identifier is not None and stamp is not None:
                 if previous is not None:
                     prev_id, prev_time = previous
@@ -187,15 +207,20 @@ def scan_bytes(raw: bytes, source: str) -> ScanResult:
                         counts["adjacent_time_inversions"] += 1
                     if stamp == prev_time:
                         counts["equal_timestamp_pairs"] += 1
+                        if (sender is not None and previous_sender is not None
+                                and str(sender) != str(previous_sender)):
+                            counts["equal_timestamp_cross_actor_pairs"] += 1
                     if identifier > prev_id and stamp < prev_time:
                         counts["chronology_counterexamples"] += 1
                         if len(samples) < MAX_COUNTEREXAMPLES:
                             samples.append(Inversion(position, prev_id, prev_time,
                                                      identifier, stamp))
                 previous = (identifier, stamp)
+                previous_sender = sender
 
     return ScanResult(source=source, sha256=digest, size_bytes=len(raw),
                       strict_json_valid=True, duplicate_ids=duplicates,
+                      chat_types=tuple(chat_types), distinct_senders=len(senders),
                       samples=tuple(samples), **counts)
 
 
@@ -216,9 +241,12 @@ def render(result: ScanResult) -> str:
             f"service {result.service} · other {result.other_types})",
             f"  ids: duplicates {result.duplicate_ids} · negative {result.negative_ids} "
             f"· unparsable {result.unparsable_ids}",
+            f"  chat types {list(result.chat_types)} · distinct senders "
+            f"{result.distinct_senders}",
             f"  adjacency: id inversions {result.adjacent_id_inversions} · "
             f"time inversions {result.adjacent_time_inversions} · "
-            f"equal timestamps {result.equal_timestamp_pairs}",
+            f"equal timestamps {result.equal_timestamp_pairs} "
+            f"(cross-actor {result.equal_timestamp_cross_actor_pairs})",
         ]
         for sample in result.samples[:5]:
             lines.append(f"    ! pos {sample.position}: id {sample.id_before}→"

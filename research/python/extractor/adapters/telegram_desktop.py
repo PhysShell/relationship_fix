@@ -25,6 +25,8 @@ until someone opens `SerializeDate`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .acquisition import Assumption, ClaimScope, Ledger, Property, Status
 
 #: Primary sources, fetched and read 2026-09-17.
@@ -435,21 +437,27 @@ TIME = (
     _p(
         key="time.local_string",
         question="Что означает строка `date`?",
-        claim="Производная от `QDateTime::fromSecsSinceEpoch(date)` без указания time-spec, "
-              "то есть от представления по умолчанию, отформатированного `Qt::ISODate`. "
-              "Есть ли в строке суффикс смещения — по документации Qt однозначно не "
-              "устанавливается.",
-        status=Status.UNKNOWN,
+        claim="Настенные часы машины экспорта, без указания смещения. Восстановить пояс "
+              "из файла нельзя. Утверждение «`date` — это UTC» ОПРОВЕРГНУТО измерением.",
+        status=Status.UNAVAILABLE,
         claim_scope=ClaimScope.ARTIFACT,
         primary_evidence=(f"{WRITER}:77-80 — `QDateTime::fromSecsSinceEpoch(date)"
-                          ".toString(Qt::ISODate)`",
+                          ".toString(Qt::ISODate)` без указания time-spec",
                           "doc.qt.io/qt-6/qdatetime.html — «default time representation is "
-                          "local time»; про суффикс смещения при LocalTime формулировка "
-                          "прочитана неоднозначно"),
-        observed_limitations=("зависит от версии Qt и от часового пояса машины экспорта",),
-        downstream_consequence="",
-        adapter_behavior="",
-        fixture_needed="Реальный экспорт с машины в известном не-UTC поясе: есть ли суффикс.",
+                          "local time»",
+                          "ИЗМЕРЕНО на публичном экспорте `organicdesign/4qx-holarchy@4403e55` "
+                          "(sha256 bbe61b1c…): `date` минус `date_unixtime` = −18000 с ровно, "
+                          "на всех 127 сообщениях; суффикса смещения в строке нет ни у одного"),
+        observed_limitations=("один файл, одна машина: измерение опровергает прочтение «это "
+                              "UTC», но не доказывает поведение всех сборок",
+                              "−5 ч — пояс того, кто экспортировал, и в файле это не написано"),
+        downstream_consequence="Строка `date` непригодна как время события: смещение из файла "
+                               "не выводится, а разница с абсолютным моментом достигает часов. "
+                               "Контракт был написан устойчивым к обоим ответам заранее — и "
+                               "именно поэтому измерение ничего не сломало.",
+        adapter_behavior="`date` не парсится никогда; событие берётся из `date_unixtime`. "
+                         "Наличие поля `date` не даёт права на `LocalDateTime`-семантику.",
+        fixture_needed="Закрыто. Дальнейшие файлы могут только уточнить разброс смещений.",
     ),
     _p(
         key="time.server_or_client",
@@ -521,4 +529,60 @@ LEDGER = Ledger(
     acquisition_path="пользователь экспортирует один чат из десктоп-клиента",
     properties=COVERAGE + ORDERING + IDENTITY + EVENTS + TIME,
     assumptions=ASSUMPTIONS,
+)
+
+
+# ---------------------------------------------------------------------------
+# Corpus rows: evidence about public files, never the files
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class CorpusRow:
+    """One scanned public export. No text, no names, no chat id — the same
+    contract as `tools.export_scan.ScanResult`, pinned here so the corpus
+    accumulates in the repository while the conversations do not."""
+
+    source: str
+    url: str
+    sha256_prefix: str
+    size_bytes: int
+    chat_type: str
+    entries: int
+    chronology_counterexamples: int
+    equal_timestamp_pairs: int
+    equal_timestamp_cross_actor_pairs: int
+    note: str
+
+    @property
+    def qualifies_target_type(self) -> bool:
+        """Only a dyadic `personal_chat` qualifies the pilot's own target.
+        Everything else qualifies the EXPORTER, which is useful and different."""
+        return self.chat_type == "personal_chat"
+
+
+CORPUS = (
+    CorpusRow(
+        source="organicdesign/4qx-holarchy@4403e55",
+        url="https://code.organicdesign.nz/organicdesign/4qx-holarchy/raw/commit/"
+            "4403e558490bcf5c436cf85895b52ebe22e5b35a/OpenClaw/Discussion/"
+            "epic4-constitutional-substrate/telegram-export.json",
+        sha256_prefix="bbe61b1c23936eff", size_bytes=362830,
+        chat_type="private_group", entries=127,
+        chronology_counterexamples=0, equal_timestamp_pairs=4,
+        equal_timestamp_cross_actor_pairs=0,
+        note="Крупный по байтам и маленький по сообщениям: 354 KiB — это длинные тексты, "
+             "а не 8000 записей. Три отправителя, поэтому квалифицирует ПОВЕДЕНИЕ ЭКСПОРТЁРА, "
+             "а не диадический personal_chat. Здесь же измерено `date` − `date_unixtime` = −5 ч.",
+    ),
+    CorpusRow(
+        source="innerdvations/telegram-chat-parser@main",
+        url="https://raw.githubusercontent.com/innerdvations/telegram-chat-parser/main/"
+            "tests/data/saved.json",
+        sha256_prefix="c3c556504921a813", size_bytes=7064,
+        chat_type="saved_messages", entries=21,
+        chronology_counterexamples=0, equal_timestamp_pairs=0,
+        equal_timestamp_cross_actor_pairs=0,
+        note="Тестовая фикстура парсера, и по типу это `saved_messages` — заметка себе, "
+             "а не разговор. Проверка инструмента, не свойства.",
+    ),
 )

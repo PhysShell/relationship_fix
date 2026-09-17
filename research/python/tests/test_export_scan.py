@@ -14,14 +14,17 @@ from tools.export_scan import Inversion, ScanResult, scan_bytes
 CHAT = "Personal chat"
 
 
-def export(messages, wrap="single") -> bytes:
-    chat = {"name": "n", "type": CHAT, "id": 1, "messages": messages}
+def export(messages, wrap="single", chat_type=None) -> bytes:
+    chat = {"name": "n", "type": chat_type or CHAT, "id": 1, "messages": messages}
     document = chat if wrap == "single" else {"chats": {"list": [chat]}}
     return json.dumps(document).encode("utf-8")
 
 
-def msg(mid, at, kind="message"):
-    return {"id": mid, "type": kind, "date": "x", "date_unixtime": str(at)}
+def msg(mid, at, kind="message", sender=None):
+    entry = {"id": mid, "type": kind, "date": "x", "date_unixtime": str(at)}
+    if sender is not None:
+        entry["from_id"] = sender
+    return entry
 
 
 class ShapeTests(unittest.TestCase):
@@ -100,6 +103,34 @@ class ChronologyTests(unittest.TestCase):
         got = scan_bytes(export(pairs), "s")
         self.assertGreater(got.chronology_counterexamples, 20)
         self.assertEqual(len(got.samples), 20)
+
+
+class ChatTypeAndSenderTests(unittest.TestCase):
+    """Type is a category, not a name — and it decides what a scan qualifies."""
+
+    def test_the_chat_type_is_reported(self):
+        got = scan_bytes(export([msg(1, 1)], chat_type="private_group"), "s")
+        self.assertEqual(got.chat_types, ("private_group",))
+
+    def test_a_same_actor_tie_is_not_a_cross_actor_tie(self):
+        """Only a cross-actor tie can change how many times the ball changed
+        hands; a same-actor one cannot move topology at all."""
+        got = scan_bytes(export([msg(1, 500, sender="user1"),
+                                 msg(2, 500, sender="user1")]), "s")
+        self.assertEqual(got.equal_timestamp_pairs, 1)
+        self.assertEqual(got.equal_timestamp_cross_actor_pairs, 0)
+
+    def test_a_cross_actor_tie_is_counted_separately(self):
+        got = scan_bytes(export([msg(1, 500, sender="user1"),
+                                 msg(2, 500, sender="user2")]), "s")
+        self.assertEqual(got.equal_timestamp_cross_actor_pairs, 1)
+        self.assertEqual(got.distinct_senders, 2)
+
+    def test_senders_are_counted_and_not_kept(self):
+        messages = [msg(i, 100 * i, sender=f"user{i}") for i in range(1, 4)]
+        got = scan_bytes(export(messages), "s")
+        self.assertEqual(got.distinct_senders, 3)
+        self.assertNotIn("user1", json.dumps(dataclasses.asdict(got)))
 
 
 class IdAccountingTests(unittest.TestCase):

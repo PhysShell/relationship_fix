@@ -103,7 +103,7 @@ BLOG      telegram.org/blog/export-and-more
 | свойство | статус | claim | primary evidence | consequence · adapter | что закроет |
 |---|---|---|---|---|---|
 | `time.instant`<br>Абсолютный ли это момент? | **QUALIFIED** | `date_unixtime` — секунды от эпохи, то есть instant, а не настенные часы. | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:82-84 — сырое число секунд | Ни timezone, ни DST не влияют на порядок и длительности.<br>**adapter:** `utc_offset_minutes = 0`, `local_time = date_unixtime`. | Фикстура через переход DST: длительности не прыгают на час. |
-| `time.local_string`<br>Что означает строка `date`? | UNKNOWN | Производная от `QDateTime::fromSecsSinceEpoch(date)` без указания time-spec, то есть от представления по умолчанию, отформатированного `Qt::ISODate`. Есть ли в строке суффикс смещения — по документации Qt однозначно не устанавливается.<br>_ограничения:_ зависит от версии Qt и от часового пояса машины экспорта | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:77-80 — `QDateTime::fromSecsSinceEpoch(date).toString(Qt::ISODate)` · doc.qt.io/qt-6/qdatetime.html — «default time representation is local time»; про суффикс смещения при LocalTime формулировка прочитана неоднозначно | — | Реальный экспорт с машины в известном не-UTC поясе: есть ли суффикс. |
+| `time.local_string`<br>Что означает строка `date`? | **UNAVAILABLE** | Настенные часы машины экспорта, без указания смещения. Восстановить пояс из файла нельзя. Утверждение «`date` — это UTC» ОПРОВЕРГНУТО измерением.<br>_ограничения:_ один файл, одна машина: измерение опровергает прочтение «это UTC», но не доказывает поведение всех сборок · −5 ч — пояс того, кто экспортировал, и в файле это не написано | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:77-80 — `QDateTime::fromSecsSinceEpoch(date).toString(Qt::ISODate)` без указания time-spec · doc.qt.io/qt-6/qdatetime.html — «default time representation is local time» · ИЗМЕРЕНО на публичном экспорте `organicdesign/4qx-holarchy@4403e55` (sha256 bbe61b1c…): `date` минус `date_unixtime` = −18000 с ровно, на всех 127 сообщениях; суффикса смещения в строке нет ни у одного | Строка `date` непригодна как время события: смещение из файла не выводится, а разница с абсолютным моментом достигает часов. Контракт был написан устойчивым к обоим ответам заранее — и именно поэтому измерение ничего не сломало.<br>**adapter:** `date` не парсится никогда; событие берётся из `date_unixtime`. Наличие поля `date` не даёт права на `LocalDateTime`-семантику. | Закрыто. Дальнейшие файлы могут только уточнить разброс смещений. |
 | `time.server_or_client`<br>Это время сервера или часы отправителя? | UNKNOWN | Не установлено.<br>_ограничения:_ MaiChat пришлось объявлять `SERVER_RECEIVE` именно здесь | telegramdesktop/tdesktop@dev Telegram/SourceFiles/export/output/export_output_json.cpp:1552 — пишется `message.date`, происхождение которого в этом файле не определяется | — | core.telegram.org: семантика `message.date` в схеме API. |
 | `time.clock_corrections`<br>Возможны ли ретроспективные правки времени или перестановки? | UNKNOWN | Не установлено. | telegram.org/blog/export-and-more — не упоминается | — | Два экспорта одного окна: сравнение `date_unixtime` по id. |
 
@@ -213,25 +213,50 @@ id₁ < id₂   но   time₁ > time₂
 `no inversion observed in N entries` — формулировка, из которой `QUALIFIED`
 не выводится ни при каком N.
 
-**Первый прогон**, на публичной тестовой фикстуре парсера
-[innerdvations/telegram-chat-parser](https://github.com/innerdvations/telegram-chat-parser)
-(`tests/data/saved.json`, sha256 `c3c556504921a813…`, 7 064 байта):
+### Корпус: две строки, обе не по целевому типу
+
+`telegram_desktop.CORPUS` — строки доказательств, не файлы. Каждая несёт URL, префикс
+sha256, размер, тип чата, счётчики; ни текста, ни имён, ни id чата.
+
+| источник | тип чата | записей | id↑/time↓ | равные метки (cross-actor) | что это квалифицирует |
+|---|---|---|---|---|---|
+| [organicdesign/4qx-holarchy@4403e55](https://code.organicdesign.nz/organicdesign/4qx-holarchy/src/commit/4403e558490bcf5c436cf85895b52ebe22e5b35a/OpenClaw/Discussion/epic4-constitutional-substrate/telegram-export.json) · `bbe61b1c…` · 362 830 Б | `private_group` | 127 | **0** | 4 (**0**) | поведение **экспортёра** |
+| [innerdvations/telegram-chat-parser@main](https://raw.githubusercontent.com/innerdvations/telegram-chat-parser/main/tests/data/saved.json) · `c3c55650…` · 7 064 Б | `saved_messages` | 21 | 0 | 0 | работоспособность **инструмента** |
+
+Ваша оговорка про `private_group` оказалась даже важнее, чем выглядела, и она теперь
+механическая: `CorpusRow.qualifies_target_type` истинно только для `personal_chat`, и
+сейчас таких строк **ноль**. Заодно тип вскрыл вторую подмену: файл, взятый в прошлом
+проходе, — это `saved_messages`, то есть заметки себе, а не разговор вообще.
+
+**354 KiB — это 127 сообщений, а не 8000.** Байты в этом файле ушли в длинные тексты.
+Хороший урок про то, что размер файла — не размер выборки; 148 записей суммарно не
+лицензируют даже скромный `PARTIAL`.
+
+Контрпримера не нашлось. Это ровно `no inversion observed`, и `ties_resolvable`
+остаётся открытым.
+
+### Зато нашлось другое: `date` — это НЕ UTC, и теперь это измерено
+
+На том же файле, все 127 сообщений:
 
 ```
-strict JSON: valid
-entries 21  (message 20 · service 1)
-id duplicates 0 · negative 0 · unparsable 0
-id inversions 0 · time inversions 0 · equal timestamps 0
-→ no inversion observed in 21 entries
+date (ISO)  −  date_unixtime  =  −18000 с  ровно, без единого исключения
+суффикс смещения в строке     =  отсутствует у всех
 ```
 
-Двадцать одна запись не доказывает **ничего** о монотонности id — это проверка
-инструмента, а не свойства. Записано как первая строка корпуса, а не как результат.
+То есть строка `date` — настенные часы машины экспорта (здесь UTC−5), а смещение в
+файле не записано и восстановлению не подлежит. Прочтение «`date` — это UTC», которое
+мне в первом проходе подсунуло резюме документации, **опровергнуто измерением**.
+`time.local_string` уходит из `UNKNOWN` в **UNAVAILABLE**.
+
+И вот тут окупилась осторожность: контракт «никогда не парсить `date`, читать только
+`date_unixtime`» был написан **до** того, как ответ стал известен, именно потому, что
+устойчив к обоим исходам. Измерение не сломало ничего — оно закрыло строку.
 
 ## 3. Вердикт
 
 ```
-24 свойства:  9 QUALIFIED · 3 PARTIAL · 6 UNKNOWN · 6 UNAVAILABLE
+24 свойства:  9 QUALIFIED · 3 PARTIAL · 5 UNKNOWN · 7 UNAVAILABLE
               0 понижено из PARTIAL (то есть все три PARTIAL несут контракт)
 ```
 
@@ -296,9 +321,9 @@ public bug corpus                 ✔ 6 багрепортов проверен�
 tdesktop history-fetch source     ✔ цепочка прослежена; 2 свойства QUALIFIED,
                                     2 допущения закрыты, 1 вопрос сведён к одному
         ↓
-public result.json attachments    ← ИДЁТ: сканер написан и прогнан на 1 файле
-                                    (21 запись — проверка инструмента, не свойства);
-                                    нужна выборка, на которой «не найдено» что-то значит
+public result.json attachments    ← ИДЁТ: 2 файла, 148 записей, 0 контрпримеров,
+                                    0 строк целевого типа `personal_chat`.
+                                    Побочно закрыл `time.local_string`
         ↓
 actual export                     только для того, что осталось незакрытым
         ↓
@@ -323,3 +348,4 @@ qualification verdict             и только теперь — первая 
 | 2026-09-17 | Интернет-pass до просьбы о личном экспорте: 4 багрепорта проверены по первоисточнику. `events.edited` **QUALIFIED → PARTIAL** (#30647: реакция создаёт и затирает `edited`); `coverage.completeness` **UNKNOWN → UNAVAILABLE** (#31328: ровно 10000 сообщений, JSON и HTML); добавлены `coverage.requested_range_honored` (#5854, #27183), `provenance.producer_version` и `format.strict_json`; заведён список UNVERIFIED | Заявленный баг 7.0.6 при проверке оказался другим классом — полный обход истории с клиентской фильтрацией это производительность, а не лишние сообщения в выводе; «медленно, но правильно» и «быстро, но неверно» дают противоположные контракты. Диапазонный класс подтверждают #5854 и #27183, а не 7.0.6 |
 | 2026-09-17 | Две поправки заказчика внесены: #31082 (7.0.6) и #30412 (6.6.2) подтверждены как отказ по СОДЕРЖИМОМУ — мой предыдущий вывод «это только производительность» был ошибкой поиска, а не факта; формулировка про сериализатор смягчена до «в значительной части вручную». History-fetch прослежен: `ordering.exported_position` и `ordering.multi_device` → QUALIFIED, добавлен третий путь закрытия допущения (`eliminated_by_refusal`) | Экспорт идёт возрастающим `id`: сервер отдаёт убывающий, `ParseMessagesSlice` разворачивает, курсор `back().id + 1` подтверждает. Значит «файл в хронологии» — не то же, что «файл в id-порядке», и вопрос о ties свёлся ровно к монотонности id по времени. Диапазон дат в запрос не входит вообще — отсюда семь лет одного и того же бага |
 | 2026-09-17 | `format.strict_json` **UNKNOWN → UNAVAILABLE** по двум подтверждённым классам невалидного вывода (#24961, #27571); добавлен `tools/export_scan.py` — сканер публичных экспортов, сохраняющий только метаданные и кортежи инверсий; #30421 внесён как явно **не**-evidence | Опровергнутая гарантия лучше неизвестной: мы знаем, что полагаться на валидность нельзя, и допущение всё равно снято fail-closed разбором. Искать надо не ties, а любую пару id↑/time↓ — часы врозь делают контрпример сильнее. Живой клиент (#30421) показывает временно неверный порядок по локальным id, но экспорт видит финализированные серверные — это предупреждение против тезиса «id по определению есть время», а не улика против файла |
+| 2026-09-17 | Прогнан публичный экспорт `4qx-holarchy@4403e55` (127 записей, `private_group`): контрпримера id↑/time↓ нет. Заведён `CORPUS` со строками доказательств и механическим `qualifies_target_type`; сканер считает cross-actor ties и тип чата. `time.local_string` **UNKNOWN → UNAVAILABLE** по измерению | 354 KiB оказались 127 сообщениями — размер файла не размер выборки. Тип чата вскрыл, что ни один из двух файлов не `personal_chat`, а один вообще `saved_messages`. И на том же файле `date` − `date_unixtime` = −18000 с на всех сообщениях без суффикса смещения: строка — настенные часы машины экспорта, а не UTC |
