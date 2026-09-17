@@ -7,6 +7,7 @@ takes a path and these tests take dictionaries shaped like the real files.
 
 import unittest
 
+from extractor.adapters.guards import DyadMembershipError
 from extractor.adapters.maichat import (
     AdapterProvenance,
     FailedDeliveryPolicy,
@@ -127,6 +128,53 @@ class FailedDeliveryTests(unittest.TestCase):
     def test_absence_of_the_field_means_delivered(self):
         _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
         self.assertEqual(provenance.failed_excluded, 0)
+
+
+class DyadMembershipTests(unittest.TestCase):
+    """The check the core cannot do: dyadic is not the same as the right dyad."""
+
+    def test_a_third_speaker_is_refused_at_the_import_boundary(self):
+        with self.assertRaises(DyadMembershipError):
+            adapt(conversation(
+                message("m1", A, "2023-12-07T20:13:50.843Z"),
+                message("m2", "stranger", "2023-12-07T20:13:52.000Z"),
+                message("m3", B, "2023-12-07T20:13:54.000Z"),
+            ))
+
+    def test_two_actors_who_are_the_wrong_two_pass_the_core_and_fail_here(self):
+        """Exactly the gap: `len(actors) <= 2` holds, and the conversation is
+        still about somebody the source never named."""
+        node = conversation(
+            message("m1", A, "2023-12-07T20:13:50.843Z"),
+            message("m2", "stranger", "2023-12-07T20:13:52.000Z"),
+        )
+        actors = {m["ofUser"]["$oid"] for m in node["messages"]}
+        self.assertEqual(len(actors), 2)          # the core would be satisfied
+        with self.assertRaises(DyadMembershipError):
+            adapt(node)
+
+    def test_a_degenerate_declared_pair_is_refused(self):
+        node = conversation(message("m1", A, "2023-12-07T20:13:50.843Z"))
+        node["secondId"] = {"$oid": A}
+        with self.assertRaises(DyadMembershipError):
+            adapt(node)
+
+    def test_one_side_silent_is_not_a_membership_problem(self):
+        """B never speaks. That is a quiet conversation, not a wrong dyad."""
+        messages, provenance = adapt(conversation(
+            message("m1", A, "2023-12-07T20:13:50.843Z"),
+            message("m2", A, "2023-12-07T20:13:52.000Z"),
+        ))
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(provenance.participants, (A, B))
+
+    def test_the_guard_is_shared_so_the_next_adapter_inherits_it(self):
+        from extractor.adapters import guards
+
+        self.assertTrue(callable(guards.verify_dyad_membership))
+        guards.verify_dyad_membership(["x", "y"], ("x", "y"), "t")
+        with self.assertRaises(guards.DyadMembershipError):
+            guards.verify_dyad_membership(["x", "z"], ("x", "y"), "t")
 
 
 class ProvenanceShapeTests(unittest.TestCase):

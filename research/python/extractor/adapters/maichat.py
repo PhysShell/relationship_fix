@@ -16,8 +16,14 @@ clock. MaiChat's `time` is the SERVER RECEIVE time — README §7, verbatim: «t
 gap between the last log timestamp and "time" therefore reflects both send delay
 and network latency». Those are different quantities, so the adapter declares
 which one it is handing over rather than quietly assigning it. Every result
-computed from this corpus is a result about observed server-receive time, and
-`AdapterProvenance` travels with the messages so that sentence cannot be lost.
+computed from this corpus is a result about observed server-receive time.
+
+`AdapterProvenance` is returned ALONGSIDE the messages, not welded to them. The
+core `ExtractionResult` is deliberately blind to where its input came from, and
+no type stops a caller from dropping the provenance on the floor — so the
+guarantee is a contract on this layer, stated plainly rather than overstated:
+**the MaiChat harness publishes no number without its `AdapterProvenance`**. The
+core staying source-agnostic is the better division of labour anyway.
 
 The same applies to failed delivery. Whether an undelivered message took part in
 the conversation is a question about the source, not about topology, so the
@@ -34,6 +40,7 @@ from enum import Enum
 from pathlib import Path
 
 from ..model import RawMessage
+from .guards import verify_dyad_membership
 
 SOURCE = "MaiChat v1.0 (Dao, Lai & Bell, LREC 2026; doi:10.7488/ds/8083)"
 LICENCE = "CC BY-SA 4.0 — attribution and share-alike; derivative datasets carry the same licence"
@@ -106,6 +113,11 @@ def adapt(
     `utc_offset_minutes` is 0 because MaiChat's timestamps are already UTC —
     which is NOT the same as saying the field means what RawMessage's docstring
     says it means. That is what the provenance is for.
+
+    Dyad membership is checked here rather than downstream: the core only asks
+    that a stream have at most two actors, which a mis-joined file can satisfy
+    while being about the wrong two people. MaiChat passes this trivially; the
+    rule lives here so the messier adapters inherit something already tested.
     """
     conversation_id = _oid(conversation["_id"])
     participants = (_oid(conversation["firstId"]), _oid(conversation["secondId"]))
@@ -125,6 +137,9 @@ def adapt(
             char_count=len(message["content"]),
             device_id=message.get("deviceType", "unknown"),
         ))
+
+    verify_dyad_membership((m.actor for m in messages), participants,
+                           f"{SOURCE} conv {conversation_id}")
 
     provenance = AdapterProvenance(
         source=SOURCE,
