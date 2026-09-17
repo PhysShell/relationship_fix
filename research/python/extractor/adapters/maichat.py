@@ -41,6 +41,26 @@ from pathlib import Path
 
 from ..model import RawMessage
 from .guards import verify_dyad_membership
+from .semantics import (
+    Deduplication,
+    LengthSemantics,
+    MessageIdentity,
+    OrderingSemantics,
+    SourceSemantics,
+    TimestampResolution,
+)
+
+#: MaiChat's declaration. Compare with the WhatsApp-export corpora, where
+#: resolution is MINUTE, ordering is partial and identity is absent.
+SEMANTICS = SourceSemantics(
+    timestamp_meaning="server_receive",
+    timestamp_resolution=TimestampResolution.MILLISECOND,
+    ordering=OrderingSemantics.TOTAL,
+    message_identity=MessageIdentity.STABLE_ID,     # MongoDB ObjectID per message
+    deduplication=Deduplication.BY_STABLE_ID,
+    length=LengthSemantics.TEXT_CHARS,              # len(content), emojis included
+    notes=("server receive time, not send time — README §7",),
+)
 
 SOURCE = "MaiChat v1.0 (Dao, Lai & Bell, LREC 2026; doi:10.7488/ds/8083)"
 LICENCE = "CC BY-SA 4.0 — attribution and share-alike; derivative datasets carry the same licence"
@@ -71,6 +91,7 @@ class AdapterProvenance:
     timestamp_semantics: TimestampSemantics
     failed_delivery_policy: FailedDeliveryPolicy
     licence: str
+    semantics: SourceSemantics
     conversation_id: str
     participants: tuple[str, str]
     messages_in_file: int
@@ -79,7 +100,8 @@ class AdapterProvenance:
     def claim_prefix(self) -> str:
         """Prepended to any reported result, so the caveat cannot detach."""
         return (f"on {self.source}, using source-provided "
-                f"{self.timestamp_semantics.value} timestamps")
+                f"{self.timestamp_semantics.value} timestamps at "
+                f"{self.semantics.timestamp_resolution.value} resolution")
 
 
 def _epoch(node: dict) -> float:
@@ -146,6 +168,7 @@ def adapt(
         timestamp_semantics=TimestampSemantics.SERVER_RECEIVE,
         failed_delivery_policy=failed_delivery,
         licence=LICENCE,
+        semantics=SEMANTICS,
         conversation_id=conversation_id,
         participants=participants,
         messages_in_file=len(conversation["messages"]),

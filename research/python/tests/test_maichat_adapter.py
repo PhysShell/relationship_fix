@@ -192,3 +192,74 @@ class ProvenanceShapeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourceSemanticsTests(unittest.TestCase):
+    """The declaration the WhatsApp corpora forced into existence."""
+
+    def test_maichat_declares_a_total_order_backed_by_real_ids(self):
+        from extractor.adapters.maichat import SEMANTICS
+        from extractor.adapters.semantics import (
+            MessageIdentity,
+            OrderingSemantics,
+            TimestampResolution,
+        )
+
+        self.assertIs(SEMANTICS.timestamp_resolution, TimestampResolution.MILLISECOND)
+        self.assertIs(SEMANTICS.ordering, OrderingSemantics.TOTAL)
+        self.assertIs(SEMANTICS.message_identity, MessageIdentity.STABLE_ID)
+        self.assertTrue(SEMANTICS.usable_as_topology_oracle)
+
+    def test_the_declaration_rides_along_with_every_claim(self):
+        _, provenance = adapt(conversation(message("m1", A, "2023-12-07T20:13:50.843Z")))
+        self.assertIn("millisecond", provenance.claim_prefix())
+
+    def test_a_minute_resolution_source_is_refused_as_a_topology_oracle(self):
+        """The WhatsApp-export shape: minute buckets, partial order, no ids.
+        Synthesising ids to break cross-actor ties would manufacture hand-overs."""
+        from extractor.adapters.semantics import (
+            Deduplication,
+            LengthSemantics,
+            MessageIdentity,
+            OrderingSemantics,
+            SourceSemantics,
+            TimestampResolution,
+            TopologyOracleRefused,
+            assert_topology_oracle_usable,
+        )
+
+        whatsapp_like = SourceSemantics(
+            timestamp_meaning="whatsapp_export",
+            timestamp_resolution=TimestampResolution.MINUTE,
+            ordering=OrderingSemantics.PARTIAL_WITHIN_EQUAL_TIMESTAMP,
+            message_identity=MessageIdentity.NONE,
+            deduplication=Deduplication.DISABLED,
+            length=LengthSemantics.TEXT_CHARS_EXCLUDING_EMOJI,
+        )
+        self.assertFalse(whatsapp_like.usable_as_topology_oracle)
+        self.assertEqual(whatsapp_like.boundary_uncertainty_seconds, 60.0)
+        with self.assertRaises(TopologyOracleRefused):
+            assert_topology_oracle_usable(whatsapp_like, "seufert-like")
+
+        from extractor.adapters.maichat import SEMANTICS
+        assert_topology_oracle_usable(SEMANTICS, "maichat")   # does not raise
+
+    def test_a_content_hash_identity_is_not_enough_even_with_a_total_order(self):
+        from extractor.adapters.semantics import (
+            Deduplication,
+            LengthSemantics,
+            MessageIdentity,
+            OrderingSemantics,
+            SourceSemantics,
+            TimestampResolution,
+        )
+
+        hashed = SourceSemantics(
+            timestamp_meaning="send_local",
+            timestamp_resolution=TimestampResolution.MILLISECOND,
+            ordering=OrderingSemantics.TOTAL,
+            message_identity=MessageIdentity.CONTENT_HASH,
+            deduplication=Deduplication.DISABLED,
+            length=LengthSemantics.TEXT_CHARS,
+        )
+        self.assertFalse(hashed.usable_as_topology_oracle)
