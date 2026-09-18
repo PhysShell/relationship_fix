@@ -97,7 +97,7 @@ def run(
                                " ".join(sorted(extra))), source_type)
 
     findings = findings + coverage_findings(document, messages, window)
-    incomplete = any(f.code in ("suspicious_round_count", "starts_at_window_edge")
+    incomplete = any(f.code in ("suspicious_round_count", "left_edge_unproven")
                      for f in findings)
     return OutwardResult(
         verdict=Verdict.INCOMPLETE if incomplete else Verdict.ACCEPTED,

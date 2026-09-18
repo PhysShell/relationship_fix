@@ -166,7 +166,17 @@ def coverage_findings(document: dict, messages: list[RawMessage],
     if len(document["messages"]) == 10000:
         findings.append(Finding(Layer.QUALIFICATION, "suspicious_round_count", "10000"))
     stamps = [m.timestamp for m in messages]
-    if stamps and min(stamps) <= window.start:
-        findings.append(Finding(Layer.QUALIFICATION, "starts_at_window_edge",
-                                "earliest message coincides with the window start"))
+    if not stamps or min(stamps) >= window.start:
+        # NOTHING is observed before the window opens, so we cannot tell whether
+        # the export begins there because the conversation did, or because the
+        # file was cut at that point. `coverage.completeness` is UNAVAILABLE and
+        # silent truncation is documented, so the left edge stays unproven.
+        #
+        # A message BEFORE the window start is the opposite of suspicious: it
+        # demonstrates the export reaches back past the period, which is exactly
+        # the coverage we want. The first version of this check flagged that
+        # case — it fired on the evidence rather than on its absence, and the
+        # golden positive path found it within a minute of existing.
+        findings.append(Finding(Layer.QUALIFICATION, "left_edge_unproven",
+                                "no message observed before the window opens"))
     return tuple(findings)

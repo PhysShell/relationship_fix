@@ -59,10 +59,16 @@ class HappyPathTests(unittest.TestCase):
     def setUp(self):
         self.result = run(HAPPY, WINDOW, PRODUCER)
 
-    def test_the_verdict_is_accepted_and_carries_measurements(self):
-        self.assertIs(self.result.verdict, Verdict.ACCEPTED)
+    def test_the_verdict_carries_measurements_with_the_left_edge_unproven(self):
+        """This fixture holds nothing before the window opens — the common real
+        case, since an export does not necessarily reach back past the period.
+        So it is measured AND marked: INCOMPLETE, not ACCEPTED. The fully clean
+        case, where coverage of the left edge is demonstrated, is
+        `GoldenPositivePathTests`."""
+        self.assertIs(self.result.verdict, Verdict.INCOMPLETE)
         self.assertTrue(self.result.verdict.carries_measurements)
         self.assertIsNotNone(self.result.aggregate)
+        self.assertIn("left_edge_unproven", self.result.codes())
 
     def test_the_expected_sufficient_statistics_arrive_intact(self):
         cell = next(h for h in self.result.aggregate["horizons"] if h["horizon_hours"] == 6.0)
@@ -96,6 +102,7 @@ class HappyPathTests(unittest.TestCase):
         tied = export([message(201, 1.0, B), message(202, 1.0, A),
                        message(203, 5.0, B), message(204, 6.0, A)])
         result = run(tied, WINDOW, PRODUCER)
+        self.assertTrue(result.verdict.carries_measurements)
         self.assertEqual(result.aggregate["cross_actor_tie_groups"], 1)
         self.assertEqual(result.aggregate["ambiguous_opportunities"], 1)
 
@@ -106,6 +113,110 @@ class HappyPathTests(unittest.TestCase):
         self.assertIn("service_entries_excluded", result.codes())
         cell = next(h for h in result.aggregate["horizons"] if h["horizon_hours"] == 6.0)
         self.assertEqual(cell["opportunities_eligible"], 1)
+
+
+
+class GoldenPositivePathTests(unittest.TestCase):
+    """Зеркальная половина отрицательного контракта.
+
+    Всё остальное доказывает, что НЕПРАВИЛЬНЫЙ путь отказывается. Система,
+    которая прекрасно умеет говорить «нет», получает сертификат на банковский
+    сейф, который не открывается даже владельцу. Здесь доказывается, что
+    правильный путь работает: внешнее окно доезжает неизменным, управляет
+    отбором и не переопределяется содержимым файла.
+
+    Окно намеренно не начинается с нуля — при нулевом старте `end - start`
+    неотличимо от `end + start`, и вся цепочка прошла бы с перепутанным знаком.
+    Сообщения лежат строго внутри, с отступом от обеих границ, чтобы ни одна
+    эвристика края не срабатывала «просто потому что первое сообщение — первое».
+    """
+
+    W0 = 30 * 24 * HOUR            # ненулевой старт
+    W1 = 37 * 24 * HOUR            # ровно семь суток
+    DELTA = 6 * HOUR               # отступ от обеих границ
+
+    def setUp(self):
+        spanning = [
+            # ДО окна: доказывает, что экспорт дотягивается назад за период,
+            # то есть левый край покрыт наблюдением, а не обрезан
+            message(199, self.W0 / HOUR - 40, B),
+            message(200, self.W0 / HOUR - 39, A),
+            # ВНУТРИ окна
+            message(201, self.W0 / HOUR + 6, B),      # партнёр открывает
+            message(202, self.W0 / HOUR + 7, A),      # участник отвечает через час
+            message(203, self.W0 / HOUR + 20, B),
+            message(204, self.W0 / HOUR + 22, A),     # ответ через два часа
+            # ПОСЛЕ окна: не должно попасть в агрегат вообще
+            message(205, self.W1 / HOUR + 5, B),
+            message(206, self.W1 / HOUR + 6, A),
+        ]
+        self.raw = export(spanning)
+        self.window = ProtocolWindow(participant_id=A, period_id="golden",
+                                     start=self.W0, end=self.W1)
+        self.result = run(self.raw, self.window, PRODUCER)
+
+    def test_the_strongest_verdict_allowed_is_reached(self):
+        """Не INCOMPLETE и не OUT_OF_SCOPE: при чистом артефакте и честном
+        внешнем окне путь обязан дойти до ACCEPTED."""
+        self.assertIs(self.result.verdict, Verdict.ACCEPTED)
+        self.assertIsNotNone(self.result.aggregate)
+
+    def test_no_coverage_finding_fires_when_coverage_is_demonstrated(self):
+        """Сообщения есть до окна — значит левый край покрыт наблюдением, и
+        флагу не на что жаловаться."""
+        self.assertNotIn("left_edge_unproven", self.result.codes())
+        self.assertNotIn("suspicious_round_count", self.result.codes())
+
+    def test_the_exported_window_is_exactly_the_protocol_window(self):
+        self.assertEqual(self.result.aggregate["observation_window_seconds"],
+                         self.W1 - self.W0)
+        self.assertEqual(self.result.aggregate["observation_window_seconds"],
+                         7 * 24 * HOUR)
+
+    def test_the_contents_never_redefine_the_window(self):
+        """Промежуток между первым и последним сообщением — 16 часов. Окно —
+        семь суток. Если бы содержимое хоть где-то переопределяло границы,
+        экспортированная длина совпала бы с размахом данных."""
+        span = (self.W1 / HOUR + 6) * HOUR - (self.W0 / HOUR - 40) * HOUR
+        self.assertNotEqual(self.result.aggregate["observation_window_seconds"], span)
+        self.assertEqual(self.result.aggregate["observation_window_seconds"],
+                         self.W1 - self.W0)
+
+    def test_the_burden_is_computed_over_that_window_and_nothing_else(self):
+        cell = next(h for h in self.result.aggregate["horizons"]
+                    if h["horizon_hours"] == 6.0)
+        self.assertEqual(cell["opportunities_eligible"], 2)
+        self.assertEqual(cell["replied_within"], 2)
+        self.assertEqual(cell["sum_min_latency_seconds"], 3 * HOUR)   # 1ч + 2ч
+
+    def test_the_same_bytes_under_a_different_window_give_a_different_answer(self):
+        """Доказательство, что окно действительно управляет, а не просто едет
+        рядом: те же байты, другое окно — другой законный результат."""
+        narrow = ProtocolWindow(participant_id=A, period_id="golden-narrow",
+                                start=self.W0 + 12 * HOUR, end=self.W1)
+        other = run(self.raw, narrow, PRODUCER)
+        self.assertIs(other.verdict, Verdict.ACCEPTED)
+        self.assertNotEqual(other.aggregate["observation_window_seconds"],
+                            self.result.aggregate["observation_window_seconds"])
+        first = next(h for h in other.aggregate["horizons"] if h["horizon_hours"] == 6.0)
+        self.assertEqual(first["opportunities_eligible"], 1)   # первая пара отсечена
+
+    def test_messages_outside_the_window_do_not_enter_the_aggregate(self):
+        """Восемь сообщений в файле, четыре внутри окна. Участнику принадлежат
+        четыре, внутри — два."""
+        self.assertEqual(self.result.aggregate["own_message_count"], 2)
+
+    def test_the_certificate_over_this_path_passes_and_says_accepted(self):
+        from acquisition.certificate import SYNTHETIC_FIXTURE, certify
+        cert = certify(self.raw, self.window, PRODUCER,
+                       artifact_kind=SYNTHETIC_FIXTURE,
+                       generator_provenance="golden positive path",
+                       markers=(SECRET_TEXT, SECRET_NAME, SECRET_MEDIA))
+        self.assertEqual(cert.verdict, "PASS")
+        self.assertEqual(cert.section("ACQUISITION").facts["verdict"], "accepted")
+        self.assertEqual(cert.section("ACQUISITION").facts["window_from_protocol"],
+                         f"[{self.W0}, {self.W1})")
+        self.assertEqual(cert.section("EXPORT BOUNDARY").facts["markers_leaked"], "none")
 
 
 class FailureInjectionTests(unittest.TestCase):
@@ -297,19 +408,42 @@ class SeamContractTests(unittest.TestCase):
         self.assertIs(result.verdict, Verdict.REFUSED)
         self.assertIn("window_outside_export", result.codes())
 
-    def test_the_earliest_message_at_the_window_edge_raises_suspicion(self):
-        """`coverage.completeness` is UNAVAILABLE: an export whose first
-        message coincides with the window start may have been truncated there
-        rather than started there. Measured, flagged, not resolved."""
-        flush = export([message(101, 0.0, B), message(102, 1.0, A)])
-        self.assertIn("starts_at_window_edge", run(flush, WINDOW, PRODUCER).codes())
-        later = export([message(101, 1.0, B), message(102, 2.0, A)])
-        self.assertNotIn("starts_at_window_edge", run(later, WINDOW, PRODUCER).codes())
+    def test_an_unproven_left_edge_is_flagged_and_a_proven_one_is_not(self):
+        """`coverage.completeness` is UNAVAILABLE and silent truncation is
+        documented, so an export with nothing before the window cannot show
+        whether it begins there or was cut there. A message BEFORE the window
+        is the evidence, not the suspicion — the first version of this check had
+        it backwards and flagged the proof."""
+        nothing_before = export([message(101, 1.0, B), message(102, 2.0, A)])
+        self.assertIn("left_edge_unproven", run(nothing_before, WINDOW, PRODUCER).codes())
 
-    def test_suspicion_looks_at_the_earliest_message_not_the_latest(self):
+        window = ProtocolWindow(participant_id=A, period_id="w",
+                                start=24 * HOUR, end=48 * HOUR)
+        reaches_back = export([message(101, 1.0, B), message(102, 25.0, B),
+                               message(103, 26.0, A)])
+        self.assertNotIn("left_edge_unproven", run(reaches_back, window, PRODUCER).codes())
+
+    def test_a_message_exactly_on_the_window_start_still_leaves_it_unproven(self):
+        """`>=`, not `>`. A message sitting exactly on the boundary shows
+        nothing about what came before it: the export could have been cut at
+        precisely that point. Proof requires something STRICTLY earlier."""
+        window = ProtocolWindow(participant_id=A, period_id="w",
+                                start=24 * HOUR, end=48 * HOUR)
+        flush = export([message(101, 24.0, B), message(102, 25.0, A)])
+        self.assertIn("left_edge_unproven", run(flush, window, PRODUCER).codes())
+
+        one_second_earlier = export([message(100, 24.0 - 1 / HOUR, B),
+                                     message(101, 24.0, B), message(102, 25.0, A)])
+        self.assertNotIn("left_edge_unproven",
+                         run(one_second_earlier, window, PRODUCER).codes())
+
+    def test_the_check_looks_at_the_earliest_message_not_the_latest(self):
         """`min`, not `max`: a late message says nothing about the left edge."""
-        late_only = export([message(101, 100.0, B), message(102, 101.0, A)])
-        self.assertNotIn("starts_at_window_edge", run(late_only, WINDOW, PRODUCER).codes())
+        window = ProtocolWindow(participant_id=A, period_id="w",
+                                start=24 * HOUR, end=48 * HOUR)
+        early_then_late = export([message(101, 1.0, B), message(102, 30.0, B),
+                                  message(103, 31.0, A), message(104, 40.0, A)])
+        self.assertNotIn("left_edge_unproven", run(early_then_late, window, PRODUCER).codes())
 
     def test_an_id_below_the_supported_range_is_refused_not_wrapped(self):
         from acquisition.telegram import ID_OFFSET, encode_message_id

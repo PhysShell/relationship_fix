@@ -29,7 +29,7 @@ def main(argv) -> int:  # pragma: no cover - reporting only
     # HARNESS-DERIVED WINDOW. A real acquisition takes it from the protocol —
     # deriving it from the file is exactly what coverage.window_provenance
     # forbids. Here it is deliberate and labelled: it also makes the artifact
-    # trip its own `starts_at_window_edge` heuristic, which is worth seeing fire
+    # trip its own `left_edge_unproven` heuristic, which is worth seeing fire
     # at scale.
     window = ProtocolWindow(participant_id=participant, period_id="certify",
                             start=float(min(stamps)), end=float(max(stamps)) + 1.0)
