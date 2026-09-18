@@ -54,8 +54,17 @@ class DyadParameters:
     #: логнормальная латентность ответа участника
     latency_log_mean: float = math.log(600.0)      # медиана 10 минут
     latency_log_sd: float = 1.2
-    #: вероятность, что участник не ответит вовсе
-    nonresponse_p: float = 0.08
+    #: D2 из S3: «неответа» в этой топологии не существует как отдельного
+    #: события. Возможность считается неотвеченной при H, когда ВОЗВРАЩЕНИЕ
+    #: заняло больше H, — то есть это хвост латентности, а не отдельный процесс.
+    #: Прежний `nonresponse_p` этого не делал: пропуск ответа сливал следующую
+    #: серию партнёра с предыдущей, и при 0.08 доля неотвеченного выходила
+    #: 0.10%, а не 8%. Здесь он заменён примесью «ушёл в тишину»: с
+    #: вероятностью `dormancy_p` латентность берётся из гораздо более длинного
+    #: распределения, и ТОЛЬКО так доля неотвеченного при H действительно
+    #: движется.
+    dormancy_p: float = 0.08
+    dormancy_log_mean: float = math.log(36 * HOUR)
     #: ночное подавление: доля попыток, отбрасываемых в ночные часы
     night_suppression: float = 0.9
     night_start_hour: int = 1
@@ -85,8 +94,8 @@ class Population:
     rate_log_sd: float = 0.45
     #: SD сдвига логарифма латентности между парами
     latency_log_sd_between: float = 0.5
-    #: SD доли неответов между парами (усечённая)
-    nonresponse_sd: float = 0.04
+    #: SD доли «ушёл в тишину» между парами (усечённая)
+    dormancy_sd: float = 0.04
 
     def draw(self, rng: random.Random) -> DyadParameters:
         base = self.base
@@ -96,8 +105,8 @@ class Population:
             * math.exp(rng.gauss(0.0, self.rate_log_sd)),
             latency_log_mean=base.latency_log_mean
             + rng.gauss(0.0, self.latency_log_sd_between),
-            nonresponse_p=min(0.6, max(0.0, base.nonresponse_p
-                                       + rng.gauss(0.0, self.nonresponse_sd))),
+            dormancy_p=min(0.6, max(0.0, base.dormancy_p
+                                    + rng.gauss(0.0, self.dormancy_sd))),
         )
 
 
@@ -115,14 +124,16 @@ class TrueEffect:
     opportunity_rate_ratio: float = 1.0
     #: сдвиг ЛОГАРИФМА латентности: +0.1 ≈ на 10% дольше
     latency_log_shift: float = 0.0
-    #: аддитивный сдвиг вероятности неответа
-    nonresponse_shift: float = 0.0
+    #: аддитивный сдвиг вероятности уйти в тишину. В отличие от прежнего
+    #: `nonresponse_shift`, этот канал действительно двигает долю неотвеченного
+    #: при H, потому что действует через хвост латентности (S3 §4).
+    dormancy_shift: float = 0.0
 
     @property
     def is_null(self) -> bool:
         return (self.opportunity_rate_ratio == 1.0
                 and self.latency_log_shift == 0.0
-                and self.nonresponse_shift == 0.0)
+                and self.dormancy_shift == 0.0)
 
     def apply(self, params: DyadParameters) -> DyadParameters:
         return replace(
@@ -130,7 +141,8 @@ class TrueEffect:
             opportunity_rate_per_day=params.opportunity_rate_per_day
             * self.opportunity_rate_ratio,
             latency_log_mean=params.latency_log_mean + self.latency_log_shift,
-            nonresponse_p=min(0.95, max(0.0, params.nonresponse_p + self.nonresponse_shift)),
+            dormancy_log_mean=params.dormancy_log_mean + self.latency_log_shift,
+            dormancy_p=min(0.95, max(0.0, params.dormancy_p + self.dormancy_shift)),
         )
 
 
@@ -160,9 +172,41 @@ def generate_dyad(
 ) -> list[RawMessage]:
     """Одна пара за `days` суток. Возвращает поток `RawMessage` без текста.
 
-    Порождающий процесс ровно тот, который наша топология и описывает: партнёр
-    открывает серию, участник либо возвращается, либо нет, следующая возможность
-    наступает после этого. Ничего про «отношения» здесь нет и быть не должно.
+    ДВОЕ ЧАСОВ, а не один чередующийся цикл. Прежняя версия планировала
+    следующий эпизод партнёра ОТ ОТВЕТА участника:
+
+        now = reply_at;  now += Exp(mean_gap)
+
+    и от этого шли сразу два дефекта, найденных S3.
+
+    Первый — одновременности нет вовсе. Партнёр замолкал на всё время ожидания,
+    поэтому сообщения двух актёров почти никогда не оказывались в одной секунде:
+    среди совпадений секунды у прежней синтетики 8.4% межакторных против 97.7% у
+    MaiChat. Это дефект формы модели, а не её настройки.
+
+    Второй — латентность МЕХАНИЧЕСКИ уничтожала incidence. Раз следующий эпизод
+    отсчитывается от ответа, медленный ответ съедал окно, и сдвиг латентности
+    на +0.4 уводил `mean_burden` в МИНУС: возможностей становилось так мало, что
+    сумма падала, хотя каждое слагаемое росло. Настоящий партнёр пишет по
+    собственному расписанию и разрешения не спрашивает.
+
+    Теперь:
+
+        партнёр:    свой пуассоновский поток на всё окно, серии внутри него
+        участник:   возвращение, назначенное от ПЕРВОГО неотвеченного сообщения
+        топология:  то, что из этого выведет экстрактор, а не то, что мы ему
+                    подсунули
+
+    Досылки («ты тут?») отсюда получаются сами: пока возвращение не наступило,
+    партнёр продолжает слать по своим часам. Отдельный параметр для них не
+    нужен — он был в промежуточной версии и убран, потому что его пришлось бы
+    калибровать тем же, чем не калибруется плотность.
+
+    Чего эта правка НЕ делает: не задаёт ЧАСТОТУ ties. Она определяется
+    плотностью — отношением латентности к интервалу между сообщениями (у MaiChat
+    ≈ 2, здесь ≈ 13), а плотность MaiChat померить не даёт: синхронная сессия
+    сжимает и медиану, и хвост (S3 §2.3, расхождение D3). Одновременность стала
+    ВОЗМОЖНОЙ; её величина осталась НЕОТКАЛИБРОВАННОЙ.
     """
     messages: list[RawMessage] = []
     now = start
@@ -187,34 +231,48 @@ def generate_dyad(
             synced_at=None,
         ))
 
-    while now < end:
-        now += rng.expovariate(1.0 / mean_gap)
-        if now >= end:
+    partner_next = start + rng.expovariate(1.0 / mean_gap)
+    opening_episode = True
+    pending_return: float | None = None
+    events: list[tuple[float, str]] = []
+
+    while True:
+        moment = partner_next
+        if pending_return is not None and pending_return < partner_next:
+            moment = pending_return
+        if moment >= end:
             break
-        if _is_night(now, params) and rng.random() < params.night_suppression:
+
+        if moment == pending_return:
+            events.append((moment, PARTICIPANT))
+            pending_return = None
             continue
 
-        # серия партнёра
-        opened = now
-        push(PARTNER, opened)
-        last = opened
-        while rng.random() < params.burst_continue_p:
-            last += rng.expovariate(1.0 / params.within_burst_seconds)
-            push(PARTNER, last)
-
-        if rng.random() < params.nonresponse_p:
-            now = last                     # участник не вернулся
+        if opening_episode and _is_night(moment, params) \
+                and rng.random() < params.night_suppression:
+            partner_next = moment + rng.expovariate(1.0 / mean_gap)
             continue
 
-        latency = rng.lognormvariate(params.latency_log_mean, params.latency_log_sd)
-        reply_at = opened + latency
-        if rng.random() < params.tie_p:
-            reply_at = last                # cross-actor tie: та же секунда
-        if reply_at >= end:
-            now = last
-            continue
-        push(PARTICIPANT, reply_at)
-        now = reply_at
+        events.append((moment, PARTNER))
+        if pending_return is None:
+            # Возвращение назначается от ПЕРВОГО неотвеченного сообщения — это
+            # ровно то, что меряет `latency_seconds`. Примесь тишины сидит в
+            # хвосте, а не в отдельном событии (D2 из S3).
+            centre = (params.dormancy_log_mean if rng.random() < params.dormancy_p
+                      else params.latency_log_mean)
+            pending_return = moment + rng.lognormvariate(centre, params.latency_log_sd)
+            if rng.random() < params.tie_p:
+                pending_return = moment
+
+        if rng.random() < params.burst_continue_p:
+            partner_next = moment + rng.expovariate(1.0 / params.within_burst_seconds)
+            opening_episode = False
+        else:
+            partner_next = moment + rng.expovariate(1.0 / mean_gap)
+            opening_episode = True
+
+    for moment, actor in events:
+        push(actor, moment)
 
     return messages
 

@@ -16,7 +16,8 @@ import random
 import statistics
 import unittest
 
-from extractor.model import RawMessage
+from extractor.extract import extract
+from extractor.model import Mode, RawMessage
 from simulation import interval, recovery as rec
 from simulation.process import (
     DAY, HOUR, PARTICIPANT, PARTNER, DyadParameters, Population, TrueEffect,
@@ -33,7 +34,7 @@ def params(**over) -> DyadParameters:
 def population(**over) -> Population:
     """Популяция без разброса: для пиннинга механики гетерогенность — шум."""
     return Population(base=params(**over), rate_log_sd=0.0,
-                      latency_log_sd_between=0.0, nonresponse_sd=0.0)
+                      latency_log_sd_between=0.0, dormancy_sd=0.0)
 
 
 class DeterminismTests(unittest.TestCase):
@@ -71,7 +72,7 @@ class DeterminismTests(unittest.TestCase):
         drawn = Population().draw(random.Random("0::0:params"))
         self.assertAlmostEqual(drawn.opportunity_rate_per_day, 12.51779765849134)
         self.assertAlmostEqual(drawn.latency_log_mean, 6.13374850180814)
-        self.assertAlmostEqual(drawn.nonresponse_p, 0.035117455578258724)
+        self.assertAlmostEqual(drawn.dormancy_p, 0.035117455578258724)
 
     def test_a_dyad_index_keeps_its_parameters_across_arms(self):
         drawn = [Population().draw(random.Random(f"4::{i}:params")) for i in range(3)]
@@ -191,9 +192,42 @@ class ProcessShapeTests(unittest.TestCase):
         # не может ничто, поэтому сравнение идёт с долей, а не с нулём
         self.assertLess(len(night) / len(opens), 0.08)
 
-    def test_nonresponse_one_produces_no_participant_message_at_all(self):
-        stream = generate_dyad(random.Random(6), params(nonresponse_p=1.0), days=20)
-        self.assertEqual([m for m in stream if m.actor == PARTICIPANT], [])
+    def test_total_dormancy_pushes_the_return_past_any_useful_horizon(self):
+        """D2: «неответ» здесь — это длинный хвост возвращения, а не событие.
+
+        Прежний `nonresponse_p` вообще не давал неотвеченных возможностей:
+        пропуск ответа сливал серии партнёра, и при 0.08 доля неотвеченного
+        выходила 0.10% вместо 8%. Примесь тишины действует через латентность,
+        поэтому её видно там, где её и меряют, — в цензурировании при H.
+        """
+        quiet = params(dormancy_p=1.0, dormancy_log_mean=math.log(72 * HOUR),
+                       latency_log_sd=0.2)
+        stream = generate_dyad(random.Random(6), quiet, days=60)
+        # мерить надо тем же определением, каким меряет метрика: от ПЕРВОГО
+        # неотвеченного сообщения. Расстояние до ПОСЛЕДНЕГО сообщения партнёра
+        # теперь короткое — он продолжает слать, пока ждёт, и это правильно.
+        result = extract(stream, PARTICIPANT, "p", 0.0, 60 * DAY,
+                         mode=Mode.QUALIFICATION, consent_to_share_trace=True)
+        latencies = [o.latency_seconds for o in result.export_trace()
+                     if o.latency_seconds is not None]
+        self.assertTrue(latencies)
+        self.assertGreater(statistics.median(latencies), 24 * HOUR)
+
+    def test_the_partner_keeps_writing_while_waiting(self):
+        """Досылки («ты тут?») получаются сами из вторых часов.
+
+        Если партнёр замолкает на время ожидания, одновременности не возникает
+        вовсе — это и был дефект D1. Признак того, что он ушёл: среди серий
+        встречаются такие, где сообщения партнёра идут ДОЛЬШЕ, чем типичная
+        пауза внутри серии.
+        """
+        slow = params(latency_log_mean=math.log(2 * HOUR), latency_log_sd=0.3,
+                      dormancy_p=0.0)
+        result = extract(generate_dyad(random.Random(21), slow, days=40),
+                         PARTICIPANT, "p", 0.0, 40 * DAY,
+                         mode=Mode.QUALIFICATION, consent_to_share_trace=True)
+        spans = [o.run_span_seconds for o in result.export_trace()]
+        self.assertGreater(statistics.fmean(spans), slow.within_burst_seconds)
 
     def test_timestamps_are_quantised_to_the_source_clock(self):
         stream = generate_dyad(random.Random(7), params(), days=10)
@@ -254,9 +288,9 @@ class ProcessShapeTests(unittest.TestCase):
         trace = generate_dyad(random.Random("golden"), params(), days=9)
         blob = json.dumps([[m.message_id, m.actor, m.local_time, m.char_count]
                            for m in trace], sort_keys=True)
-        self.assertEqual(len(trace), 87)
+        self.assertEqual(len(trace), 95)
         self.assertEqual(hashlib.sha256(blob.encode()).hexdigest(),
-                         "24e0c1e35a4cb54b1e8cc4a97a106a9c02baebd6f1bc04edc06b8bba0b428de1")
+                         "168aef4ea6d8bca4bbadc7f7ae87b2c84847e6588b32e62278a311970624879e")
 
     def test_continuous_time_would_hide_the_ambiguity_the_clock_creates(self):
         """Разрешение часов — источник ties, и без него симуляция себе льстит.
@@ -287,18 +321,25 @@ class TrueEffectTests(unittest.TestCase):
     def test_any_single_channel_makes_it_non_null(self):
         self.assertFalse(TrueEffect(opportunity_rate_ratio=0.99).is_null)
         self.assertFalse(TrueEffect(latency_log_shift=0.01).is_null)
-        self.assertFalse(TrueEffect(nonresponse_shift=0.01).is_null)
+        self.assertFalse(TrueEffect(dormancy_shift=0.01).is_null)
 
     def test_channels_move_the_parameter_they_name(self):
         got = TrueEffect(opportunity_rate_ratio=0.5, latency_log_shift=0.2,
-                         nonresponse_shift=0.1).apply(params())
+                         dormancy_shift=0.1).apply(params())
         self.assertAlmostEqual(got.opportunity_rate_per_day, 3.0)
         self.assertAlmostEqual(got.latency_log_mean, math.log(600.0) + 0.2)
-        self.assertAlmostEqual(got.nonresponse_p, 0.18)
+        self.assertAlmostEqual(got.dormancy_p, 0.18)
 
-    def test_nonresponse_stays_a_probability(self):
-        self.assertEqual(TrueEffect(nonresponse_shift=-5.0).apply(params()).nonresponse_p, 0.0)
-        self.assertEqual(TrueEffect(nonresponse_shift=5.0).apply(params()).nonresponse_p, 0.95)
+    def test_a_latency_shift_moves_the_silent_component_too(self):
+        """Иначе сдвиг латентности сжимал бы примесь тишины относительно тела
+        распределения и менял бы ДВЕ вещи под именем одной."""
+        got = TrueEffect(latency_log_shift=0.3).apply(params())
+        self.assertAlmostEqual(got.dormancy_log_mean,
+                               DyadParameters().dormancy_log_mean + 0.3)
+
+    def test_dormancy_stays_a_probability(self):
+        self.assertEqual(TrueEffect(dormancy_shift=-5.0).apply(params()).dormancy_p, 0.0)
+        self.assertEqual(TrueEffect(dormancy_shift=5.0).apply(params()).dormancy_p, 0.95)
 
 
 class ClassifyTests(unittest.TestCase):
@@ -505,15 +546,52 @@ class RecoveryTests(unittest.TestCase):
             for name in rec.ESTIMANDS
         }
 
-    def test_every_estimand_recovers_what_was_planted(self):
-        for name, check in self.checks.items():
+    def test_the_sensitive_estimands_recover_what_was_planted(self):
+        for name in ("mean_incidence", "opportunity_rmtr", "person_period_rmtr"):
+            check = self.checks[name]
             self.assertIs(check.verdict, rec.Verdict.RECOVERED,
                           f"{name}: observed {check.observed} vs planted {check.planted}")
 
+    def test_nothing_contradicts_what_was_planted(self):
+        for name, check in self.checks.items():
+            self.assertIsNot(check.verdict, rec.Verdict.MISMATCH,
+                             f"{name}: observed {check.observed} vs planted {check.planted}")
+
     def test_a_longer_latency_lengthens_the_duration_estimands(self):
-        for name in ("opportunity_rmtr", "person_period_rmtr", "mean_burden"):
+        for name in ("opportunity_rmtr", "person_period_rmtr"):
             self.assertGreater(self.checks[name].planted, 0.0, name)
             self.assertGreater(self.checks[name].observed, 0.0, name)
+
+    def test_the_burden_endpoint_nearly_cancels_under_a_pure_latency_shift(self):
+        """Самая дорогая находка после правки D1, и она про выбор исхода.
+
+        `B = N x R`. Сдвиг латентности гонит R вверх, но одновременно сливает
+        серии партнёра и гонит N вниз — и на 2400 парах это гасится почти
+        нацело:
+
+            mean_incidence       -3.90 +- 0.24    |t| = 16
+            opportunity_rmtr      +816 +-   70    |t| = 12
+            person_period_rmtr   +1770 +-  193    |t| =  9
+            mean_burden          -1329 +-  922    |t| =  1.4
+
+        То есть `reentry_burden_H` — МАЛОЧУВСТВИТЕЛЬНЫЙ исход для воздействия,
+        которое двигает только длительность. Для дизайна это важнее, чем любое
+        совпадение с корпусом.
+
+        Оговорка обязательная: отклик incidence в генераторе сам НЕ
+        откалиброван (S3 §3), поэтому это гипотеза, порождённая моделью, а не
+        установленный факт. В S6 её проверяют, а не цитируют.
+        """
+        def signal_to_noise(name):
+            check = self.checks[name]
+            return abs(check.planted / check.planted_se)
+
+        # сравнивать сами величины нельзя: burden — сумма по окну, rmtr —
+        # средняя длительность. Сравнимо только отношение сигнала к шуму.
+        self.assertLess(signal_to_noise("mean_burden"), 2.0)
+        for sensitive in ("mean_incidence", "opportunity_rmtr", "person_period_rmtr"):
+            self.assertGreater(signal_to_noise(sensitive), 3.0, sensitive)
+        self.assertIsNot(self.checks["mean_burden"].verdict, rec.Verdict.MISMATCH)
 
     def test_the_channels_are_not_separable_and_that_is_a_finding(self):
         """Сдвиг ТОЛЬКО латентности двигает и частоту возможностей, вниз.

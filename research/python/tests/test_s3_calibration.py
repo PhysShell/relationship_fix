@@ -198,7 +198,7 @@ class ManifestTests(unittest.TestCase):
     def test_the_digest_is_pinned_and_deterministic(self):
         self.assertEqual(
             trace_digest(),
-            "24e0c1e35a4cb54b1e8cc4a97a106a9c02baebd6f1bc04edc06b8bba0b428de1")
+            "168aef4ea6d8bca4bbadc7f7ae87b2c84847e6588b32e62278a311970624879e")
         self.assertEqual(trace_digest(), trace_digest())
 
     def test_changing_the_process_changes_the_digest(self):
