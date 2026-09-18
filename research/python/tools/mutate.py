@@ -47,10 +47,12 @@ SURFACE = (
     "acquisition/model.py",
     "acquisition/telegram.py",
     "acquisition/pipeline.py",
+    "acquisition/certificate.py",
 )
 
 TESTS = (
     "tests.test_acquisition_pipeline",
+    "tests.test_certificate",
     "tests.test_extractor",
     "tests.test_estimands",
     "tests.test_extractor_properties",
