@@ -12,10 +12,16 @@ class ContractOnlyTests(unittest.TestCase):
     A vendor's documentation sentence is evidence about intent, not a
     measurement, and the ledger must not pretend otherwise."""
 
-    def test_nothing_is_marked_unavailable_because_nothing_was_measured(self):
-        """UNAVAILABLE means "the source demonstrably does not provide it".
-        Nothing here has been observed, so nothing may carry that verdict."""
-        self.assertEqual(tdlib.LEDGER.by_status(Status.UNAVAILABLE), ())
+    def test_no_BEHAVIOURAL_property_is_unavailable_without_a_measurement(self):
+        """UNAVAILABLE means "demonstrably not provided". No runtime behaviour
+        has been observed yet, so no behavioural property may carry it.
+
+        Legal properties are the exception, and a principled one: there the
+        primary source IS a document, so reading it is the measurement. That is
+        why `legal.ai_use` is allowed to be UNAVAILABLE while nothing about
+        pagination or ordering may be."""
+        for entry in tdlib.LEDGER.by_status(Status.UNAVAILABLE):
+            self.assertTrue(entry.key.startswith("legal."), entry.key)
 
     def test_no_property_claims_physical_chronology(self):
         for entry in tdlib.LEDGER.properties:
@@ -26,13 +32,18 @@ class ContractOnlyTests(unittest.TestCase):
             if entry.effective_status is Status.UNKNOWN:
                 self.assertTrue(entry.fixture_needed, entry.key)
 
-    def test_the_terms_of_service_are_not_assumed_to_permit_us(self):
-        """api_id is free of charge; that is not the same as "our mode of use
-        is allowed". Reading the ToS is step 1 and it is not done."""
-        entry = tdlib.LEDGER.property("deployment.api_terms")
-        self.assertIs(entry.status, Status.UNKNOWN)
-        assumption = next(a for a in tdlib.LEDGER.assumptions if a.key == "use_is_permitted")
-        self.assertIn(assumption, tdlib.LEDGER.unresolved_assumptions())
+    def test_the_terms_are_read_and_still_do_not_permit_us(self):
+        """Both documents are now quoted verbatim, and both scope questions
+        remain open — with the text reading against us rather than merely being
+        silent. That is a legal determination, not one a test can close."""
+        for key in ("legal.api_terms_app_scope", "legal.content_access_purpose"):
+            entry = tdlib.LEDGER.property(key)
+            self.assertIs(entry.status, Status.UNKNOWN, key)
+            self.assertTrue(entry.primary_evidence, key)
+            self.assertIn("Блокирует", entry.fixture_needed, key)
+        open_keys = {a.key for a in tdlib.LEDGER.unresolved_assumptions()}
+        self.assertIn("app_is_in_scope_of_the_terms", open_keys)
+        self.assertIn("measurement_purpose_is_licensed", open_keys)
 
 
 class WhyThisSourceTests(unittest.TestCase):
@@ -73,9 +84,41 @@ class WhyThisSourceTests(unittest.TestCase):
             "к человеку больше не задаётся", "не задаётся человеку"))
 
     def test_the_library_licence_permits_shipping_unlike_the_gpl_donors(self):
-        entry = tdlib.LEDGER.property("deployment.library_license")
+        entry = tdlib.LEDGER.property("legal.library_license")
         self.assertIs(entry.status, Status.QUALIFIED)
         self.assertIn("Boost Software License", " ".join(entry.primary_evidence))
+
+
+class AiFirewallTests(unittest.TestCase):
+    """The one property that is settled and settled against us."""
+
+    def test_telegram_derived_data_may_not_enter_an_ai_path(self):
+        entry = tdlib.LEDGER.property("legal.ai_use")
+        self.assertIs(entry.status, Status.UNAVAILABLE)
+        self.assertIn("train, fine-tune", entry.claim)
+        self.assertIn("§1.5", " ".join(entry.primary_evidence))
+        self.assertIn("firewall", entry.downstream_consequence)
+
+    def test_the_firewall_binds_the_spike_too(self):
+        """A feasibility run must not become the first AI processing path by
+        accident — that is how a prohibition gets crossed by nobody in
+        particular."""
+        entry = tdlib.LEDGER.property("legal.ai_use")
+        self.assertIn("спайк", entry.downstream_consequence)
+
+    def test_the_consent_exception_needs_BOTH_members_of_the_dyad(self):
+        """"All relevant users" is not "our participant". It is the same
+        second-person consent problem prereg §3.1 already had open."""
+        limits = " ".join(tdlib.LEDGER.property("legal.ai_use").observed_limitations)
+        self.assertIn("all relevant users", limits)
+        self.assertIn("ОБОИХ", limits)
+
+    def test_the_prohibition_resolves_the_assumption_rather_than_leaving_a_hole(self):
+        """UNAVAILABLE with a written refusal is an answer: the AI layer does
+        not eat Telegram data, and that is now a design constraint."""
+        assumption = next(a for a in tdlib.LEDGER.assumptions
+                          if a.key == "ai_layer_may_use_telegram_data")
+        self.assertNotIn(assumption, tdlib.LEDGER.unresolved_assumptions())
 
 
 class CTargetLinkageTests(unittest.TestCase):

@@ -28,6 +28,8 @@ MTPROTO = "core.telegram.org/method/messages.getHistory"
 TDLIB_DOC = "core.telegram.org/tdlib/docs — td_api::getChatHistory"
 TDLIB_LICENSE = "github.com/tdlib/td LICENSE_1_0.txt + README §License"
 API_ID = "core.telegram.org/api/obtaining_api_id"
+API_TOS = "core.telegram.org/api/terms — Telegram API Terms of Service"
+CONTENT = "telegram.org/tos/content-licensing — Terms of Service for Content Licensing"
 
 
 def _p(**kw) -> Property:
@@ -35,9 +37,9 @@ def _p(**kw) -> Property:
     return Property(**kw)
 
 
-DEPLOYMENT = (
+LEGAL = (
     _p(
-        key="deployment.library_license",
+        key="legal.library_license",
         question="Можно ли встроить TDLib в наше приложение?",
         claim="Boost Software License 1.0 — пермиссивная, совместима с закрытой поставкой.",
         status=Status.QUALIFIED,
@@ -50,20 +52,106 @@ DEPLOYMENT = (
         fixture_needed="Закрыто.",
     ),
     _p(
-        key="deployment.api_terms",
-        question="Разрешают ли условия Telegram наш режим использования?",
-        claim="НЕ УСТАНОВЛЕНО. `api_id` выдаётся бесплатно, но «all third-party client apps "
-              "must comply with the API Terms of Service».",
+        key="legal.api_terms_app_scope",
+        question="Является ли наше приложение адресатом этих условий?",
+        claim="НЕ УСТАНОВЛЕНО, и прочтение скорее против нас. Условия написаны про "
+              "«Telegram-like messaging applications» и «third-party client apps», а §1.3 "
+              "требует, чтобы «all the basic features of the main Telegram apps function "
+              "correctly» в вашем приложении. Исследовательский измеритель мессенджером не "
+              "является и §1.3 выполнить не может по построению.",
         status=Status.UNKNOWN,
         claim_scope=ClaimScope.ARTIFACT,
-        primary_evidence=(f"{API_ID} — цитата выше прочитана на странице",),
-        observed_limitations=("ToS не прочитан; исследовательское приложение, читающее "
-                              "историю личного чата с согласия владельца аккаунта, — не тот "
-                              "случай, где можно предполагать «наверное можно»",),
+        primary_evidence=(f"{API_TOS} — преамбула и §1.3 прочитаны дословно",
+                          f"{API_ID} — «all third-party client apps must comply with the "
+                          "API Terms of Service»"),
+        observed_limitations=("вилка неприятна с обеих сторон: если мы НЕ client app, то "
+                              "непонятно, что вообще разрешает нам доступ; если client app — "
+                              "мы нарушаем §1.3",
+                              "вывод юридический, а не технический: тестом не закрывается"),
         downstream_consequence="",
         adapter_behavior="",
-        fixture_needed="Прочитать API Terms of Service целиком и оценить наш режим ДО любого "
-                        "коммита в реализацию. Это шаг 1 спайка, и он не закрыт.",
+        fixture_needed="Юридическая оценка или прямое разъяснение от Telegram. **Блокирует "
+                       "реализацию**, а не откладывается на потом.",
+    ),
+    _p(
+        key="legal.content_access_purpose",
+        question="Разрешён ли доступ к контенту РАДИ ИЗМЕРЕНИЯ?",
+        claim="НЕ УСТАНОВЛЕНО, и текст читается скорее против. Общий запрет: «Access to "
+              "user-generated content for any purpose other than ordinary, legitimate, and "
+              "intended use of the Telegram platform as its user is prohibited». Исключение "
+              "перечислено закрытым списком — Client, Bot, Mini App — и лицензия дана «solely "
+              "to the extent strictly required to operate the relevant service».",
+        status=Status.UNKNOWN,
+        claim_scope=ClaimScope.ARTIFACT,
+        primary_evidence=(f"{CONTENT} — обе цитаты прочитаны дословно",),
+        observed_limitations=("исследовательский измеритель не входит в перечисление из трёх",
+                              "даже внутри исключения чтение истории ради метрик трудно назвать "
+                              "«strictly required to operate» клиент"),
+        downstream_consequence="",
+        adapter_behavior="",
+        fixture_needed="Та же юридическая оценка. **Блокирует реализацию.**",
+    ),
+    _p(
+        key="legal.ai_use",
+        question="Могут ли данные из Telegram попасть в AI/ML-слой продукта?",
+        claim="Нет по умолчанию. Запрет прямой и широкий: «prohibited from using, accessing "
+              "or aggregating data obtained from the Telegram platform to train, fine-tune or "
+              "otherwise engage in the development, enhancement or deployment of artificial "
+              "intelligence, machine learning models and similar technologies».",
+        status=Status.UNAVAILABLE,
+        claim_scope=ClaimScope.ARTIFACT,
+        primary_evidence=(f"{API_TOS} §1.5 — цитата выше",
+                          f"{CONTENT} §«Large Language Models and AI» — шире: добавлены "
+                          "«scraping, indexing, harvesting», «validate», «benchmarking»"),
+        observed_limitations=("исключение существует, но требовательное: «all relevant users "
+                              "individually provide explicit, informed, affirmative and "
+                              "continued consent», строго ограниченное конкретным чатом, и "
+                              "«consent obtained in one context is non-transferable»",
+                              "«all relevant users» для диады означает ОБОИХ партнёров — то "
+                              "самое согласие второго человека, которое prereg §3.1 уже "
+                              "отметил как нерешённое"),
+        downstream_consequence="Архитектурный firewall обязателен: данные, полученные из "
+                               "Telegram, не входят в LLM/embeddings/ML ни в каком виде, "
+                               "включая feasibility-спайк. Даже разведочный прогон не должен "
+                               "случайно стать первым AI-путём.",
+        adapter_behavior="Путь обрывается на детерминированных агрегатах. Пересечение границы "
+                         "требует отдельно установленного основания, а не решения инженера.",
+        fixture_needed="Закрыто как запрет. Открыть может только явное основание по исключению "
+                       "о согласии — для ОБОИХ участников диады.",
+    ),
+    _p(
+        key="legal.transparency_obligations",
+        question="Что требуется от приложения, если путь окажется допустим?",
+        claim="Перечислено явно: собственный `api_id`; пользователи должны знать, что "
+              "приложение использует Telegram API, и это «must be featured prominently»; "
+              "слово «Telegram» в названии запрещено (кроме «Unofficial»); официальный "
+              "логотип использовать нельзя.",
+        status=Status.QUALIFIED,
+        claim_scope=ClaimScope.ARTIFACT,
+        primary_evidence=(f"{API_TOS} §2.1–2.4 прочитаны дословно",),
+        observed_limitations=("§4: при нарушении — уведомление, 10 дней на исправление, "
+                              "затем отключение доступа и обращение в магазины приложений",),
+        downstream_consequence="Требования известны и выполнимы; они НЕ решают вопрос "
+                               "применимости из двух предыдущих строк.",
+        adapter_behavior="Раскрытие факта использования Telegram API входит в onboarding — "
+                         "то есть в `C`, и должно быть учтено в burden budget.",
+        fixture_needed="Закрыто.",
+    ),
+    _p(
+        key="legal.security_guidelines",
+        question="Обязаны ли мы соблюдать Security Guidelines?",
+        claim="Да, прямо: «All client apps must, therefore, guard their users' privacy with "
+              "utmost care and comply with our Security Guidelines».",
+        status=Status.QUALIFIED,
+        claim_scope=ClaimScope.ARTIFACT,
+        primary_evidence=(f"{API_TOS} §1.1 прочитан дословно",),
+        observed_limitations=("руководство писано про реализации MTProto; использование "
+                              "официальной TDLib закрывает криптографическую часть, но не "
+                              "снимает обязательство целиком",),
+        downstream_consequence="Совместимо с нашей privacy boundary, которая уже строже: "
+                               "наружу уходят только агрегаты из allowlist.",
+        adapter_behavior="Соблюдение фиксируется в provenance этапа, а не подразумевается.",
+        fixture_needed="Прочитать guidelines целиком при переходе к реализации.",
     ),
     _p(
         key="deployment.authorization_burden",
@@ -199,8 +287,17 @@ ASSUMPTIONS = (
     Assumption("zero_routine_user_actions", "C_target §2C", "deployment.authorization_burden",
                "если авторизация повторяется каждый период, C_target недостижим и весь смысл "
                "перехода на этот источник исчезает"),
-    Assumption("use_is_permitted", "весь acquisition path", "deployment.api_terms",
-               "реализация запрещена до прочтения ToS; это не техническое ограничение"),
+    Assumption("app_is_in_scope_of_the_terms", "весь acquisition path",
+               "legal.api_terms_app_scope",
+               "реализация не начинается; это не техническое ограничение и тестом не "
+               "закрывается"),
+    Assumption("measurement_purpose_is_licensed", "весь acquisition path",
+               "legal.content_access_purpose",
+               "реализация не начинается по той же причине"),
+    Assumption("ai_layer_may_use_telegram_data", "будущий AI-слой Relationship Fix",
+               "legal.ai_use",
+               "AI-слой не питается данными из Telegram ни в каком виде — это установленный "
+               "запрет, а не риск, и firewall обязателен уже на этапе спайка"),
     Assumption("order_is_chronological", "нормализация",
                "ordering.tdlib_conflates_id_and_time",
                "остаётся `TiePolicy.STRICT`: экстрактор уже не предполагает порядок внутри "
@@ -219,6 +316,6 @@ ASSUMPTIONS = (
 LEDGER = Ledger(
     target="Telegram API / TDLib",
     acquisition_path="локальный клиент в нашем приложении, разовая авторизация участника",
-    properties=DEPLOYMENT + ORDERING + COVERAGE + PROVENANCE,
+    properties=LEGAL + ORDERING + COVERAGE + PROVENANCE,
     assumptions=ASSUMPTIONS,
 )
