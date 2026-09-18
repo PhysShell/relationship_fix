@@ -171,6 +171,29 @@ DONORS = (
              "ни строки не копируем.",
     ),
     Donor(
+        name="xiaotianxt/tg",
+        url="https://github.com/xiaotianxt/tg",
+        license_spdx="MIT",
+        license_evidence="LICENSE @main — «MIT License Copyright (c) 2026 xiaotianxt»; "
+                         "Cargo.toml: version 2.2.1, license = \"MIT\"",
+        disposition=(Disposition.ORACLE,),
+        input_formats="локальная `db_storage` Telegram Desktop через SQLCipher, read-only, "
+                      "`query_only`, включая закоммиченный WAL; экспорт txt/csv/json",
+        provenance_lost="Ничего — как oracle мы берём его ВЫВОД, не код. Но сам он читает "
+                        "иной срез реальности, чем официальный экспорт, и это не потеря, "
+                        "а второй независимый взгляд.",
+        semantics_assumed="Что локальная база = история. README это прямо опровергает: "
+                          "«не восстанавливает сообщения, которых уже нет в локальной базе». "
+                          "Официальный экспорт тянет историю С СЕРВЕРА (прослежено по "
+                          "`messages.getHistory` в экспортёре), локальная база — кэш клиента "
+                          "с неизвестными правилами вытеснения.",
+        emits_foreign_shape=False,
+        note="ORACLE только для разработчика на его собственном аккаунте, macOS/Linux. "
+             "Ценность именно в расхождении: сравнение `tg` и официального экспорта на одном "
+             "чате измеряет ПОЛНОТУ экспорта — то, о чём `coverage.completeness` сегодня "
+             "UNAVAILABLE. Участникам этот путь не предлагается, см. LOCAL-0 §3.",
+    ),
+    Donor(
         name="lucasrodes/whatstk",
         url="https://github.com/lucasrodes/whatstk",
         license_spdx="GPL-3.0",
