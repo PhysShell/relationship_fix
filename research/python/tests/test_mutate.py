@@ -232,3 +232,37 @@ class CalibrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSetMappingTests(unittest.TestCase):
+    """Каждому файлу — те тесты, которые его вообще импортируют.
+
+    Прогонять против мутанта набор, не импортирующий мутированный файл, значит
+    производить выживших, которых ни один тест УБИТЬ НЕ МОГ. Это не находка, это
+    набивка знаменателя, и она разбавляет реальных выживших до невидимости.
+    """
+
+    def test_one_sequence_still_applies_to_every_file(self):
+        got = mutate._test_sets(["a.py", "b.py"], ["tests.x", "tests.y"])
+        self.assertEqual(got, {"a.py": ("tests.x", "tests.y"),
+                               "b.py": ("tests.x", "tests.y")})
+
+    def test_a_mapping_gives_each_file_its_own_set(self):
+        got = mutate._test_sets(["a.py"], {"a.py": ("tests.x",), "b.py": ("tests.y",)})
+        self.assertEqual(got, {"a.py": ("tests.x",)})
+
+    def test_a_file_with_no_declared_tests_is_refused_rather_than_skipped(self):
+        """Молча пропустить файл — значит показать зелёный отчёт без него."""
+        with self.assertRaises(RuntimeError) as caught:
+            mutate._test_sets(["a.py", "orphan.py"], {"a.py": ("tests.x",)})
+        self.assertIn("orphan.py", str(caught.exception))
+
+    def test_the_shipped_surface_declares_tests_for_every_file_it_lists(self):
+        sets = mutate._test_sets(list(mutate.SURFACE), mutate.SURFACE)
+        self.assertEqual(set(sets), set(mutate.SURFACE))
+        for path, tests in sets.items():
+            self.assertTrue(tests, path)
+
+    def test_every_file_on_the_surface_exists(self):
+        for path in mutate.SURFACE:
+            self.assertTrue((mutate.ROOT / path).is_file(), path)

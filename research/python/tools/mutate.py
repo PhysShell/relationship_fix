@@ -40,16 +40,8 @@ ROOT = Path(__file__).resolve().parent.parent
 #: Where a surviving mutant actually matters. Everything else is out of scope
 #: on purpose: whole-repository mutation testing is slower than a sedated sloth
 #: and buries the real survivors under noise.
-SURFACE = (
-    "extractor/model.py",
-    "extractor/extract.py",
-    "extractor/estimands.py",
-    "acquisition/model.py",
-    "acquisition/telegram.py",
-    "acquisition/pipeline.py",
-    "acquisition/certificate.py",
-)
-
+#: The engine set. Everything here is downstream of the extractor, so a mutant
+#: in it gets the whole set rather than a guessed subset.
 TESTS = (
     "tests.test_acquisition_pipeline",
     "tests.test_certificate",
@@ -58,6 +50,26 @@ TESTS = (
     "tests.test_extractor_properties",
     "tests.test_maichat_adapter",
 )
+
+#: The simulation harness is not imported by any of the above, so running them
+#: against its mutants could only ever produce survivors — and a survivor that
+#: no test COULD have killed is not a finding, it is padding. Narrowing the set
+#: per file can only turn KILLED into SURVIVED, never the reverse, so it is the
+#: conservative direction.
+SIMULATION_TESTS = ("tests.test_simulation",)
+
+SURFACE = {
+    "extractor/model.py": TESTS,
+    "extractor/extract.py": TESTS,
+    "extractor/estimands.py": TESTS,
+    "acquisition/model.py": TESTS,
+    "acquisition/telegram.py": TESTS,
+    "acquisition/pipeline.py": TESTS,
+    "acquisition/certificate.py": TESTS,
+    "simulation/process.py": SIMULATION_TESTS,
+    "simulation/recovery.py": SIMULATION_TESTS,
+    "simulation/interval.py": SIMULATION_TESTS,
+}
 
 _SWAPS = {
     ast.Add: ast.Sub, ast.Sub: ast.Add,
@@ -279,17 +291,32 @@ class Report:
                 f"({score}); {' · '.join(parts)}; {self.seconds:.0f}s")
 
 
+def _test_sets(files, tests) -> dict[str, tuple[str, ...]]:
+    """`tests` is either one set for every file, or a per-file mapping."""
+    if isinstance(tests, dict):
+        missing = [path for path in files if path not in tests]
+        if missing:
+            raise RuntimeError(f"no test set declared for: {', '.join(missing)}")
+        return {path: tuple(tests[path]) for path in files}
+    return {path: tuple(tests) for path in files}
+
+
 def evaluate(files, tests, *, root: Path = None, progress: bool = False) -> Report:
-    """Run every mutant of `files` against `tests`. Restores sources always."""
+    """Run every mutant of `files` against its tests. Restores sources always."""
     root = root or ROOT
+    per_file = _test_sets(files, tests)
     all_mutants = [m for path in files for m in mutants_for(path, root)]
     _clear_bytecode(root)
-    baseline_verdict, baseline_tests = _run_tests(tests, root, None)
-    if baseline_verdict is not None or baseline_tests == 0:
-        raise RuntimeError(
-            f"baseline is not green ({baseline_tests} tests) — fix the suite "
-            f"before asking it to catch anything"
-        )
+    baselines: dict[tuple[str, ...], int] = {}
+    for test_set in dict.fromkeys(per_file.values()):
+        baseline_verdict, baseline_tests = _run_tests(test_set, root, None)
+        if baseline_verdict is not None or baseline_tests == 0:
+            raise RuntimeError(
+                f"baseline is not green for {', '.join(test_set)} "
+                f"({baseline_tests} tests) — fix the suite before asking it to "
+                f"catch anything"
+            )
+        baselines[test_set] = baseline_tests
 
     originals = {path: (root / path).read_text(encoding="utf-8") for path in files}
 
@@ -312,7 +339,8 @@ def evaluate(files, tests, *, root: Path = None, progress: bool = False) -> Repo
             try:
                 target.write_text(_source_with(mutant.path, mutant.index, root), encoding="utf-8")
                 _clear_bytecode(root)
-                verdict, _ = _run_tests(tests, root, baseline_tests)
+                test_set = per_file[mutant.path]
+                verdict, _ = _run_tests(test_set, root, baselines[test_set])
             finally:
                 target.write_text(originals[mutant.path], encoding="utf-8")
             verdicts.setdefault(verdict, []).append(mutant)
@@ -340,7 +368,7 @@ def main() -> int:
 
     print(f"surface: {', '.join(args.files)}")
     try:
-        report = evaluate(args.files, TESTS, progress=True)
+        report = evaluate(args.files, SURFACE, progress=True)
     except RuntimeError as failure:
         print(failure)
         return 2
