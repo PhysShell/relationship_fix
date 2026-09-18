@@ -208,6 +208,30 @@ class ProcessShapeTests(unittest.TestCase):
         for message in stream:
             self.assertEqual(message.timestamp % 60.0, 0.0)
 
+    def test_quantisation_only_ever_moves_a_moment_EARLIER(self):
+        """Кратность разрешению — не то же самое, что ПРАВИЛЬНАЯ кратность.
+
+        Проверка «метка делится на 60» пропускала мутанта `floor(at / res) * res`
+        -> `floor(at * res) * res`: результат тоже кратен 60, только больше
+        истины в 3600 раз. Определяющее свойство пола на сетке другое:
+
+            stamped <= at < stamped + resolution
+
+        Квантование происходит в `push`, ПОСЛЕ всех вытягиваний, поэтому при
+        одном seed грубая и непрерывная трассы совпадают сообщение в сообщение —
+        и их можно сравнить попарно.
+        """
+        seed, resolution = "quantise", 60.0
+        fine = generate_dyad(random.Random(seed),
+                             params(timestamp_resolution_seconds=0.0), days=10)
+        coarse = generate_dyad(random.Random(seed),
+                               params(timestamp_resolution_seconds=resolution), days=10)
+        self.assertEqual(len(fine), len(coarse))
+        self.assertGreater(len(fine), 20)
+        for exact, stamped in zip(fine, coarse):
+            self.assertLessEqual(stamped.timestamp, exact.timestamp)
+            self.assertLess(exact.timestamp, stamped.timestamp + resolution)
+
     def test_resolution_zero_means_no_quantisation_at_all(self):
         stream = generate_dyad(random.Random(7), params(timestamp_resolution_seconds=0.0),
                                days=10)
