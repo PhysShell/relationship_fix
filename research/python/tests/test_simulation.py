@@ -19,6 +19,7 @@ import unittest
 from extractor.extract import extract
 from extractor.model import Mode, RawMessage
 from simulation import interval, recovery as rec
+from simulation.manifest import FROZEN_DIGEST
 from simulation.process import (
     DAY, HOUR, PARTICIPANT, PARTNER, DyadParameters, Population, TrueEffect,
     _is_night, generate_arm, generate_dyad,
@@ -289,8 +290,7 @@ class ProcessShapeTests(unittest.TestCase):
         blob = json.dumps([[m.message_id, m.actor, m.local_time, m.char_count]
                            for m in trace], sort_keys=True)
         self.assertEqual(len(trace), 95)
-        self.assertEqual(hashlib.sha256(blob.encode()).hexdigest(),
-                         "168aef4ea6d8bca4bbadc7f7ae87b2c84847e6588b32e62278a311970624879e")
+        self.assertEqual(hashlib.sha256(blob.encode()).hexdigest(), FROZEN_DIGEST)
 
     def test_continuous_time_would_hide_the_ambiguity_the_clock_creates(self):
         """Разрешение часов — источник ties, и без него симуляция себе льстит.
@@ -574,13 +574,15 @@ class RecoveryTests(unittest.TestCase):
             person_period_rmtr   +1770 +-  193    |t| =  9
             mean_burden          -1329 +-  922    |t| =  1.4
 
-        То есть `reentry_burden_H` — МАЛОЧУВСТВИТЕЛЬНЫЙ исход для воздействия,
-        которое двигает только длительность. Для дизайна это важнее, чем любое
-        совпадение с корпусом.
+        То есть В ТЕКУЩЕМ ГЕНЕРАТОРЕ `mean_burden` имеет слабое отношение
+        сигнала к шуму для pure-latency воздействия из-за ИНДУЦИРОВАННОГО
+        изменения incidence. Не «burden плохой исход вообще»: величина связи
+        держится на density / opportunity process, а он не откалиброван
+        (S3 §3). Это гипотеза, порождённая моделью; в S6 её проверяют.
 
-        Оговорка обязательная: отклик incidence в генераторе сам НЕ
-        откалиброван (S3 §3), поэтому это гипотеза, порождённая моделью, а не
-        установленный факт. В S6 её проверяют, а не цитируют.
+        И это НЕ выбор endpoint по симуляции. `person_period_weighted_rmtr`
+        выбран primary раньше и по содержательным причинам; S3a добавил лишь
+        причину НЕ заменять его на burden.
         """
         def signal_to_noise(name):
             check = self.checks[name]

@@ -11,6 +11,7 @@ import unittest
 
 from extractor.model import RawMessage
 from simulation import corpus_compare as cal
+from simulation import manifest
 from simulation.manifest import RunManifest, trace_digest
 from simulation.process import DyadParameters, Population, TrueEffect
 
@@ -195,11 +196,16 @@ class TotalVariationTests(unittest.TestCase):
 class ManifestTests(unittest.TestCase):
     """Манифест — то, без чего таблица через месяц держится на вере."""
 
-    def test_the_digest_is_pinned_and_deterministic(self):
-        self.assertEqual(
-            trace_digest(),
-            "168aef4ea6d8bca4bbadc7f7ae87b2c84847e6588b32e62278a311970624879e")
+    def test_the_digest_matches_the_freeze_and_is_deterministic(self):
+        """Замок, а не справка: семантика генератора заморожена до S4.
+
+        Сдвинуть отпечаток можно только вместе с документированной поправкой —
+        расхождение, класс, что сделано, новый отпечаток. Иначе калибровочный
+        корпус за пару кругов становится дрессировочной площадкой.
+        """
+        self.assertEqual(trace_digest(), manifest.FROZEN_DIGEST)
         self.assertEqual(trace_digest(), trace_digest())
+        self.assertIn("S4", manifest.FROZEN_UNTIL)
 
     def test_changing_the_process_changes_the_digest(self):
         """Отпечаток обязан умирать демонстративно: манифест со старым

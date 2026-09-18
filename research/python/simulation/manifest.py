@@ -30,6 +30,20 @@ from .process import DyadParameters, Population, TrueEffect, generate_dyad
 GOLDEN_SEED = "golden"
 GOLDEN_DAYS = 9.0
 
+#: ЗАМОРОЗКА СЕМАНТИКИ ГЕНЕРАТОРА до S4 (Messaging Matters).
+#:
+#: Отпечаток здесь — не справочная величина, а замок. Он меняется при любой
+#: смысловой правке процесса, и менять его разрешено ТОЛЬКО вместе с
+#: документированной поправкой: расхождение, его класс, что сделано, новый
+#: отпечаток. Без этого правила калибровочный корпус за два круга превращается
+#: в дрессировочную площадку, а «похоже на людей» — в критерий истины.
+#:
+#: На момент заморозки откалиброванных параметров: 0 из 8. Ближайшее, что может
+#: снять заморозку, — реальные асинхронные многодневные данные, а не ещё один
+#: круг подгонки под MaiChat.
+FROZEN_DIGEST = "168aef4ea6d8bca4bbadc7f7ae87b2c84847e6588b32e62278a311970624879e"
+FROZEN_UNTIL = "S4 — Messaging Matters (async, multi-day corpus)"
+
 
 def trace_digest(params: DyadParameters = DyadParameters(),
                  *, seed: str = GOLDEN_SEED, days: float = GOLDEN_DAYS) -> str:

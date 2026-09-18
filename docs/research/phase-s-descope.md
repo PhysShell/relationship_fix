@@ -200,38 +200,81 @@ SD на пару втрое больше самого эффекта. Иллюс
 
 ## 4. План PHASE S и гейт в PHASE H
 
-Порядок изменён: **S3 идёт раньше S2.** TelAnalysis и ChatRel способны доказать,
-что машина переваривает чужую синтетику. MaiChat способен сказать, что сама
-синтетика живёт на другой планете. Второе сейчас ценнее. После S3 синтетические
-фикстуры перестают быть попыткой доказать realism и становятся тем, чем
-синтетика действительно хороша: большим воспроизводимым E2E и hostile-shape
-тестированием.
+## 4.0 FREEZE после S3a — состояние на 2026-09-18
 
 ```
-S1  generator + simulation harness            CLOSED
-        ↓
-S3  MaiChat stress / calibration
-        ↓
-    FREEZE: parameter envelope · discrepancy notes · run manifest
-        ↓
-S2  TelAnalysis / ChatRel: shape / E2E / robustness fixtures
-        ↓
-S4  genuinely external corpus, если добываем (Messaging Matters)
-        ↓
-S5  симуляция эксперимента K0 целиком
-        ↓
-S6  `δ`, дисперсия, чувствительность мощности
+S1  generator machinery          CLOSED
+S3  MaiChat calibration          CLOSED
+S3a structural amendment         CLOSED
+
+Generator semantics              FREEZE until S4
+    FROZEN_DIGEST                168aef4e…
+    замок                        simulation/manifest.py + тест
+
+Calibrated parameters            0 / 8
+
+Known structural improvements
+    independent actor clocks
+    meaningful nonresponse (dormancy)
+    treatment can affect incidence emergently
+
+Open pivot                       opportunity_rate_per_day / density
+S4 target                        Messaging Matters
+S2 (TelAnalysis / ChatRel)       DEFERRED
+```
+
+Правки генератора **остановлены**. S3a сделал то, ради чего затевался: не
+подогнал синтетику к человечеству, а нашёл, где модель мира была структурно
+неверна. Ещё один круг настройки по MaiChat превратил бы калибровочный корпус в
+дрессировочную площадку.
+
+Главное в S3a — не 7.02%, а смена порождающей семантики:
+
+```
+БЫЛО                          СТАЛО
+participant reply             partner clock ─────── independent
+    ↓                         participant clock ─── independent
+определяет, когда partner              ↓
+снова может писать                merge events
+                                       ↓
+                            frozen extractor derives topology
+```
+
+То, что после исправления distribution fit **ухудшился**, — хороший признак:
+чинили модель, а не занимались curve fitting.
+
+Порядок этапов:
+
+```
+S1  generator + harness                       CLOSED
+     ↓
+S3  MaiChat stress / calibration              CLOSED
+     ↓
+S3a structural amendment + FREEZE             CLOSED
+     ↓
+S4  Messaging Matters (async, multi-day)      prereg записан
+     ↓
+S2  TelAnalysis / ChatRel: E2E, hostile shapes   DEFERRED
+     ↓
+S5  симуляция эксперимента K0
+     ↓
+S6  δ, дисперсия, чувствительность мощности
 ```
 
 | # | шаг | статус |
 |---|---|---|
-| S1 | собственный генератор процесса с известной ground truth | **выполнен** |
-| S3 | MaiChat как калибровочный/стресс-корпус | **prereg записан**, см. `maichat-calibration-prereg.md` |
-| — | FREEZE: envelope + discrepancies + manifest | после S3 |
-| S2 | TelAnalysis / ChatRel: E2E и hostile shapes | не начат |
-| S4 | попытка получить Messaging Matters (Apache-2.0, Zenodo) | не начат |
+| S1 | генератор процесса с известной ground truth | **выполнен** |
+| S3 | MaiChat как калибровочный/стресс-корпус | **выполнен**, `maichat-calibration-s3.md` |
+| S3a | правка формы модели + заморозка | **выполнен** |
+| S4 | Messaging Matters | **prereg записан**, `messaging-matters-s4-prereg.md` |
+| S2 | TelAnalysis / ChatRel | **DEFERRED** — после сегодняшнего ещё одна синтетика почти ничего не скажет |
 | S5 | симуляция эксперимента K0 целиком | не начат |
 | S6 | `δ`, дисперсия, чувствительность мощности | не начат |
+
+Итог, который стоит держать в голове: **MaiChat не откалибровал ни одного
+параметра и при этом оказался чрезвычайно полезным корпусом.** Так и выглядит
+работающая falsification machinery — она редко выдаёт желаемое число, зато
+иногда сообщает, что сам мир в симуляторе был устроен неправильно.
 
 **MaiChat — калибровочный корпус, не validation set.** Он уже использовался, и
 теперь на него смотрят, чтобы подстроить генератор. Подтверждать на нём
