@@ -9,8 +9,11 @@
 """
 
 import dataclasses
+import hashlib
+import json
 import math
 import random
+import statistics
 import unittest
 
 from extractor.model import RawMessage
@@ -138,6 +141,16 @@ class NightWindowTests(unittest.TestCase):
         self.assertFalse(_is_night(12 * HOUR, self.WRAPPED))
         self.assertFalse(_is_night(23 * HOUR - 1.0, self.WRAPPED))
 
+    def test_a_zero_length_window_means_no_night_rather_than_all_night(self):
+        """`start == end` — ловушка: через перенос она даёт ночь круглосуточно."""
+        degenerate = DyadParameters(night_start_hour=0, night_end_hour=0)
+        for hour in (0, 3, 12, 23):
+            self.assertFalse(_is_night(hour * HOUR, degenerate), hour)
+        stream = generate_dyad(random.Random(9), params(night_start_hour=0,
+                                                        night_end_hour=0,
+                                                        night_suppression=1.0), days=20)
+        self.assertGreater(len(stream), 50)
+
     def test_the_hour_is_read_from_the_day_and_not_from_the_epoch(self):
         self.assertTrue(_is_night(97 * DAY + 3 * HOUR, self.DAY_PARAMS))
         self.assertFalse(_is_night(97 * DAY + 15 * HOUR, self.DAY_PARAMS))
@@ -186,6 +199,40 @@ class ProcessShapeTests(unittest.TestCase):
         stream = generate_dyad(random.Random(7), params(), days=10)
         for message in stream:
             self.assertEqual(message.timestamp, math.floor(message.timestamp))
+
+    def test_a_coarser_clock_quantises_coarser(self):
+        """Не единица по умолчанию, а ЗАЯВЛЕННОЕ разрешение — вопрос «а если
+        источник грубее, чем мы думаем» должен быть задаваем."""
+        stream = generate_dyad(random.Random(7), params(timestamp_resolution_seconds=60.0),
+                               days=10)
+        for message in stream:
+            self.assertEqual(message.timestamp % 60.0, 0.0)
+
+    def test_resolution_zero_means_no_quantisation_at_all(self):
+        stream = generate_dyad(random.Random(7), params(timestamp_resolution_seconds=0.0),
+                               days=10)
+        self.assertTrue(any(m.timestamp != math.floor(m.timestamp) for m in stream))
+
+    def test_message_length_follows_the_declared_mean(self):
+        stream = generate_dyad(random.Random(8), params(mean_chars=200.0), days=120)
+        self.assertAlmostEqual(statistics.fmean(m.char_count for m in stream),
+                               200.0, delta=25.0)
+
+    def test_the_generated_trace_is_pinned_to_a_recorded_digest(self):
+        """Золотая трасса. Меняется генератор — меняется ВСЯ прежняя ground truth.
+
+        Арифметику `generate_dyad` иначе не проверяет никто: мутации вроде
+        `DAY / rate` -> `DAY * rate` переписывают процесс целиком и не роняют ни
+        одного статистического утверждения с широким допуском. Этот тест обязан
+        упасть при любом изменении порождающего процесса — и тогда все числа,
+        посчитанные до него, относятся к другому процессу и подлежат пересчёту.
+        """
+        trace = generate_dyad(random.Random("golden"), params(), days=9)
+        blob = json.dumps([[m.message_id, m.actor, m.local_time, m.char_count]
+                           for m in trace], sort_keys=True)
+        self.assertEqual(len(trace), 87)
+        self.assertEqual(hashlib.sha256(blob.encode()).hexdigest(),
+                         "24e0c1e35a4cb54b1e8cc4a97a106a9c02baebd6f1bc04edc06b8bba0b428de1")
 
     def test_continuous_time_would_hide_the_ambiguity_the_clock_creates(self):
         """Разрешение часов — источник ties, и без него симуляция себе льстит.
@@ -268,6 +315,33 @@ class ClassifyTests(unittest.TestCase):
         self.assertIs(self.verdict(observed=13.0, agreement_half_width=2.0),
                       rec.Verdict.MISMATCH)
 
+    def test_each_boundary_is_pinned_at_the_exact_point_it_flips(self):
+        """Границы — это и есть вся семантика классификатора.
+
+        Каждое из трёх сравнений проверяется ровно на своём значении и на волос
+        по обе стороны от него. Без этого `>` и `>=` неразличимы, а именно они и
+        решают, объявлен ли дефект.
+        """
+        # MISMATCH: расхождение РОВНО в полуширину согласия ещё не расхождение
+        self.assertIs(self.verdict(observed=12.0, planted=10.0, agreement_half_width=2.0),
+                      rec.Verdict.RECOVERED)
+        self.assertIs(self.verdict(observed=12.001, planted=10.0, agreement_half_width=2.0),
+                      rec.Verdict.MISMATCH)
+        # RECOVERED: точка РОВНО в полуширину от нуля — ноль ещё не исключён
+        self.assertIsNot(self.verdict(observed=1.0, planted=1.0, half_width=1.0,
+                                      agreement_half_width=2.0, delta=0.5),
+                         rec.Verdict.RECOVERED)
+        self.assertIs(self.verdict(observed=1.001, planted=1.0, half_width=1.0,
+                                   agreement_half_width=2.0, delta=0.5),
+                      rec.Verdict.RECOVERED)
+        # ABSENT: интервал, упирающийся в delta ровно, ещё внутри
+        self.assertIs(self.verdict(observed=1.0, planted=1.0, half_width=4.0,
+                                   agreement_half_width=5.0, delta=5.0),
+                      rec.Verdict.ABSENT)
+        self.assertIs(self.verdict(observed=1.001, planted=1.0, half_width=4.0,
+                                   agreement_half_width=5.0, delta=5.0),
+                      rec.Verdict.INCONCLUSIVE)
+
     def test_absence_needs_the_whole_interval_inside_delta(self):
         # точка внутри delta, но интервал вылезает — это не «практически ноль»
         self.assertIs(self.verdict(observed=4.0, planted=4.0, half_width=3.0,
@@ -286,6 +360,12 @@ class ReplicatesTests(unittest.TestCase):
         self.assertEqual(r.mean, 15.0)
         self.assertEqual(r.undefined, 3)
 
+    def test_two_replicates_are_already_a_spread(self):
+        """Граница ровно на двух: `n >= 2` и `n > 2` — разные контракты."""
+        r = rec.Replicates("x", H, values=(1.0, 3.0), undefined=0)
+        self.assertAlmostEqual(r.sd, math.sqrt(2.0))
+        self.assertAlmostEqual(r.se, math.sqrt(2.0) / math.sqrt(2))
+
     def test_a_single_replicate_has_no_spread(self):
         r = rec.Replicates("x", H, values=(10.0,), undefined=0)
         self.assertIsNone(r.sd)
@@ -294,6 +374,55 @@ class ReplicatesTests(unittest.TestCase):
     def test_standard_error_shrinks_with_the_root_of_n(self):
         four = rec.Replicates("x", H, values=(1.0, 3.0, 1.0, 3.0), undefined=0)
         self.assertAlmostEqual(four.se, four.sd / 2.0)
+
+
+class WelchTests(unittest.TestCase):
+    """Степени свободы разности двух средних — замкнутая форма, не «примерно»."""
+
+    def test_equal_sides_double_the_degrees_of_freedom(self):
+        self.assertAlmostEqual(rec._welch_df(2.0, 7.0, 2.0, 7.0), 14.0)
+        self.assertAlmostEqual(rec._welch_df(0.5, 3.0, 0.5, 3.0), 6.0)
+
+    def test_the_noisier_side_dominates(self):
+        got = rec._welch_df(10.0, 4.0, 0.1, 400.0)
+        self.assertAlmostEqual(got, 4.0, delta=0.01)
+
+    def test_two_certain_sides_fall_back_instead_of_dividing_by_zero(self):
+        self.assertEqual(rec._welch_df(0.0, 5.0, 0.0, 9.0), 5.0)
+
+
+class LevelsTests(unittest.TestCase):
+    """Абсолютные уровни одной руки — экспортируются, значит проверяются."""
+
+    def test_every_estimand_gets_one_value_per_replicate(self):
+        got = rec.levels(Population(), TrueEffect(), dyads=4, days=7,
+                         replicates=3, base_seed=44, horizon_hours=H)
+        self.assertEqual(set(got), set(rec.ESTIMANDS))
+        for name, replicates in got.items():
+            self.assertEqual(replicates.n + replicates.undefined, 3, name)
+
+    def test_replicates_are_different_samples_and_not_one_repeated(self):
+        got = rec.levels(Population(), TrueEffect(), dyads=4, days=7,
+                         replicates=3, base_seed=44, horizon_hours=H)
+        self.assertGreater(len(set(got["mean_burden"].values)), 1)
+
+
+class UndefinedEstimandTests(unittest.TestCase):
+    """«Не определено» и «ноль» — разные вещи, и путать их дороже всего."""
+
+    def test_a_window_too_short_for_the_horizon_leaves_rmtr_undefined(self):
+        # H = 24 ч не помещается в полусуточное окно, поэтому ни одна
+        # возможность не eligible и условные величины не существуют
+        aggregates = rec.run_arm(3, Population(), TrueEffect(), dyads=5, days=0.5)
+        self.assertIsNone(rec.ESTIMANDS["person_period_rmtr"](aggregates, H).value)
+        self.assertEqual(rec.ESTIMANDS["mean_incidence"](aggregates, H).value, 0.0)
+
+    def test_the_contrast_counts_undefined_replicates_instead_of_zeroing_them(self):
+        got = rec.contrast(Population(), TrueEffect(), dyads=5, days=0.5,
+                           replicates=2, base_seed=12, horizon_hours=H, paired=False)
+        self.assertEqual(got["person_period_rmtr"].undefined, 2)
+        self.assertEqual(got["person_period_rmtr"].differences, ())
+        self.assertEqual(got["mean_incidence"].n, 2)
 
 
 class ArmTests(unittest.TestCase):
@@ -395,6 +524,14 @@ class RecoveryTests(unittest.TestCase):
         self.assertGreater(high, check.observed)
         self.assertGreater(check.agreement_df, 1.0)
 
+    def test_two_replicates_are_enough_and_the_df_follows_them(self):
+        """Граница `n < 2` и степени свободы, которые из неё выводятся."""
+        thin = rec.Contrast("mean_burden", H, differences=(1.0, 3.0), undefined=0, paired=True)
+        check = rec.check_recovery(thin, thin, delta=1.0)
+        self.assertEqual(check.replicates, 2)
+        self.assertAlmostEqual(check.agreement_df,
+                               rec._welch_df(thin.se, 1.0, thin.se, 1.0))
+
     def test_a_verdict_cannot_be_built_from_one_replicate(self):
         thin = rec.Contrast("mean_burden", H, differences=(1.0,), undefined=0, paired=True)
         fat = rec.Contrast("mean_burden", H, differences=(1.0, 2.0), undefined=0, paired=True)
@@ -453,6 +590,33 @@ class IntervalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             interval.half_width(1.0, 1)
 
+    def test_the_half_width_uses_n_minus_one_degrees_of_freedom(self):
+        """Единственная причина существования модуля — и её не проверял никто.
+
+        Мутант `n - 1` -> `n + 1` выживал: интервал оставался «каким-то», просто
+        слишком узким — ровно тем дефектом, из-за которого модуль и появился.
+        """
+        for n in (2, 3, 7, 25):
+            self.assertAlmostEqual(interval.half_width(1.0, n),
+                                   interval.student_t_quantile(0.975, n - 1), places=9)
+
+    def test_two_observations_are_enough_for_an_interval(self):
+        self.assertAlmostEqual(interval.half_width(1.0, 2), 12.7062, places=3)
+
+    def test_the_half_width_scales_with_the_standard_error(self):
+        self.assertAlmostEqual(interval.half_width(3.0, 9), 3.0 * interval.half_width(1.0, 9))
+
+    def test_a_different_confidence_gives_a_different_width(self):
+        self.assertLess(interval.half_width(1.0, 9, confidence=0.80),
+                        interval.half_width(1.0, 9, confidence=0.99))
+
+    def test_the_quantile_is_exact_far_past_the_precision_anyone_reads(self):
+        """Допуск бисекции пинуется здесь: мутанты, ослабляющие его, иначе
+        выживают — ответ остаётся верным ровно до третьего знака."""
+        for df in (2, 9, 40):
+            t = interval.student_t_quantile(0.975, df)
+            self.assertAlmostEqual(interval.student_t_cdf(t, df), 0.975, delta=2e-12)
+
     def test_the_incomplete_beta_hits_its_closed_form_cases(self):
         # I_x(1, 1) = x
         for x in (0.1, 0.5, 0.9):
@@ -477,6 +641,20 @@ class CoverageTests(unittest.TestCase):
         self.assertFalse(rec.Coverage("x", trials=20, mismatches=6, nominal=0.05).within_nominal)
         self.assertFalse(rec.Coverage("x", trials=80, mismatches=15, nominal=0.05).within_nominal)
 
+    def test_the_binomial_tail_flips_at_the_count_it_should(self):
+        """Точный хвост, посчитанный вручную, а не «примерно столько».
+
+        n = 20, p = 0.05: P(X >= 4) = 0.0159 > 0.01 — терпимо;
+                          P(X >= 5) = 0.0026 < 0.01 — уже нет.
+        """
+        self.assertTrue(rec.Coverage("x", trials=20, mismatches=4, nominal=0.05).within_nominal)
+        self.assertFalse(rec.Coverage("x", trials=20, mismatches=5, nominal=0.05).within_nominal)
+        self.assertTrue(rec.Coverage("x", trials=80, mismatches=9, nominal=0.05).within_nominal)
+        self.assertFalse(rec.Coverage("x", trials=80, mismatches=10, nominal=0.05).within_nominal)
+
+    def test_every_trial_failing_is_never_within_nominal(self):
+        self.assertFalse(rec.Coverage("x", trials=20, mismatches=20, nominal=0.05).within_nominal)
+
     def test_the_rate_is_a_share_and_not_a_count(self):
         self.assertEqual(rec.Coverage("x", trials=20, mismatches=5, nominal=0.05).rate, 0.25)
 
@@ -495,6 +673,8 @@ class CoverageTests(unittest.TestCase):
         for name, coverage in probe.items():
             self.assertEqual(coverage.trials, 3, name)
             self.assertLessEqual(coverage.mismatches, 3, name)
+            # номинал — это 1 - confidence, а не confidence
+            self.assertAlmostEqual(coverage.nominal, 0.05, msg=name)
 
 
 if __name__ == "__main__":

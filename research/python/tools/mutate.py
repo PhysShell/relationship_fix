@@ -28,6 +28,7 @@ import copy
 import os
 import shutil
 import re
+import tempfile
 import subprocess
 import sys
 import time
@@ -354,10 +355,34 @@ def evaluate(files, tests, *, root: Path = None, progress: bool = False) -> Repo
     return Report(verdicts=verdicts, seconds=time.time() - started)
 
 
+def sandbox_root(root: Path = None) -> Path:
+    """A throwaway copy of the tree to mutate instead of the working tree.
+
+    Mutation rewrites sources in place and restores them afterwards, so for most
+    of a run the checkout on disk is a mutant. That makes an ordinary `git add`
+    during a run capable of committing one — a hazard that has already produced
+    two false readings in this session, one of them a reproduction script that
+    silently compounded mutants because it read back its own output.
+
+    Opt-in rather than default: some suites resolve data paths from their own
+    location, and a copy moves that location. A broken copy is caught by the
+    baseline check rather than reported as a wall of survivors.
+    """
+    source = root or ROOT
+    destination = Path(tempfile.mkdtemp(prefix="mutate-")) / source.name
+    shutil.copytree(
+        source, destination,
+        ignore=shutil.ignore_patterns("__pycache__", ".git", "*.pyc", ".venv"),
+    )
+    return destination
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--files", nargs="*", default=list(SURFACE))
+    parser.add_argument("--sandbox", action="store_true",
+                        help="mutate a temporary copy, leaving the working tree alone")
     args = parser.parse_args()
 
     if args.list:
@@ -367,8 +392,12 @@ def main() -> int:
         return 0
 
     print(f"surface: {', '.join(args.files)}")
+    root = None
+    if args.sandbox:
+        root = sandbox_root()
+        print(f"sandbox: {root}")
     try:
-        report = evaluate(args.files, SURFACE, progress=True)
+        report = evaluate(args.files, SURFACE, root=root, progress=True)
     except RuntimeError as failure:
         print(failure)
         return 2

@@ -135,8 +135,19 @@ class TrueEffect:
 
 
 def _is_night(at: float, params: DyadParameters) -> bool:
-    hour = (at % DAY) / HOUR
+    """Окно ночи, включая левую границу и исключая правую.
+
+    Вырожденный случай `start == end` означает ОТСУТСТВИЕ ночи, и это
+    приходится сказать явно: без этой ветки он попадал в перенос через полночь,
+    где `hour >= start or hour < end` истинно всегда, и ночью становились сутки
+    целиком. Человек, написавший `night_start_hour = night_end_hour = 0` в
+    смысле «ночи нет», получил бы подавление 90% всего потока и ни одной
+    ошибки.
+    """
     start, end = params.night_start_hour, params.night_end_hour
+    if start == end:
+        return False
+    hour = (at % DAY) / HOUR
     return start <= hour < end if start < end else (hour >= start or hour < end)
 
 

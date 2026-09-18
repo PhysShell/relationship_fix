@@ -13,6 +13,7 @@ electricity supply.
 """
 
 import ast
+import shutil
 import tempfile
 import textwrap
 import unittest
@@ -266,3 +267,53 @@ class TestSetMappingTests(unittest.TestCase):
     def test_every_file_on_the_surface_exists(self):
         for path in mutate.SURFACE:
             self.assertTrue((mutate.ROOT / path).is_file(), path)
+
+
+class SandboxTests(unittest.TestCase):
+    """Мутировать копию, а не рабочее дерево.
+
+    Прогон переписывает исходники на месте и возвращает их обратно, поэтому
+    почти всё время чекаут на диске — мутант. Обычный `git add` в этот момент
+    способен закоммитить его. Дважды за сессию это уже давало ложные показания,
+    и один раз — скрипт воспроизведения, который читал собственный вывод и
+    молча складывал мутанты друг на друга.
+    """
+
+    def test_the_copy_carries_the_code_and_the_tests(self):
+        root = mutate.sandbox_root()
+        try:
+            self.assertTrue((root / "simulation" / "process.py").is_file())
+            self.assertTrue((root / "tests" / "test_simulation.py").is_file())
+            self.assertTrue((root / "extractor" / "model.py").is_file())
+        finally:
+            shutil.rmtree(root.parent, ignore_errors=True)
+
+    def test_the_copy_leaves_bytecode_and_git_behind(self):
+        root = mutate.sandbox_root()
+        try:
+            self.assertFalse((root / ".git").exists())
+            self.assertEqual(list(root.rglob("__pycache__")), [])
+        finally:
+            shutil.rmtree(root.parent, ignore_errors=True)
+
+    def test_each_call_gets_its_own_directory(self):
+        first, second = mutate.sandbox_root(), mutate.sandbox_root()
+        try:
+            self.assertNotEqual(first, second)
+        finally:
+            for root in (first, second):
+                shutil.rmtree(root.parent, ignore_errors=True)
+
+    def test_mutating_the_copy_does_not_touch_the_original(self):
+        original = (mutate.ROOT / "simulation" / "process.py").read_text(encoding="utf-8")
+        root = mutate.sandbox_root()
+        try:
+            target = root / "simulation" / "process.py"
+            mutant = mutate._source_with("simulation/process.py", 0, root)
+            target.write_text(mutant, encoding="utf-8")
+            self.assertNotEqual(target.read_text(encoding="utf-8"), original)
+            self.assertEqual(
+                (mutate.ROOT / "simulation" / "process.py").read_text(encoding="utf-8"),
+                original)
+        finally:
+            shutil.rmtree(root.parent, ignore_errors=True)
