@@ -44,9 +44,13 @@ SURFACE = (
     "extractor/model.py",
     "extractor/extract.py",
     "extractor/estimands.py",
+    "acquisition/model.py",
+    "acquisition/telegram.py",
+    "acquisition/pipeline.py",
 )
 
 TESTS = (
+    "tests.test_acquisition_pipeline",
     "tests.test_extractor",
     "tests.test_estimands",
     "tests.test_extractor_properties",
