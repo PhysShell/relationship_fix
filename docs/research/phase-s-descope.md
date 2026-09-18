@@ -268,7 +268,7 @@ S6  δ, дисперсия, чувствительность мощности
 | S3a | правка формы модели + заморозка | **выполнен** |
 | S4 | Messaging Matters | **prereg записан**, `messaging-matters-s4-prereg.md` |
 | S2 | TelAnalysis / ChatRel | **DEFERRED** — после сегодняшнего ещё одна синтетика почти ничего не скажет |
-| S5a | K0 machinery qualification | **выполнен**, `k0-simulation-s5-prereg.md` |
+| S5a | K0 machinery qualification | **CLOSED**, `k0-simulation-s5-prereg.md` |
 | S5b | `δ`, variance envelope, pilot N, мощность | **BLOCKED_ON_S4** |
 | S6 | чувствительность мощности на откалиброванном генераторе | после S4 и S5b |
 
