@@ -153,9 +153,37 @@ def moves(bucket: Bin, carried: bool) -> list[Move]:
     return out
 
 
+def opens_here(start: float, *, horizon: float, window_end: float,
+               initiation_end: float | None) -> bool:
+    """Может ли В ЭТОЙ корзине ОТКРЫТЬСЯ засчитываемая возможность.
+
+    ДВЕ РАЗНЫЕ ГРАНИЦЫ, и смешивать их нельзя — найдено третьим враждебным
+    чтением. `window_end` — конец НАБЛЮДЕНИЯ: до него корзины остаются в
+    данных и закрывают ранее открытые возможности. `initiation_end` — конец
+    ОБЛАСТИ ИНИЦИАЦИИ: после него новые открытия не засчитываются.
+
+    Просто обрезать корзины по отсечке НЕЛЬЗЯ. Возможность может открыться до
+    отсечки, а ответ прийти после неё; выбросив поздние корзины, мы превратим
+    завершённую возможность в цензурированную и припишем ей полный горизонт.
+    Ошибка тихая и ровно в ту сторону, которая красивее выглядит.
+
+    `initiation_end` — ИСКЛЮЧАЮЩАЯ верхняя граница на начало корзины. Она
+    скалярна потому, что область инициации — префикс по времени; на этом же
+    свойстве стоит теорема N_min = 0 => N_max = 0.
+
+    None означает историческое правило (`start + H <= window_end`), при
+    котором конец наблюдения и отсечка совпадают. Так считался Q1c, и его
+    запечатанный результат обязан воспроизводиться байт в байт.
+    """
+    if initiation_end is None:
+        return start + horizon <= window_end
+    return start < initiation_end
+
+
 def contribution(move: Move, bucket: Bin, opened_at: float | None, *,
                  delta: float, horizon: float, window_end: float,
-                 time_layer: bool) -> tuple[int, float, float]:
+                 time_layer: bool,
+                 initiation_end: float | None = None) -> tuple[int, float, float]:
     """(сколько eligible возможностей открылось, вклад в B_lo, вклад в B_hi).
 
     Eligibility считается по НАЧАЛУ КОРЗИНЫ — той же метке, которую видит
@@ -163,12 +191,16 @@ def contribution(move: Move, bucket: Bin, opened_at: float | None, *,
     гуляет внутри корзины, поэтому у возможностей ровно на краю окна правило
     могло бы дрогнуть; это объявлено, а не замолчано.
     """
-    here_eligible = bucket.start + horizon <= window_end
+    def opens(at: float) -> bool:
+        return opens_here(at, horizon=horizon, window_end=window_end,
+                          initiation_end=initiation_end)
+
+    here_eligible = opens(bucket.start)
     n_add = move.opened if here_eligible else 0
     low = high = 0.0
 
     if move.closed_carried and opened_at is not None:
-        if opened_at + horizon <= window_end:
+        if opens(opened_at):
             gap = bucket.start - opened_at
             if time_layer:
                 low += min(max(0.0, gap - delta), horizon)
@@ -233,7 +265,8 @@ def _table(partner: int, participant: int, carried: bool) -> tuple:
 
 def _optimise(bins: list[Bin], *, delta: float, horizon: float,
               window_end: float, time_layer: bool, lam: float,
-              maximise: bool, require_any: bool) -> float | None:
+              maximise: bool, require_any: bool,
+              initiation_end: float | None = None) -> float | None:
     """min/max по допустимым порядкам величины (B − λ·N). Shortest path по DAG.
 
     B и N складываются по переходам, поэтому `B − λN` тоже складывается, и
@@ -241,14 +274,18 @@ def _optimise(bins: list[Bin], *, delta: float, horizon: float,
     которую нельзя обойти поопортунитно: минимум одной возможности и минимум
     другой могут требовать взаимоисключающих порядков одной корзины.
     """
+    def opens(at: float) -> bool:
+        return opens_here(at, horizon=horizon, window_end=window_end,
+                          initiation_end=initiation_end)
+
     frontier: dict[tuple[float | None, bool], float] = {(None, False): 0.0}
     for bucket in bins:
         start = bucket.start
-        here_eligible = start + horizon <= window_end
+        here_eligible = opens(start)
         nxt: dict[tuple[float | None, bool], float] = {}
         for (state, seen), value in frontier.items():
             carried = state is not None
-            carried_eligible = carried and state + horizon <= window_end
+            carried_eligible = carried and opens(state)
             if carried_eligible:
                 gap = start - state
                 if time_layer:
@@ -281,28 +318,30 @@ def _optimise(bins: list[Bin], *, delta: float, horizon: float,
         if require_any and not seen:
             continue
         total = value
-        if state is not None and state + horizon <= window_end:
+        if state is not None and opens(state):
             total += horizon                    # возврата не было: вносит H
         if best is None or better(best, total) == total:
             best = total
     return best
 
 
-def count_bounds(bins: list[Bin], *, horizon: float,
-                 window_end: float) -> Interval:
+def count_bounds(bins: list[Bin], *, horizon: float, window_end: float,
+                 initiation_end: float | None = None) -> Interval:
     """Границы для N. Отдельно, потому что N — самостоятельная величина."""
-    return Interval(float(_count(bins, horizon, window_end, False)),
-                    float(_count(bins, horizon, window_end, True)))
+    return Interval(float(_count(bins, horizon, window_end, False, initiation_end)),
+                    float(_count(bins, horizon, window_end, True, initiation_end)))
 
 
 def _count(bins: list[Bin], horizon: float, window_end: float,
-           maximise: bool) -> int:
+           maximise: bool, initiation_end: float | None = None) -> int:
     """Чистый экстремум N: тот же DP с нулевым вкладом в B."""
     better = max if maximise else min
     frontier: dict[float | None, int] = {None: 0}
     for bucket in bins:
         nxt: dict[float | None, int] = {}
-        eligible = bucket.start + horizon <= window_end
+        eligible = opens_here(bucket.start, horizon=horizon,
+                              window_end=window_end,
+                              initiation_end=initiation_end)
         for state, value in frontier.items():
             for move in moves(bucket, state is not None):
                 target = state if move.state == CARRY else move.state
@@ -315,13 +354,14 @@ def _count(bins: list[Bin], horizon: float, window_end: float,
 
 def burden_bounds(bins: list[Bin], *, horizon: float, window_end: float,
                   delta: float = OBSERVED_RESOLUTION_SECONDS,
-                  time_layer: bool = True) -> Interval:
+                  time_layer: bool = True,
+                  initiation_end: float | None = None) -> Interval:
     low = _optimise(bins, delta=delta, horizon=horizon, window_end=window_end,
                     time_layer=time_layer, lam=0.0, maximise=False,
-                    require_any=False)
+                    require_any=False, initiation_end=initiation_end)
     high = _optimise(bins, delta=delta, horizon=horizon, window_end=window_end,
                      time_layer=time_layer, lam=0.0, maximise=True,
-                     require_any=False)
+                     require_any=False, initiation_end=initiation_end)
     return Interval(low or 0.0, high or 0.0)
 
 
@@ -333,7 +373,8 @@ RATIO_TOLERANCE_SECONDS = 5e-2
 
 def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
                  delta: float = OBSERVED_RESOLUTION_SECONDS,
-                 time_layer: bool = True) -> Interval | None:
+                 time_layer: bool = True,
+                 initiation_end: float | None = None) -> Interval | None:
     """Границы для R = B / N через дробную оптимизацию.
 
     ЧТО ИМЕННО ВОЗВРАЩАЕТСЯ, и слово тут выбрано не для красоты. По ПОРЯДКУ
@@ -360,12 +401,14 @@ def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
     Это стандартный приём (Dinkelbach), и он избавляет от хранения всего
     зоопарка достижимых пар (N, B).
     """
-    if _count(bins, horizon, window_end, True) == 0:
+    if _count(bins, horizon, window_end, True, initiation_end) == 0:
         return None                      # эстиманда нет: N = 0 при любом порядке
 
-    counts = count_bounds(bins, horizon=horizon, window_end=window_end)
+    counts = count_bounds(bins, horizon=horizon, window_end=window_end,
+                          initiation_end=initiation_end)
     burden = burden_bounds(bins, horizon=horizon, window_end=window_end,
-                           delta=delta, time_layer=time_layer)
+                           delta=delta, time_layer=time_layer,
+                           initiation_end=initiation_end)
     # НАИВНАЯ оболочка B_lo/N_hi .. B_hi/N_lo не годится как ОТВЕТ — её
     # концы достигаются на разных порядках. Но как СКОБКА ПОИСКА она
     # безупречна: искомый экстремум отношения лежит внутри неё, и старт с
@@ -379,7 +422,8 @@ def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
             mid = (lo + hi) / 2.0
             value = _optimise(bins, delta=delta, horizon=horizon,
                               window_end=window_end, time_layer=time_layer,
-                              lam=mid, maximise=maximise, require_any=True)
+                              lam=mid, maximise=maximise, require_any=True,
+                              initiation_end=initiation_end)
             if value is None:
                 return math.nan
             # f(λ) = extremum(B − λN) не возрастает по λ и обращается в ноль
@@ -481,7 +525,8 @@ def definedness(counts: Interval) -> Definedness:
 
 def arm_ratio_bounds(periods: list[list[Bin]], *, horizon: float,
                      window_end: float, delta: float = OBSERVED_RESOLUTION_SECONDS,
-                     time_layer: bool = True) -> Interval | None:
+                     time_layer: bool = True,
+                     initiation_end: float | None = None) -> Interval | None:
     """Границы для ΣB / ΣN по ВСЕЙ руке. Найдено враждебным чтением S5b.
 
     ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ, если есть `ratio_bounds` на период. Потому что
@@ -513,13 +558,15 @@ def arm_ratio_bounds(periods: list[list[Bin]], *, horizon: float,
     """
     if not periods:
         return None
-    if sum(_count(bins, horizon, window_end, True) for bins in periods) == 0:
+    if sum(_count(bins, horizon, window_end, True, initiation_end)
+           for bins in periods) == 0:
         return None                      # эстиманда нет: ΣN = 0 при любом порядке
 
     def total(lam: float, maximise: bool) -> float:
         return sum(_optimise(bins, delta=delta, horizon=horizon,
                              window_end=window_end, time_layer=time_layer,
-                             lam=lam, maximise=maximise, require_any=False) or 0.0
+                             lam=lam, maximise=maximise, require_any=False,
+                             initiation_end=initiation_end) or 0.0
                    for bins in periods)
 
     def solve(maximise: bool) -> float:

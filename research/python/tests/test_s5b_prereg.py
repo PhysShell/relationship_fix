@@ -146,7 +146,7 @@ class TwoGatesTests(unittest.TestCase):
         """Главный блокер прежней редакции: как из интервалов выходит решение."""
         self.assertEqual(len(prereg.AGGREGATION_CHAIN), 6)
         self.assertIn("Dinkelbach", prereg.ARM_BOUNDS)
-        self.assertIn("lowT", prereg.CONTRAST_BOUNDS)
+        self.assertIn("λ⁻T", prereg.CONTRAST_BOUNDS)
         self.assertIn("outer union", prereg.SAMPLING_INTERVAL)
         self.assertTrue(prereg.SAMPLING_INTERVAL_IS_CONSERVATIVE)
         self.assertTrue(prereg.SHARPER_PARTIAL_IDENTIFICATION_CI.startswith("DEFERRED"))
@@ -159,7 +159,7 @@ class TwoGatesTests(unittest.TestCase):
         self.assertTrue(prereg.REALIZED_INTERVAL_DOES_DEPEND_ON_N)
         self.assertIn("POPULATION", prereg.MEASUREMENT_GATE)
         self.assertFalse(hasattr(prereg, "MEASUREMENT_GATE_REFERENCE_DYADS"))
-        self.assertIn("E lowT", prereg.POPULATION_MEASUREMENT_BOUNDS)
+        self.assertIn("λ⁻_T", prereg.POPULATION_MEASUREMENT_BOUNDS)
 
     def test_monte_carlo_stops_on_precision_never_on_result(self):
         """Остановка по точности — не то же, что остановка по ответу."""
@@ -267,25 +267,38 @@ class AdmissibilityRuleTests(unittest.TestCase):
 
     def test_the_selection_is_executable_not_prose(self):
         """Проза оставляла runner'у решать, что такое «ближайшая изнутри»."""
-        cells = [prereg.Cell(("b",), 1.4, 3.0, 1.0),     # изнутри, 0.4
-                 prereg.Cell(("a",), 2.0, 3.0, 1.0),     # изнутри, 1.0
-                 prereg.Cell(("c",), -1.2, 0.5, 1.0),    # снаружи, 0.2
-                 prereg.Cell(("d",), -5.0, 5.0, 1.0)]    # снаружи, 4.0
+        cells = [prereg.Cell(("b",), 1.05, 3.0, 1.0),    # изнутри, 0.05
+                 prereg.Cell(("a",), 2.0, 3.0, 1.0),     # изнутри, но не погранич.
+                 prereg.Cell(("c",), -1.02, 0.5, 1.0),   # снаружи, 0.02
+                 prereg.Cell(("d",), -5.0, 5.0, 1.0)]    # снаружи, далеко
         inside, outside = prereg.select_borderline_cells(cells)
         self.assertEqual(inside.axes, ("b",))
         self.assertEqual(outside.axes, ("c",))
 
+    def test_only_genuinely_borderline_cells_are_eligible(self):
+        """Мой баг, благословлённый моим же тестом: фильтр шёл только по
+        base_admissibility, поэтому при отсутствии пограничных на стороне
+        возвращалась ближайшая НЕПОГРАНИЧНАЯ и называлась пограничной."""
+        far = [prereg.Cell(("a",), 2.0, 3.0, 1.0),       # изнутри, 1.0 >> 0.1
+               prereg.Cell(("d",), -5.0, 5.0, 1.0)]      # снаружи, 4.0 >> 0.1
+        for cell in far:
+            self.assertIsNot(prereg.admissibility(cell.low, cell.high, cell.delta),
+                             Admissibility.BORDERLINE)
+        self.assertEqual(prereg.select_borderline_cells(far), (None, None))
+
     def test_ties_are_broken_lexicographically_not_by_input_order(self):
         """Иначе порядок обхода сетки становится научным решением."""
-        cells = [prereg.Cell(("z", 2), 1.4, 3.0, 1.0),
-                 prereg.Cell(("a", 1), 1.4, 3.0, 1.0)]
+        cells = [prereg.Cell(("z", 2), 1.05, 3.0, 1.0),
+                 prereg.Cell(("a", 1), 1.05, 3.0, 1.0)]
         inside, _ = prereg.select_borderline_cells(cells)
         self.assertEqual(inside.axes, ("a", 1))
         inside_again, _ = prereg.select_borderline_cells(list(reversed(cells)))
         self.assertEqual(inside_again.axes, ("a", 1))
 
     def test_an_empty_side_yields_none_rather_than_a_substitute(self):
-        cells = [prereg.Cell(("a",), 2.0, 3.0, 1.0)]
+        """«Пограничных нет» — результат, а не повод подставить ближайшую."""
+        self.assertTrue(prereg.BORDERLINE_SIDE_MAY_BE_EMPTY)
+        cells = [prereg.Cell(("a",), 1.05, 3.0, 1.0)]
         inside, outside = prereg.select_borderline_cells(cells)
         self.assertIsNotNone(inside)
         self.assertIsNone(outside)
@@ -433,3 +446,125 @@ class PrefixNestingTests(unittest.TestCase):
     def test_the_longest_duration_covers_the_axis(self):
         self.assertEqual(prereg.LONGEST_DURATION_DAYS,
                          max(prereg.OBSERVATION_DAYS))
+
+
+class PopulationFunctionalTests(unittest.TestCase):
+    """После смены эстиманда популяционный объект стал другим."""
+
+    def test_the_population_object_is_a_dinkelbach_root_not_a_mean(self):
+        """«Сначала границы, потом среднее» не коммутирует с отношением —
+        доказано на конечной руке, и на популяционном слое то же самое."""
+        self.assertTrue(prereg.MEAN_OF_ENDPOINTS_IS_THE_WRONG_POPULATION_OBJECT)
+        self.assertIn("roots of", prereg.POPULATION_ARM_BOUNDS)
+        self.assertIn("E[extremum", prereg.POPULATION_ARM_BOUNDS)
+        self.assertIn("λ⁻_T", prereg.POPULATION_MEASUREMENT_BOUNDS)
+        self.assertIn("границы руки — это среднее поячеечных границ",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_the_finite_engine_is_named_as_the_approximation_it_is(self):
+        self.assertTrue(prereg.ARM_RATIO_BOUNDS_IS_THE_SAA_OF_THE_POPULATION_FUNCTIONAL)
+        self.assertIn("SAA", prereg.AGGREGATION_CHAIN[2])
+
+
+class SamplingInferenceTests(unittest.TestCase):
+    """Бонферрони не доказывает валидность компонентных интервалов."""
+
+    def test_welch_is_retired_with_a_named_reason(self):
+        self.assertTrue(prereg.BONFERRONI_DOES_NOT_PROVE_COMPONENT_VALIDITY)
+        self.assertIn("root of a whole-arm", prereg.WELCH_NO_LONGER_APPLIES_BECAUSE)
+        self.assertIn("bootstrap", prereg.SAMPLING_INTERVAL)
+
+    def test_the_bootstrap_is_frozen_end_to_end(self):
+        self.assertEqual(len(prereg.SAMPLING_INFERENCE), 5)
+        self.assertIn("no linearisation", prereg.SAMPLING_INFERENCE[1])
+        self.assertTrue(prereg.BOOTSTRAP_RESAMPLES_RANDOMISED_UNITS)
+        self.assertGreater(prereg.BOOTSTRAP_REPLICATES, 0)
+
+    def test_degenerate_replicates_are_counted_not_dropped(self):
+        self.assertTrue(prereg.BOOTSTRAP_DEGENERATE_SHARE_IS_REPORTED)
+        self.assertGreater(prereg.BOOTSTRAP_DEGENERATE_REPLICATE_LIMIT, 0.0)
+
+    def test_coverage_is_checked_not_assumed(self):
+        """Иначе метод снова выбирается после того, как видно, какой нравится."""
+        self.assertTrue(prereg.SAMPLING_METHOD_COVERAGE_STUDY)
+        self.assertTrue(prereg.COVERAGE_IS_OF_THE_SET_NOT_OF_A_POINT)
+        self.assertIn("⊇", prereg.COVERAGE_TARGET)
+        self.assertIn("SAMPLING_METHOD_INVALID", prereg.COVERAGE_FAILURE_RULE)
+        self.assertTrue(prereg.NO_SHOPPING_FOR_A_BOOTSTRAP_THAT_COVERS)
+        self.assertIn("SAMPLING_METHOD_INVALID", prereg.STOP_RULES["coverage_failure"])
+
+
+class EstimandTradeTests(unittest.TestCase):
+    """Смена эстиманда — размен, а не починка смещения."""
+
+    def test_the_trade_is_stated_not_hidden(self):
+        self.assertTrue(prereg.ESTIMAND_SWITCH_IS_A_TRADE_NOT_A_BIAS_FIX)
+        self.assertTrue(prereg.PRIMARY_IS_NOT_ONE_VOTE_PER_RANDOMISED_UNIT)
+        self.assertTrue(prereg.OPPORTUNITY_WEIGHTS_ARE_THEMSELVES_TREATMENT_DEPENDENT)
+
+    def test_the_target_parameter_is_written_as_a_formula(self):
+        self.assertIn("E[B(z)] / E[N(z)]", prereg.TARGET_PARAMETER)
+        self.assertIn("θ_1 − θ_0", prereg.TARGET_PARAMETER)
+
+    def test_the_two_tempting_misreadings_are_forbidden(self):
+        self.assertIn("контраст θ — средний индивидуальный эффект лечения",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+        self.assertIn("θ_1 и θ_0 считаются на общем наборе возможностей",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_the_caveat_is_auditable_through_the_identity(self):
+        """Тождество ΣB/M = (ΣN/M)(ΣB/ΣN) уже доказано в estimands.py."""
+        self.assertEqual(len(prereg.REPORTED_TRIPLE), 3)
+        self.assertTrue(prereg.IDENTITY_IS_AUDITED_PER_ARM)
+
+    def test_the_tripwire_now_guards_the_arm_denominator(self):
+        self.assertIn("ΣN = 0", prereg.TRIPWIRE_GUARDS_THE_ARM_DENOMINATOR)
+
+
+class S5aRatioAmendmentTests(unittest.TestCase):
+    """Сертификат от другого эстиманда не наследуется."""
+
+    def test_the_amendment_is_blocking(self):
+        self.assertTrue(prereg.S5A_QUALIFIED_A_DIFFERENT_PRIMARY)
+        self.assertTrue(prereg.S5A_RATIO_IS_BLOCKING_FOR_S5B)
+        self.assertEqual(len(prereg.S5A_RATIO_CHECKS), 6)
+        self.assertIn("sampling-CI coverage", prereg.S5A_RATIO_CHECKS)
+        self.assertIn("S5a-RATIO", prereg.STOP_RULES["s5a_ratio_is_blocking"])
+
+    def test_history_is_annotated_not_rewritten(self):
+        self.assertTrue(prereg.HISTORICAL_S5A_STAYS_CLOSED_FOR_THE_OLD_PRIMARY)
+        self.assertTrue(prereg.OLD_ARTIFACTS_ARE_ANNOTATED_NOT_REWRITTEN)
+        self.assertTrue(prereg.FROZEN_FILES_ARE_NOT_EDITED_FOR_CROSS_REFERENCES)
+        self.assertTrue(prereg.THE_FREEZE_REFUSED_A_DOCUMENTATION_EDIT_AND_WAS_OBEYED)
+        self.assertIn("S5a уже квалифицировал этот анализ",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_the_run_order_puts_machinery_first(self):
+        self.assertEqual(len(prereg.RUN_ORDER), 4)
+        self.assertIn("S5a-RATIO", prereg.RUN_ORDER[0])
+
+
+class InitiationBridgeTests(unittest.TestCase):
+    """Мост «предикат prereg -> скаляр движка» гниёт молча, поэтому проверен."""
+
+    def test_the_scalar_cutoff_agrees_with_the_predicate(self):
+        for window in (120.0, 600.0, 3600.0, 86_400.0):
+            for horizon in prereg.HORIZONS_SECONDS:
+                cutoff = prereg.initiation_cutoff(window, horizon)
+                for t in range(0, int(window) + 1, max(1, int(window) // 200)):
+                    self.assertEqual(
+                        prereg.is_eligible(float(t), window_end=window,
+                                           horizon=horizon),
+                        float(t) < cutoff, (window, horizon, t))
+
+    def test_a_window_too_short_for_any_horizon_admits_nothing(self):
+        self.assertEqual(prereg.initiation_cutoff(100.0, 60.0), 0.0)
+        self.assertFalse(prereg.is_eligible(0.0, window_end=100.0, horizon=60.0))
+
+    def test_the_engine_takes_the_cutoff_separately_from_the_window(self):
+        """Конец наблюдения и отсечка инициации — разные аргументы."""
+        from coarsening.bounded import opens_here
+        self.assertTrue(opens_here(0.0, horizon=300.0, window_end=600.0,
+                                   initiation_end=60.0))
+        self.assertFalse(opens_here(120.0, horizon=300.0, window_end=600.0,
+                                    initiation_end=60.0))

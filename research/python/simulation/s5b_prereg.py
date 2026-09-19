@@ -211,6 +211,15 @@ N_ZERO_INVARIANCE_RESTS_ON = ("eligibility is monotone in time (a prefix)",
 #: статус `Definedness.AMBIGUOUS`, недостижимый СЕГОДНЯ, и тест-растяжка,
 #: которая обязана упасть в тот день, когда он станет достижим.
 DEFINEDNESS_AMBIGUOUS_IS_A_TRIPWIRE = True
+
+#: ОБОСНОВАНИЕ РАСТЯЖКИ ПЕРЕЦЕЛЕНО (третье чтение). Старое говорило про
+#: «множество person-period слагаемых» — это довод из mean-of-ratios, и он
+#: стал историческим вместе с прежним первичным эстимандом. Для отношения
+#: СУММ плавающий N_i сам по себе безвреден, пока определён ЗНАМЕНАТЕЛЬ РУКИ.
+#: Опасность начинается там, где допустимы совместные истории и с ΣN = 0, и с
+#: ΣN > 0: тогда само существование θ_z латентно. Монотонная eligibility
+#: делает этот мир недостижимым — и растяжка сторожит именно его.
+TRIPWIRE_GUARDS_THE_ARM_DENOMINATOR = "admissible histories with ΣN = 0 and ΣN > 0 at once"
 #: И у растяжки объявлено ПОВЕДЕНИЕ, а не только существование. Правила для
 #: плавающего знаменателя у нас нет; сочинять его на ходу runner не вправе.
 IF_DEFINEDNESS_AMBIGUOUS_EVER_FIRES = ("the cell fails the measurement gate "
@@ -235,22 +244,58 @@ PERSON_PERIOD_WEIGHTED_CONDITIONS_ON_POST_TREATMENT = True
 
 #: РЕШЕНИЕ. Первичным становится opportunity-weighted ΣB/ΣN: на уровне
 #: периода у него знаменателя нет вовсе, пустые периоды вносят 0 и в
-#: числитель, и в знаменатель, и никакого отбора не возникает.
+#: числитель, и в знаменатель, и отбора по N > 0 не возникает.
 #:
-#: ЧЕСТНАЯ ОГОВОРКА, без которой замена была бы фокусом. ΣB/ΣN — ОТНОШЕНИЕ
-#: ДВУХ ITT-величин, а не «среднее время возврата среди тех возможностей,
-#: которые возникли бы всё равно». Контраст отношений может поехать оттого,
-#: что поехал числитель, что поехал знаменатель, или что изменился СОСТАВ
-#: возможностей. Это законный причинный эстиманд с оговоркой на состав, а
-#: не условный на отборе — разница именно в этом, и она не косметическая.
+#: НО ЭТО РАЗМЕН, А НЕ ПОЧИНКА СМЕЩЕНИЯ, и третье чтение право: формулировка
+#: «никакого отбора не возникает» была слишком доброй. Эстиманд определяется
+#: как arm-specific отношение ожиданий
+#:
+#:     θ_z = E[B(z)] / E[N(z)],     целевой контраст = θ_1 − θ_0
+#:
+#: и лечение меняет N, то есть меняет, КАКИЕ типы возможностей получают вес и
+#: сколько. Веса сами treatment-dependent. Правильная формулировка:
+#:
+#:     estimator НЕ обусловливает включение person-period на N > 0;
+#:     вместо этого он таргетирует arm-specific ratio-of-expectations,
+#:     чьи веса по возможностям сами могут зависеть от лечения
+#:
+#: И отказ платный. `extractor/estimands.py` называл person-period-weighted
+#: inferential ровно за «one vote per person-period, matching the unit of
+#: randomisation». Новый первичный этого свойства НЕ ИМЕЕТ. Размен целиком:
+#:
+#:     person-period   один голос на единицу рандомизации    ДА
+#:                     не обусловлен на post-treatment       НЕТ
+#:     ΣB/ΣN           один голос на единицу                 НЕТ
+#:                     не обусловлен на post-treatment       ДА
+#:     mean_burden     оба свойства                          ДА
+#:                     отделяет длительность от частоты      НЕТ
+#:
+#: Бесплатного варианта в этой тройке нет, и делать вид, что нашёлся, нельзя.
+ESTIMAND_SWITCH_IS_A_TRADE_NOT_A_BIAS_FIX = True
 PRIMARY_ARM_FUNCTIONAL = "opportunity-weighted ΣB/ΣN (ratio of two ITT totals)"
 PRIMARY_IS_A_RATIO_OF_ITTS_NOT_A_CONDITIONAL_MEAN = True
+TARGET_PARAMETER = "θ_z = E[B(z)] / E[N(z)];  contrast = θ_1 − θ_0"
+OPPORTUNITY_WEIGHTS_ARE_THEMSELVES_TREATMENT_DEPENDENT = True
+PRIMARY_IS_NOT_ONE_VOTE_PER_RANDOMISED_UNIT = True
 COMPOSITION_CAVEAT = ("a contrast of ratios can move because the numerator "
                       "moved, the denominator moved, or the mix changed")
 
-#: Безусловный спутник: mean_i(B_i) по ВСЕМ периодам, включая пустые. Ничего
-#: не выбрасывается, значит ни на чём не обусловлено; цена — масштаб окна.
-#: Он не разрешает споров про знаменатель, он их не имеет.
+#: ЧТО ДЕЛАЕТ ОГОВОРКУ ПРОВЕРЯЕМОЙ, А НЕ РИТОРИЧЕСКОЙ. В `estimands.py` уже
+#: доказано тождество
+#:
+#:     Σ B / M  =  (Σ N / M) × (Σ B / Σ N)
+#:
+#: поэтому отчёт идёт ТРОЙКОЙ, и по ней видно, что именно поехало: частота,
+#: длительность или обе. Отдельно взятое ΣB/ΣN этого различить не даёт, а
+#: тройка даёт — и это ровно то разделение, ради которого RMTR и заводился.
+REPORTED_TRIPLE = ("mean_incidence  ΣN/M",
+                   "opportunity_weighted_rmtr  ΣB/ΣN",
+                   "mean_burden  ΣB/M")
+IDENTITY_IS_AUDITED_PER_ARM = True
+
+#: Безусловный спутник: mean_burden по ВСЕМ периодам, нули включительно.
+#: Ничего не выбрасывается, значит ни на чём не обусловлено; цена — он
+#: смешивает частоту с длительностью.
 UNCONDITIONAL_COMPANION = "mean_burden over ALL person-periods, zeros included"
 
 #: Диагностика, НЕ первичное. На одной полке со STRICT и по одной причине.
@@ -268,9 +313,11 @@ ZERO_INCIDENCE_SHARE_IS_REPORTED_PER_ARM = True
 AGGREGATION_CHAIN = (
     "наблюдённые грубые данные",
     "BOUNDED на person-period -> (N-границы, B-границы) без деления",
-    "границы руки: Динкельбах по ВСЕЙ руке, ноль экстремума ΣB − λΣN",
-    "границы контраста: [lowT − highK, highT − lowK]",
-    "выборочная неопределённость ОТДЕЛЬНО для каждого конца",
+    "границы руки: корень g∓(λ) = E[экстремум (B − λN)]; на выборке — "
+    "Динкельбах по ВСЕЙ руке, то есть SAA этого корня",
+    "границы контраста: [λ⁻T − λ⁺K, λ⁺T − λ⁻K]",
+    "выборочная неопределённость: бутстрап по единицам рандомизации, "
+    "ОТДЕЛЬНО для каждого конца",
     "консервативная внешняя оболочка -> решение",
 )
 
@@ -297,28 +344,79 @@ ARM_BOUNDS_ARE_SHARP_ON_THE_ORDER_LAYER_ONLY = True
 
 #: ПОЧЕМУ КОНТРАСТ ИМЕННО ТАК. Руки независимы, поэтому наименьшая разность
 #: достигается при наименьшем T и наибольшем K, и наоборот. Резко.
-CONTRAST_BOUNDS = "[lowT − highK, highT − lowK]"
+CONTRAST_BOUNDS = "[λ⁻T − λ⁺K, λ⁺T − λ⁻K]"
 
-#: ВЫБОРОЧНАЯ НЕОПРЕДЕЛЁННОСТЬ. Оба конца контраста — функции выборки, и для
-#: каждого строится двусторонний интервал уровня CONFIDENCE_LEVEL. РЕШАЮЩАЯ
-#: ОБОЛОЧКА берётся как
+#: ВЫБОРОЧНАЯ НЕОПРЕДЕЛЁННОСТЬ. ПОПРАВКА ТРЕТЬЕГО ЧТЕНИЯ, и она тоже прямое
+#: следствие смены эстиманда.
+#:
+#: Бонферрони-аргумент (ниже) доказывает: ЕСЛИ два компонентных интервала
+#: валидны, то внешняя оболочка имеет нужное совместное покрытие. Он НЕ
+#: доказывает валидность компонентных интервалов, и раньше её доказывало
+#: другое: конец контраста был обычным средним поячеечных величин, и Уэлч
+#: имел смысл.
+#:
+#: Теперь конец — КОРЕНЬ задачи Динкельбаха по всей руке. Списка
+#: индивидуальных `low_i`, к которому честно применить Уэлча, больше нет.
+#: Уэлч на корне — не консервативная оценка, а оценка неизвестно чего.
+WELCH_NO_LONGER_APPLIES_BECAUSE = ("the endpoint is a root of a whole-arm "
+                                   "optimisation, not a mean of per-unit values")
+
+#: ЗАМОРОЖЕННЫЙ ИНФЕРЕНС. λ̂⁻ решает (1/n)Σ min(B_i − λN_i) = 0 — это
+#: Z-оценка с монотонной по λ оценивающей функцией, и непараметрический
+#: бутстрап по единицам рандомизации для неё стандартен. Пересчёт ПОЛНЫЙ:
+#: никакой линеаризации, потому что дешёвая линеаризация здесь была бы ещё
+#: одним незаявленным решением.
+SAMPLING_INFERENCE = (
+    "resample randomized units within each arm",
+    "recompute arm_ratio_bounds completely — no linearisation",
+    "recompute both contrast endpoints",
+    "percentile interval per endpoint",
+    "outer union of the two",
+)
+BOOTSTRAP_REPLICATES = 2_000
+BOOTSTRAP_INTERVAL = "percentile at CONFIDENCE_LEVEL"
+BOOTSTRAP_RESAMPLES_RANDOMISED_UNITS = True
+#: Реплика, в которой ΣN = 0 во всей руке, эстиманда не имеет. Она НЕ
+#: выбрасывается молча: доля таких реплик отчётна, и если она превышает
+#: долю ниже, интервал не строится, а ячейка идёт в BOTH_AMBIGUOUS.
+BOOTSTRAP_DEGENERATE_REPLICATE_LIMIT = 0.01
+BOOTSTRAP_DEGENERATE_SHARE_IS_REPORTED = True
+
+#: РЕШАЮЩАЯ ОБОЛОЧКА — по-прежнему внешнее объединение:
 #:
 #:     [ нижняя граница CI нижнего конца , верхняя граница CI верхнего конца ]
 #:
-#: ЭТО МЕСТО ПЫТАЛИСЬ СЛОМАТЬ И НЕ СЛОМАЛИ, и отрицательный результат атаки
-#: записывается так же, как записывались бы её успехи. Удерживается каждый
-#: из двух ОДНОСТОРОННИХ пределов с уровнем 97.5%, и по Бонферрони
-#: совместное покрытие обоих нужных концов не хуже 95% — при условии, что
-#: сами интервалы валидны. То есть «консервативная оболочка» здесь имеет
-#: основание, а не декоративную каску.
-SAMPLING_INTERVAL = "separate two-sided CI per endpoint, then outer union"
+#: Бонферрони: каждый удерживаемый ОДНОСТОРОННИЙ предел несёт 97.5%,
+#: совместное покрытие обоих нужных концов не хуже 95% — ПРИ УСЛОВИИ, что
+#: компонентные интервалы валидны. Это условие и проверяется ниже.
+SAMPLING_INTERVAL = "separate two-sided bootstrap CI per endpoint, then outer union"
 SAMPLING_INTERVAL_IS_CONSERVATIVE = True
 SAMPLING_ENVELOPE_COVERAGE = ("each retained one-sided limit carries 97.5%; "
-                              "Bonferroni gives >= 95% jointly while the "
+                              "Bonferroni gives >= 95% jointly IF the "
                               "component intervals are valid")
 SAMPLING_ENVELOPE_SURVIVED_ATTACK = True
+BONFERRONI_DOES_NOT_PROVE_COMPONENT_VALIDITY = True
 SHARPER_PARTIAL_IDENTIFICATION_CI = "DEFERRED (Imbens-Manski-style)"
 CONFIDENCE_LEVEL = 0.95
+
+#: ПОКРЫТИЕ ПРОВЕРЯЕТСЯ, А НЕ ПРЕДПОЛАГАЕТСЯ. Иначе метод снова выбирается
+#: после того, как стало видно, какой нравится. Цель — покрытие ИДЕНТИФИЦИ-
+#: РОВАННОГО МНОЖЕСТВА, а не точки: оболочка на то и внешняя. Imbens-Manski
+#: целился бы в точку и дал бы уже — он и записан как DEFERRED.
+SAMPLING_METHOD_COVERAGE_STUDY = True
+COVERAGE_TARGET = "P(outer union ⊇ population identified interval) >= 0.95"
+COVERAGE_IS_OF_THE_SET_NOT_OF_A_POINT = True
+COVERAGE_REPLICATES = 1_000
+#: Ячейки объявлены заранее и не выбираются после взгляда: четыре узла
+#: плотности на двух крайних разрешениях, опорный режим, нейтральная точка C.
+COVERAGE_STUDY_CELLS = ("all four opportunity_rate nodes x {1 s, 60 s} "
+                        "at the reference regime and the neutral C point")
+#: Провал — это СТАТУС, а не приглашение попробовать другой бутстрап.
+COVERAGE_FAILURE_RULE = ("if the Wilson lower limit of measured coverage falls "
+                         "below 0.93, the method is SAMPLING_METHOD_INVALID and "
+                         "the prereg is amended before any main run")
+SAMPLING_METHOD_INVALID = "SAMPLING_METHOD_INVALID"
+NO_SHOPPING_FOR_A_BOOTSTRAP_THAT_COVERS = True
 
 
 class Gate(Enum):
@@ -333,20 +431,43 @@ class Gate(Enum):
 #: ГЕЙТ ИЗМЕРЕНИЯ — ПОПУЛЯЦИОННЫЙ ОБЪЕКТ. Вторая поправка второго чтения.
 #:
 #: Первая редакция говорила «не зависит от N вовсе»; вторая — «меряется при
-#: опорных 500 диадах». Вторая формулировка лучше первой и всё равно неверна:
-#: одна выборка из 500 остаётся РЕАЛИЗАЦИЕЙ. Она может случайно пересечь ±δ и
-#: случайно не пересечь, а рядом стоит собственное утверждение prereg, что
-#: NO_FINITE_N — структурная категория, а не невезение. Два эти места
-#: противоречили друг другу, и виноват был гейт, а не категория.
-#:
-#: Объект определяется честно — через ОЖИДАНИЯ:
-#:
-#:     границы руки:      E[low], E[high]
-#:     границы контраста: [E lowT − E highK, E highT − E lowK]
-#:
-#: Симуляция их ЧИСЛЕННО ИНТЕГРИРУЕТ, и у интегрирования объявлена точность.
+#: опорных 500 диадах». Вторая лучше первой и всё равно неверна: одна выборка
+#: из 500 остаётся РЕАЛИЗАЦИЕЙ. Она может случайно пересечь ±δ и случайно не
+#: пересечь, а рядом стояло собственное утверждение prereg, что NO_FINITE_N —
+#: структурная категория, а не невезение.
 MEASUREMENT_GATE_IS_A_POPULATION_OBJECT = True
-POPULATION_MEASUREMENT_BOUNDS = "[E lowT − E highK, E highT − E lowK]"
+
+#: И ЗАПИСАН ЭТОТ ОБЪЕКТ БЫЛ СНОВА НЕВЕРНО — поправка ТРЕТЬЕГО чтения, и
+#: возникла она ровно потому, что сменился эстиманд.
+#:
+#: Стояло: «границы руки: E[low], E[high]». Для отношения сумм это та же
+#: ошибка, которую мы только что доказали на конечной руке: «сначала взять
+#: границы, потом усреднить» НЕ КОММУТИРУЕТ с отношением. Усреднение
+#: поячеечных концов отвечает на вопрос про mean-of-ratios, а не про
+#: ratio-of-totals. Ошибка приехала в популяционный слой в чуть более дорогом
+#: костюме, и это её единственное отличие.
+#:
+#: Правильный объект — корень ПОПУЛЯЦИОННОГО функционала Динкельбаха:
+#:
+#:     g⁻_z(λ) = E[ min_{h ∈ A(O)} (B_h − λN_h) ]     ->  λ⁻_z
+#:     g⁺_z(λ) = E[ max_{h ∈ A(O)} (B_h − λN_h) ]     ->  λ⁺_z
+#:
+#: и только затем
+#:
+#:     [ λ⁻_T − λ⁺_K ,  λ⁺_T − λ⁻_K ]
+#:
+#: Оба g монотонно не возрастают по λ (каждый min и max не возрастает),
+#: поэтому корень единственный и дихотомия законна.
+POPULATION_ARM_BOUNDS = "roots of g∓(λ) = E[extremum over admissible histories of (B − λN)]"
+POPULATION_MEASUREMENT_BOUNDS = "[λ⁻_T − λ⁺_K, λ⁺_T − λ⁻_K]"
+MEAN_OF_ENDPOINTS_IS_THE_WRONG_POPULATION_OBJECT = True
+
+#: Практически это хорошая новость, и она не случайна: `arm_ratio_bounds` на
+#: большой синтетической руке есть SAMPLE-AVERAGE APPROXIMATION ровно этого
+#: объекта — его дихотомия ищет ноль Σ_i min(B_i − λN_i), то есть n-кратного
+#: эмпирического среднего. Меняется не машинерия, а то, ЧЕМ МЫ ЕЁ НАЗЫВАЕМ,
+#: и от честного имени зависит, что позволено делать дальше.
+ARM_RATIO_BOUNDS_IS_THE_SAA_OF_THE_POPULATION_FUNCTIONAL = True
 STRUCTURAL_AMBIGUITY_IS_NOT_CURED_BY_N = True
 REALIZED_INTERVAL_DOES_DEPEND_ON_N = True
 
@@ -401,6 +522,71 @@ def verdict(measurement_identified: bool, sampling_decisive: bool) -> Verdict:
     if sampling_decisive:
         return Verdict.MEASUREMENT_AMBIGUOUS
     return Verdict.BOTH_AMBIGUOUS
+
+
+
+
+# ---------------------------------------------------------------------------
+# §4b. S5a-RATIO — МАЛЕНЬКАЯ ПОПРАВКА К S5a, БЕЗ КОТОРОЙ S5b НЕ ЗАПУСКАЕТСЯ
+# ---------------------------------------------------------------------------
+
+#: ПОПРАВКА ТРЕТЬЕГО ЧТЕНИЯ, и это следствие, которое я не догнал сам.
+#:
+#: Смена первичного эстиманда протухла часть S5a. Репозиторий сейчас говорит
+#: две несовместимые вещи:
+#:
+#:     simulation/experiment.py     PRIMARY = "person_period_rmtr"
+#:     extractor/estimands.py       person_period_weighted_rmtr — inferential
+#:                                  opportunity_weighted_rmtr   — algebraic
+#:
+#: а prereg S5b объявляет обратное распределение ролей. Это не
+#: документационный хвост: S5a квалифицировал null behaviour, доверительные
+#: интервалы, гейт решения, missingness и перекос рук ДЛЯ СТАРОГО АНАЛИЗА.
+#: Связка «ΣB/ΣN + арм-Динкельбах + бутстрап по корню» такой квалификации не
+#: получала НИ ОДНОЙ. Тихо унаследовать сертификат от другого эстиманда —
+#: ровно тот жанр, за который этот проект ругает чужие работы.
+S5A_QUALIFIED_A_DIFFERENT_PRIMARY = True
+HISTORICAL_S5A_STAYS_CLOSED_FOR_THE_OLD_PRIMARY = True
+#: Старые файлы НЕ переписываются: они описывают то, что было сделано.
+#:
+#: И попытка вписать туда хотя бы перекрёстную ссылку была ОСТАНОВЛЕНА
+#: МОРОЗИЛЬНИКОМ — `extractor/estimands.py` под sha-пином, правка (одного
+#: комментария!) уронила `test_freeze`. Процедура поправки требует назвать,
+#: КАКОЕ ДОПУЩЕНИЕ ОКАЗАЛОСЬ НЕВЕРНЫМ. Здесь — никакое: поведение не
+#: менялось, менялась ссылка. Значит амнистировать морозильник ради
+#: комментария нельзя, и правка откачена: гейт, который обходят, когда он
+#: неудобен, перестаёт быть гейтом ровно в этот момент.
+#:
+#: Ссылка живёт там, где ей и место: здесь и в `experiment.py` (он не
+#: заморожен). А знание никуда не пропадало — `reactivity-power-design.md`
+#: уже писал, что «сводка сама построена на treatment-зависимом множестве
+#: событий» и что рандомизация этого не лечит. Проект знал это ТРИЖДЫ и
+#: всё равно выбрал условный функционал первичным.
+OLD_ARTIFACTS_ARE_ANNOTATED_NOT_REWRITTEN = True
+FROZEN_FILES_ARE_NOT_EDITED_FOR_CROSS_REFERENCES = True
+THE_FREEZE_REFUSED_A_DOCUMENTATION_EDIT_AND_WAS_OBEYED = True
+
+#: Переоткрывать весь S5a не нужно и нечестно дорого. Нужен маленький явный
+#: amendment на ТОМ ЖЕ замороженном DGP — и он БЛОКИРУЮЩИЙ.
+S5A_RATIO_CHECKS: tuple[str, ...] = (
+    "null false-positive rate",
+    "sign recovery",
+    "N = 0 behaviour",
+    "missingness",
+    "arm imbalance",
+    "sampling-CI coverage",
+)
+S5A_RATIO_IS_BLOCKING_FOR_S5B = True
+S5A_RATIO_RUNS_ON_THE_SAME_FROZEN_DGP = True
+S5A_RATIO_IS_MACHINERY_NOT_SCIENCE = ("it qualifies the new estimator, it does "
+                                      "not measure anything about people")
+
+#: И порядок именно такой, иначе мы очень тщательно преregistrируем три
+#: разных анализа под одним названием.
+RUN_ORDER = ("S5a-RATIO (machinery gate for the new primary)",
+             "S5b stage 1 (population measurability surface)",
+             "S5b stage 2 (operating characteristics)",
+             "S5b stage 3 (two borderline cells)")
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +646,26 @@ def initiation_region_end(window_end: float, horizon: float, *,
                           guard_bins: int = ELIGIBILITY_GUARD_BINS) -> float:
     """Последнее допустимое НАЧАЛО опорной корзины. Чистая функция."""
     return window_end - horizon - guard_bins * reference_delta
+
+
+def initiation_cutoff(window_end: float, horizon: float, *,
+                      reference_delta: float = ELIGIBILITY_REFERENCE_RESOLUTION_SECONDS,
+                      phase: float = ELIGIBILITY_PHASE_SECONDS,
+                      guard_bins: int = ELIGIBILITY_GUARD_BINS) -> float:
+    """ИСКЛЮЧАЮЩАЯ отсечка, которую получает движок: конец последней
+    допустимой опорной корзины.
+
+    МОСТ МЕЖДУ PREREG И ДВИЖКОМ, и он существует потому, что область
+    инициации — ПРЕФИКС по времени: предикат по родительской корзине
+    представим одним числом. `bounded` принимает именно скаляр, а не
+    функцию, и эквивалентность двух представлений проверяется тестом —
+    такие мосты гниют молча.
+    """
+    last = phase + reference_delta * math.floor(
+        (initiation_region_end(window_end, horizon,
+                               reference_delta=reference_delta,
+                               guard_bins=guard_bins) - phase) / reference_delta)
+    return last + reference_delta
 
 
 def is_eligible(t: float, *, window_end: float, horizon: float,
@@ -609,22 +815,38 @@ class Cell:
 
 
 def select_borderline_cells(cells) -> tuple[Cell | None, Cell | None]:
-    """(ближайшая изнутри, ближайшая снаружи). Исполняемое правило.
+    """(ближайшая ПОГРАНИЧНАЯ изнутри, ближайшая ПОГРАНИЧНАЯ снаружи).
 
-    ПОЧЕМУ ФУНКЦИЯ, А НЕ АБЗАЦ. Прошлая редакция описала правило прозой,
-    и runner всё равно должен был бы решать сам, что такое «ближайшая
-    изнутри» ПОСЛЕ того, как `admissibility` уже схлопнула обе стороны в
-    BORDERLINE. Десять строк кода дешевле археологии через неделю.
+    ПОЧЕМУ ФУНКЦИЯ, А НЕ АБЗАЦ. Прошлая редакция описала правило прозой, и
+    runner всё равно решал бы сам, что такое «ближайшая изнутри» ПОСЛЕ того,
+    как `admissibility` схлопнула обе стороны в BORDERLINE.
+
+    ПОПРАВКА ТРЕТЬЕГО ЧТЕНИЯ, и это был мой баг, благословлённый моим же
+    тестом. Первая версия фильтровала пул ТОЛЬКО по `base_admissibility`,
+    поэтому при отсутствии пограничных ячеек на одной стороне спокойно
+    возвращала ближайшую НЕПОГРАНИЧНУЮ — и называла её пограничной. Тест
+    это даже закреплял: ячейка [1.4, 3.0] при delta = 1 лежит вчетверо
+    дальше допуска, а выбиралась как «изнутри». Детерминизм был настоящим,
+    а вот выбираемый объект — не тем, и Stage 3 получал post-hoc свободу
+    под видом правила.
+
+    Пусто на стороне — возвращается None. «Пограничных нет» это результат, а
+    не повод подставить ближайшую попавшуюся.
     """
     def pick(want: Admissibility) -> Cell | None:
         pool = [c for c in cells
-                if base_admissibility(c.low, c.high, c.delta) is want]
+                if admissibility(c.low, c.high, c.delta) is Admissibility.BORDERLINE
+                and base_admissibility(c.low, c.high, c.delta) is want]
         if not pool:
             return None
         return min(pool, key=lambda c: (distance_to_gate(c.low, c.high, c.delta),
                                         c.axes))
 
     return pick(Admissibility.USABLE), pick(Admissibility.UNUSABLE)
+
+
+#: Пустая сторона — объявленный исход, а не повод для подстановки.
+BORDERLINE_SIDE_MAY_BE_EMPTY = True
 
 
 # ---------------------------------------------------------------------------
@@ -738,6 +960,14 @@ STOP_RULES: dict[str, str] = {
         "выполнимость бюджета C проверяется НЕ ЗДЕСЬ, а при заморозке C; если "
         "тогда рабочая точка выполнима только вне бюджета — переделывается C, "
         "а не критерий",
+    "s5a_ratio_is_blocking":
+        "основной прогон S5b не начинается, пока новый первичный эстиманд не "
+        "прошёл S5a-RATIO на том же замороженном DGP: сертификат от другого "
+        "эстиманда не наследуется",
+    "coverage_failure":
+        "если измеренное покрытие выборочного метода не держится, статус "
+        "SAMPLING_METHOD_INVALID и поправка к prereg — а не подбор другого "
+        "бутстрапа до тех пор, пока покрытие не понравится",
     "s6_gate":
         "S5b выдаёт поверхность и не выбирает точку на ней. Целевой дизайн "
         "замораживается по внешним ограничениям ПОСЛЕ S5b, и уже его "
@@ -764,6 +994,10 @@ FORBIDDEN_INTERPRETATIONS: tuple[str, ...] = (
     "лестница N исчерпана, значит никакой N не поможет",
     "структурная ширина измерена на 500 диадах",
     "ΣB/ΣN — это среднее время возврата среди возникших возможностей",
+    "контраст θ — средний индивидуальный эффект лечения",
+    "θ_1 и θ_0 считаются на общем наборе возможностей",
+    "S5a уже квалифицировал этот анализ",
+    "границы руки — это среднее поячеечных границ",
 )
 
 #: Q4 СУЖЕН. Вопрос обещал «разрешение И contract покрытия», но оси покрытия

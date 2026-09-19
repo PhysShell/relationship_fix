@@ -42,7 +42,8 @@ def _arrangements(bucket: Bin):
 
 
 def oracle(bins: list[Bin], *, horizon: float, window_end: float,
-           delta: float = DELTA, time_layer: bool = True):
+           delta: float = DELTA, time_layer: bool = True,
+           initiation_end: float | None = None):
     """(N, B_lo, B_hi) по каждому допустимому порядку. Ничего не оптимизирует.
 
     Правило вклада здесь повторено НАМЕРЕННО, а не импортировано: оракул
@@ -68,8 +69,11 @@ def oracle(bins: list[Bin], *, horizon: float, window_end: float,
                 end += 1
             reply = sequence[end + 1] if end + 1 < len(sequence) else None
             index = end + 1
-            if start + horizon > window_end:
-                continue                       # не eligible — как в экстракторе
+            if initiation_end is None:
+                if start + horizon > window_end:
+                    continue                   # не eligible — как в экстракторе
+            elif start >= initiation_end:
+                continue                       # вне области инициации
             count += 1
             if reply is None:
                 low += horizon
@@ -594,3 +598,87 @@ class ArmRatioTests(unittest.TestCase):
     def test_an_arm_with_no_opportunity_anywhere_has_no_estimand(self):
         bins = [[Bin(0.0, 0, 2)], [Bin(0.0, 0, 1)]]
         self.assertIsNone(arm_ratio_bounds(bins, horizon=60.0, window_end=600.0))
+
+
+class InitiationCutoffTests(unittest.TestCase):
+    """Конец НАБЛЮДЕНИЯ и конец ОБЛАСТИ ИНИЦИАЦИИ — разные границы.
+    Найдено третьим враждебным чтением prereg S5b."""
+
+    def test_the_legacy_rule_is_bit_identical(self):
+        """Q1c запечатан; отсутствие отсечки обязано считать ровно как раньше."""
+        rng = random.Random(9)
+        for _ in range(40):
+            bins = random_bins(rng, rng.randint(1, 4))
+            for horizon in (60.0, 300.0):
+                window = 4 * DELTA
+                self.assertEqual(
+                    count_bounds(bins, horizon=horizon, window_end=window),
+                    count_bounds(bins, horizon=horizon, window_end=window,
+                                 initiation_end=None))
+
+    def test_the_t119_counterexample_dies_at_every_resolution(self):
+        """Старое правило признавало t = 119 допустимым при 60 с и
+        недопустимым при 1 с. Отсечка по опорной корзине убивает его в обеих."""
+        stream = Stream((119.0, 400.0), (0, 1), ("a", "b"))
+        for delta in (1.0, 5.0, 15.0, 60.0):
+            bins = to_bins(stream, 1, delta=delta)
+            counts = count_bounds(bins, horizon=60.0, window_end=120.0,
+                                  initiation_end=60.0)
+            self.assertEqual((counts.low, counts.high), (0.0, 0.0), delta)
+
+    def test_a_reply_after_the_cutoff_still_closes_an_earlier_opening(self):
+        """САМЫЙ ВАЖНЫЙ СЛУЧАЙ. Возможность открылась до отсечки, ответ пришёл
+        после неё. Если поздние корзины просто отрезать, завершённая
+        возможность станет цензурированной и получит полный горизонт —
+        ошибка тихая и ровно в ту сторону, которая красивее выглядит.
+        """
+        bins = [Bin(0.0, 1, 0), Bin(120.0, 0, 1)]
+        counts = count_bounds(bins, horizon=300.0, window_end=600.0,
+                              initiation_end=60.0)
+        self.assertEqual((counts.low, counts.high), (1.0, 1.0))
+
+        burden = burden_bounds(bins, horizon=300.0, window_end=600.0,
+                               time_layer=False, initiation_end=60.0)
+        self.assertEqual((burden.low, burden.high), (120.0, 120.0))
+        self.assertNotEqual(burden.high, 300.0, "возможность стала цензурированной")
+
+    def test_openings_after_the_cutoff_are_not_counted_but_still_transition(self):
+        """Позднее открытие не в N, но состояние оно менять обязано."""
+        bins = [Bin(0.0, 1, 0), Bin(120.0, 1, 0), Bin(180.0, 0, 1)]
+        counts = count_bounds(bins, horizon=300.0, window_end=600.0,
+                              initiation_end=60.0)
+        self.assertEqual((counts.low, counts.high), (1.0, 1.0))
+
+    def test_it_agrees_with_the_oracle_under_a_cutoff(self):
+        """DP и независимый перебор должны согласиться и с отсечкой."""
+        rng = random.Random(21)
+        checked = 0
+        for _ in range(120):
+            bins = random_bins(rng, rng.randint(1, 3))
+            horizon, window = 300.0, 10 * DELTA
+            cutoff = rng.choice([DELTA, 2 * DELTA, 3 * DELTA])
+            rows = oracle(bins, horizon=horizon, window_end=window,
+                          time_layer=False, initiation_end=cutoff)
+            counts = count_bounds(bins, horizon=horizon, window_end=window,
+                                  initiation_end=cutoff)
+            self.assertEqual(counts.low, float(min(n for n, _, _ in rows)), bins)
+            self.assertEqual(counts.high, float(max(n for n, _, _ in rows)), bins)
+            burden = burden_bounds(bins, horizon=horizon, window_end=window,
+                                   time_layer=False, initiation_end=cutoff)
+            self.assertAlmostEqual(burden.low, min(lo for _, lo, _ in rows), 6)
+            self.assertAlmostEqual(burden.high, max(hi for _, _, hi in rows), 6)
+            checked += 1
+        self.assertGreater(checked, 100)
+
+    def test_n_zero_invariance_survives_the_new_cutoff(self):
+        """Теорема стоит на префиксности; отсечка обязана её сохранить."""
+        rng = random.Random(33)
+        seen = 0
+        for _ in range(3000):
+            bins = random_bins(rng, rng.randint(1, 3))
+            counts = count_bounds(bins, horizon=300.0, window_end=10 * DELTA,
+                                  initiation_end=rng.choice([DELTA, 2 * DELTA]))
+            if counts.low == 0.0:
+                seen += 1
+                self.assertEqual(counts.high, 0.0, bins)
+        self.assertGreater(seen, 50)
