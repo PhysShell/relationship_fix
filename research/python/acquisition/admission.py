@@ -113,6 +113,50 @@ class Admission:
         return "\n".join(lines)
 
 
+class Admissibility(Enum):
+    """Корпус допускается НЕ ЦЕЛИКОМ, а по вопросам.
+
+    NetHealth показал это в чистом виде: 60 миллионов строк и богатейший
+    кодбук отвечают почти на всё — кроме единственного вопроса, ради которого
+    корпус и открывали. Один булев допуск такое выразить не умеет.
+    """
+
+    QUALIFIED = "QUALIFIED"
+    #: отвечает, но с названным ущербом
+    PARTIAL = "PARTIAL"
+    REFUSED = "REFUSED"
+
+
+@dataclass(frozen=True, slots=True)
+class Question:
+    """Вопрос и то, от каких проверок он ДЕЙСТВИТЕЛЬНО зависит."""
+
+    key: str
+    asks: str
+    #: провал любой из них делает вопрос неотвечаемым
+    requires: tuple[str, ...]
+    #: провал ухудшает ответ, но не отменяет его; ущерб надо назвать
+    degraded_by: tuple[str, ...] = ()
+    degradation: str = ""
+
+    def __post_init__(self):
+        if self.degraded_by and not self.degradation:
+            raise AdmissionError(
+                f"{self.key}: названы смягчающие проверки, но не назван ущерб"
+            )
+
+
+def admissibility(question: Question, admission: Admission) -> Admissibility:
+    """Выводится из вердиктов проверок, а не объявляется вручную."""
+    for key in question.requires:
+        if not admission.check(key).clears:
+            return Admissibility.REFUSED
+    for key in question.degraded_by:
+        if not admission.check(key).clears:
+            return Admissibility.PARTIAL
+    return Admissibility.QUALIFIED
+
+
 def require_admission(admission: Admission) -> None:
     """Вызывается ПЕРЕД первым чтением корпуса. Не проходит — не читаем.
 
