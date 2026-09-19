@@ -20,9 +20,9 @@ import random
 import unittest
 
 from coarsening.bounded import (
-    Bin, Identified, Interval, RATIO_TOLERANCE_SECONDS, burden_bounds,
-    count_bounds, identified, moves, patterns, ratio_bounds, to_bins,
-)
+    Bin, Definedness, Identified, Interval, RATIO_TOLERANCE_SECONDS,
+    arm_ratio_bounds, burden_bounds, count_bounds, definedness, identified,
+    moves, patterns, ratio_bounds, to_bins)
 from coarsening.paired import Stream, apply_operator, opportunities, order, rmtr
 from coarsening.prereg import coarsen
 
@@ -472,3 +472,125 @@ class Q1cIsClosedTests(unittest.TestCase):
     def test_reopening_is_forbidden_by_name(self):
         from coarsening import q1c_result as q
         self.assertIn("sharper temporal bounds", q.DO_NOT_REOPEN)
+
+
+class DefinednessTests(unittest.TestCase):
+    """Найдено враждебным чтением prereg S5b: существует ли эстиманд вообще."""
+
+    def test_the_three_statuses_are_distinguished(self):
+        self.assertIs(definedness(Interval(1.0, 3.0)), Definedness.DEFINED)
+        self.assertIs(definedness(Interval(0.0, 0.0)),
+                      Definedness.UNDEFINED_EVERYWHERE)
+        self.assertIs(definedness(Interval(0.0, 3.0)), Definedness.AMBIGUOUS)
+
+    def test_n_zero_is_order_invariant(self):
+        """ТЕОРЕМА, на которой стоит сложение поячеечных границ:
+
+            N_min = 0  =>  N_max = 0
+
+        Eligibility монотонна по времени, а ожидающее возвращение создаётся
+        только открытием; значит в первую корзину с сообщением партнёра любой
+        порядок входит с пустым состоянием и открывает. Середины нет.
+
+        Исчерпывающий перебор, а не выборочная проверка: случай `low = 0 <
+        high` — тот самый, ради которого затевался плавающий знаменатель.
+        """
+        sizes = [(p, q) for p in range(4) for q in range(4) if p or q]
+        seen_zero = 0
+        for nbins in (1, 2):
+            for combo in itertools.product(sizes, repeat=nbins):
+                bins = [Bin(i * 60.0, p, q) for i, (p, q) in enumerate(combo)]
+                for horizon in (30.0, 60.0, 150.0):
+                    for window in (60.0, 120.0, 900.0):
+                        counts = count_bounds(bins, horizon=horizon,
+                                              window_end=window)
+                        if counts.low == 0.0:
+                            seen_zero += 1
+                            self.assertEqual(counts.high, 0.0, (combo, horizon, window))
+        self.assertGreater(seen_zero, 100, "случай N_min = 0 не встретился вовсе")
+
+    def test_the_ambiguous_status_is_unreachable_today(self):
+        """Растяжка: статус существует и обязан НЕ срабатывать. В тот день,
+        когда eligibility перестанет быть монотонной, этот тест упадёт —
+        что и требуется, потому что правила для латентного знаменателя нет.
+        """
+        rng = random.Random(4242)
+        for _ in range(4000):
+            bins = [Bin(i * 60.0, rng.randint(0, 3), rng.randint(0, 3))
+                    for i in range(rng.randint(1, 4))]
+            bins = [b for b in bins if b.size]
+            if not bins:
+                continue
+            counts = count_bounds(bins, horizon=rng.choice([30.0, 60.0, 120.0]),
+                                  window_end=rng.choice([60.0, 180.0, 600.0]))
+            self.assertIsNot(definedness(counts), Definedness.AMBIGUOUS, bins)
+
+
+class ArmRatioTests(unittest.TestCase):
+    """ΣB/ΣN по всей руке: Динкельбах этажом выше, а не сумма концов."""
+
+    def _periods(self, rng, count):
+        sizes = [(p, q) for p in range(3) for q in range(3) if p or q]
+        return [[Bin(i * DELTA, *rng.choice(sizes))
+                 for i in range(rng.randint(1, 2))] for _ in range(count)]
+
+    def _brute(self, periods, horizon, window):
+        rows = [oracle(b, horizon=horizon, window_end=window, time_layer=False)
+                for b in periods]
+        low = high = None
+        for combo in itertools.product(*rows):
+            total = sum(r[0] for r in combo)
+            if not total:
+                continue
+            lo = sum(r[1] for r in combo) / total
+            hi = sum(r[2] for r in combo) / total
+            low = lo if low is None else min(low, lo)
+            high = hi if high is None else max(high, hi)
+        return low, high
+
+    def test_it_agrees_with_full_enumeration_of_joint_orders(self):
+        """Оракул перебирает совместные порядки; DP не должен их угадывать."""
+        rng = random.Random(11)
+        horizon, window = 90.0, 600.0
+        checked = 0
+        for _ in range(60):
+            periods = self._periods(rng, rng.randint(2, 3))
+            low, high = self._brute(periods, horizon, window)
+            if low is None:
+                continue
+            checked += 1
+            got = arm_ratio_bounds(periods, horizon=horizon, window_end=window,
+                                   time_layer=False)
+            self.assertAlmostEqual(got.low, low, delta=RATIO_TOLERANCE_SECONDS)
+            self.assertAlmostEqual(got.high, high, delta=RATIO_TOLERANCE_SECONDS)
+        self.assertGreater(checked, 40)
+
+    def test_the_naive_sum_envelope_is_not_bounds(self):
+        """ΣB_lo/ΣN_hi .. ΣB_hi/ΣN_lo — ловушка B_min/N_max этажом выше.
+        Она не «иногда неточна»: на случайных руках врёт чаще, чем нет.
+        """
+        rng = random.Random(11)
+        horizon, window = 90.0, 600.0
+        wrong = total = 0
+        for _ in range(60):
+            periods = self._periods(rng, rng.randint(2, 3))
+            low, high = self._brute(periods, horizon, window)
+            if low is None:
+                continue
+            counts = [count_bounds(b, horizon=horizon, window_end=window)
+                      for b in periods]
+            burdens = [burden_bounds(b, horizon=horizon, window_end=window,
+                                     time_layer=False) for b in periods]
+            n_lo, n_hi = sum(c.low for c in counts), sum(c.high for c in counts)
+            b_lo, b_hi = sum(x.low for x in burdens), sum(x.high for x in burdens)
+            if not n_lo or not n_hi:
+                continue
+            total += 1
+            if abs(b_lo / n_hi - low) > 1e-6 or abs(b_hi / n_lo - high) > 1e-6:
+                wrong += 1
+        self.assertGreater(total, 30)
+        self.assertGreater(wrong, total // 3, "наивная оболочка подозрительно точна")
+
+    def test_an_arm_with_no_opportunity_anywhere_has_no_estimand(self):
+        bins = [[Bin(0.0, 0, 2)], [Bin(0.0, 0, 1)]]
+        self.assertIsNone(arm_ratio_bounds(bins, horizon=60.0, window_end=600.0))

@@ -427,3 +427,111 @@ def identified(interval: Interval | None, delta: float) -> Identified:
     if -delta <= interval.low and interval.high <= delta:
         return Identified.PRACTICALLY_NEGLIGIBLE
     return Identified.ORDER_AMBIGUOUS
+
+
+# ---------------------------------------------------------------------------
+# ОПРЕДЕЛЁННОСТЬ ЭСТИМАНДА. Найдено враждебным чтением prereg S5b.
+# ---------------------------------------------------------------------------
+
+class Definedness(Enum):
+    """Существует ли `R = B/N` на этой person-period — и при ВСЕХ ли историях.
+
+    ПОЧЕМУ ЭТО ОТДЕЛЬНАЯ ВЕЛИЧИНА, а не деталь реализации. `ratio_bounds`
+    возвращает `None` только когда `N = 0` при ЛЮБОМ допустимом порядке. Во
+    всех остальных случаях он зовёт `_optimise(require_any=True)`, то есть
+    оптимизирует по историям С ХОТЯ БЫ ОДНОЙ возможностью. Значит при
+
+        count_bounds = [0, 3]
+
+    возвращённый интервал — это интервал УСЛОВНО НА `N > 0`, а само событие
+    `N > 0` латентно: часть допустимых историй его не даёт.
+
+    Последствие тихое и дорогое. Если такие ячейки складывать в среднее по
+    руке, то множество слагаемых само зависит от ненаблюдаемой хронологии, и
+
+        [mean L_i, mean U_i]
+
+    перестаёт быть резкой границей среднего: она выведена для ФИКСИРОВАННОГО
+    знаменателя. Интервал, условный на событии, которое само неоднозначно,
+    складывать с безусловными нельзя.
+
+    Три случая, а не два — и третий не является неоднозначностью:
+    """
+
+    #: N > 0 при любом допустимом порядке. Слагаемое безусловное.
+    DEFINED = "defined"
+    #: N = 0 при любом допустимом порядке. Эстиманда нет НИ ПРИ КАКОЙ истории,
+    #: поэтому ячейка выбывает ДЕТЕРМИНИРОВАННО и знаменатель остаётся
+    #: фиксированным. Это не неоднозначность, а пустой период.
+    UNDEFINED_EVERYWHERE = "undefined_everywhere"
+    #: N = 0 при одних порядках и N > 0 при других. Вот это — неоднозначность
+    #: САМОЙ ОБЛАСТИ ОПРЕДЕЛЕНИЯ, и она не лечится ни числом диад, ни более
+    #: умным интервалом при фиксированном знаменателе.
+    AMBIGUOUS = "definedness_ambiguous"
+
+
+def definedness(counts: Interval) -> Definedness:
+    """`count_bounds` -> статус определённости. Чистая функция."""
+    if counts.high <= 0.0:
+        return Definedness.UNDEFINED_EVERYWHERE
+    if counts.low > 0.0:
+        return Definedness.DEFINED
+    return Definedness.AMBIGUOUS
+
+
+def arm_ratio_bounds(periods: list[list[Bin]], *, horizon: float,
+                     window_end: float, delta: float = OBSERVED_RESOLUTION_SECONDS,
+                     time_layer: bool = True) -> Interval | None:
+    """Границы для ΣB / ΣN по ВСЕЙ руке. Найдено враждебным чтением S5b.
+
+    ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ, если есть `ratio_bounds` на период. Потому что
+    для функционала «отношение сумм» поячеечные интервалы складывать НЕЛЬЗЯ:
+
+        [ Σ B_lo / Σ N_hi ,  Σ B_hi / Σ N_lo ]     НЕ границы
+
+    это ровно ловушка `B_min / N_max`, поднятая этажом выше: концы достигаются
+    на РАЗНЫХ допустимых порядках, и получившаяся оболочка не резкая. Среднее
+    поячеечных концов не годится тем более — оно вообще про другой функционал
+    (person-period-weighted), а не про этот.
+
+    ПРАВИЛЬНО — тот же Динкельбах, но по всей руке сразу: искать λ, при котором
+    экстремум `ΣB − λΣN` обращается в ноль. И здесь везение структурное:
+    периоды независимы, ограничений между ними нет, а целевая функция
+    аддитивна, поэтому
+
+        min по совместным порядкам Σ_i (B_i − λ N_i)  =  Σ_i min_i (B_i − λ N_i)
+
+    то есть совместная оптимизация РАСПАДАЕТСЯ на уже имеющийся поячеечный DP.
+    Стоимость линейна по числу периодов, а не экспоненциальна.
+
+    Почему этот функционал вообще стал первичным — см. prereg S5b §4:
+    person-period-weighted RMTR условен на `N > 0`, а это post-treatment
+    событие. Здесь пустые периоды вносят 0 и в числитель, и в знаменатель, и
+    никакого знаменателя на уровне периода просто нет.
+
+    По ПОРЯДКУ точно; по ВРЕМЕНИ — внешняя оболочка, как и у `ratio_bounds`.
+    """
+    if not periods:
+        return None
+    if sum(_count(bins, horizon, window_end, True) for bins in periods) == 0:
+        return None                      # эстиманда нет: ΣN = 0 при любом порядке
+
+    def total(lam: float, maximise: bool) -> float:
+        return sum(_optimise(bins, delta=delta, horizon=horizon,
+                             window_end=window_end, time_layer=time_layer,
+                             lam=lam, maximise=maximise, require_any=False) or 0.0
+                   for bins in periods)
+
+    def solve(maximise: bool) -> float:
+        lo, hi = 0.0, horizon + 1e-9
+        for _ in range(60):
+            mid = (lo + hi) / 2.0
+            if total(mid, maximise) > 0.0:
+                lo = mid
+            else:
+                hi = mid
+            if hi - lo < RATIO_TOLERANCE_SECONDS:
+                break
+        return (lo + hi) / 2.0
+
+    return Interval(solve(False), solve(True))
