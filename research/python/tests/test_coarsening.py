@@ -181,3 +181,78 @@ class PairedTests(unittest.TestCase):
         self.assertEqual(
             result.added_strict_loss,
             result.observed.strict_loss_share - result.reference.strict_loss_share)
+
+
+class MeasuredOperatorTests(unittest.TestCase):
+    """Измеренная передаточная функция — данные, и они обязаны сходиться."""
+
+    def test_the_counts_reconcile_with_the_pooled_total(self):
+        from coarsening import measured
+        total = sum(n for _, n in measured.TRANSFER.values())
+        self.assertEqual(total + measured.TRANSFER_TAIL[1],
+                         measured.POOLED_OPPORTUNITIES)
+
+    def test_the_discard_split_reconciles_to_one_per_dyad(self):
+        """Разница между пулом и «с возвратом» — ровно по одной на диаду.
+
+        Последняя возможность чата возврата не дождалась. Сходимость до
+        единицы и есть проверка того, что две пробы считали одно и то же.
+        """
+        from coarsening import measured
+        replied = measured.DISCARDED_REPLIES + measured.KEPT_REPLIES
+        self.assertEqual(measured.POOLED_OPPORTUNITIES - replied,
+                         measured.DYADS_ANALYSED)
+
+    def test_the_function_rises_with_occupancy_and_never_falls(self):
+        from coarsening import measured
+        values = [measured.TRANSFER[k][0] for k in sorted(measured.TRANSFER)]
+        self.assertEqual(values, sorted(values))
+
+    def test_the_floor_is_not_zero_at_a_single_message_bin(self):
+        """Возможность касается ещё конца серии и ответа — потому и не ноль."""
+        from coarsening import measured
+        self.assertEqual(measured.probability(1),
+                         measured.FLOOR_AT_SINGLE_OCCUPANCY)
+        self.assertGreater(measured.FLOOR_AT_SINGLE_OCCUPANCY, 0.2)
+
+    def test_destruction_bounds_bracket_the_measured_curve(self):
+        from coarsening import measured
+        self.assertLess(measured.probability(measured.DESTRUCTION_BEGINS_AT - 1),
+                        0.5)
+        self.assertGreater(measured.probability(measured.DESTRUCTION_COMPLETE_AT),
+                           0.95)
+
+    def test_the_scope_is_carried_with_the_numbers(self):
+        """Переносимость оговаривается рядом с данными, а не в чьей-то памяти."""
+        from coarsening import measured
+        self.assertTrue(measured.SUBPOPULATION_DIFFERS)
+        self.assertIn("seconds-resolution subpopulation", measured.SCOPE)
+
+    def test_strict_discards_the_fast_returns(self):
+        """Смещение, а не потеря мощности: увеличением N не лечится."""
+        from coarsening import measured
+        self.assertGreater(measured.KEPT_MEDIAN_MINUTES,
+                           measured.DISCARDED_MEDIAN_MINUTES * 5)
+
+
+class StageTwoTests(unittest.TestCase):
+
+    def test_the_fired_triggers_actually_exceed_their_declared_thresholds(self):
+        """Порог объявлен в prereg, значение измерено — сверяется, не верится."""
+        from coarsening import measured
+        self.assertGreater(measured.MEDIAN_ADDED_STRICT_LOSS_PP,
+                           prereg.STAGE_TWO_TRIGGERS["median_added_strict_loss_pp"])
+        self.assertGreater(measured.DENSITY_QUARTILE_GAP_PP,
+                           prereg.STAGE_TWO_TRIGGERS["density_quartile_gap_pp"])
+        self.assertLess(measured.TIE_BREAK_SPREAD_PP,
+                        prereg.STAGE_TWO_TRIGGERS["tie_break_spread_pp"])
+        self.assertTrue(measured.STAGE_TWO_REQUIRED)
+
+    def test_a_quiet_tie_break_is_not_read_as_identification(self):
+        """Устойчив агрегат, а не судьба конкретной возможности."""
+        from coarsening import measured
+        self.assertTrue(measured.TIE_BREAK_QUIET_DOES_NOT_MEAN_IDENTIFIED)
+
+    def test_the_phase_check_passed_and_is_recorded(self):
+        from coarsening import measured
+        self.assertLess(measured.PHASE_SPREAD_PP, 5.0)
