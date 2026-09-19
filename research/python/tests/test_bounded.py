@@ -899,3 +899,36 @@ class NumericalConservativenessTests(unittest.TestCase):
         periods = [[Bin(0.0, 0, 2)], [Bin(0.0, 0, 1)]]
         self.assertIsNone(arm_ratio_bounds(periods, horizon=300.0,
                                            window_end=600.0))
+
+
+class DomainInvariantTests(unittest.TestCase):
+    """[0, H] — граница задачи, а не потолок поиска. Иначе компоненту
+    доверительного множества, упирающуюся в H, нельзя читать как конечную."""
+
+    def test_burden_never_exceeds_horizon_times_count(self):
+        rng = random.Random(21)
+        worst = 0.0
+        for _ in range(600):
+            bins = random_bins(rng, rng.randint(1, 4))
+            for horizon in (60.0, 300.0, 3600.0):
+                window = 10 * DELTA
+                for layer in (False, True):
+                    n = count_bounds(bins, horizon=horizon, window_end=window).high
+                    b = burden_bounds(bins, horizon=horizon, window_end=window,
+                                      time_layer=layer).high
+                    if n:
+                        worst = max(worst, b / (horizon * n))
+                        self.assertLessEqual(b, horizon * n + 1e-9, (bins, horizon))
+        self.assertGreater(worst, 0.99, "граница обязана быть ДОСТИЖИМОЙ, иначе "
+                                        "инвариант проверяет не то")
+
+    def test_every_ratio_bound_lies_in_the_domain(self):
+        rng = random.Random(22)
+        for _ in range(400):
+            bins = random_bins(rng, rng.randint(1, 3))
+            horizon, window = 300.0, 10 * DELTA
+            got = ratio_bounds(bins, horizon=horizon, window_end=window)
+            if got is None:
+                continue
+            self.assertGreaterEqual(got.low, -1e-9, bins)
+            self.assertLessEqual(got.high, horizon + 1e-6, bins)

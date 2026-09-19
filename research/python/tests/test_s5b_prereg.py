@@ -1155,10 +1155,21 @@ class AcceptanceSetGeometryTests(unittest.TestCase):
         self.assertIn("quadratic", prereg.ACCEPTANCE_SET_IS_COMPUTED_EXACTLY)
 
     def test_zero_variance_has_a_declared_semantics(self):
+        """И обоснование правильное: это соглашение теста, а не вывод о
+        покрытии. Из E[ψ(λ0)] = 0 не следует нулевое ВЫБОРОЧНОЕ среднее."""
         from coarsening import inversion
-        self.assertIn("accept", prereg.ZERO_VARIANCE_RULE)
+        self.assertIn("do not reject", prereg.ZERO_VARIANCE_RULE)
+        self.assertIn("costs power, not coverage", prereg.ZERO_VARIANCE_RULE)
+        self.assertTrue(prereg.ZERO_VARIANCE_COSTS_POWER_NOT_COVERAGE)
         self.assertTrue(prereg.ZERO_VARIANCE_FREQUENCY_IS_REPORTED)
         self.assertTrue(inversion.ZERO_VARIANCE_IS_ACCEPTED)
+        self.assertTrue(inversion.ZERO_VARIANCE_COSTS_POWER_NOT_COVERAGE)
+
+    def test_the_domain_is_structural_not_a_search_cap(self):
+        """Иначе компоненту, упирающуюся в H, нельзя читать как конечную."""
+        self.assertIn("B <= H·N", prereg.DOMAIN_IS_STRUCTURAL)
+        self.assertTrue(prereg.DOMAIN_UPPER_END_IS_NOT_A_SEARCH_CAP)
+        self.assertTrue(prereg.DOMAIN_INVARIANT_IS_TESTED)
 
     def test_no_multiplicity_correction_over_lambda(self):
         """Покрытие определяется поведением теста в истинном λ0."""

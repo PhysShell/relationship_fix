@@ -42,10 +42,22 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-#: Вырожденная дисперсия: ПРИНИМАЕМ. В истинном λ0 среднее равно нулю, и
-#: отвергнуть там из-за нулевого разброса значило бы терять покрытие. Выбор
-#: в ту же сторону, что и округление скобок наружу.
+#: Вырожденная дисперсия: ПРИНИМАЕМ. Обоснование уточнено девятым чтением,
+#: прежнее было неверным. Писалось: «в истинном λ0 среднее равно нулю, значит
+#: отвергнуть там — потерять покрытие». Не следует: из E[ψ(λ0)] = 0 НЕ
+#: вытекает, что выборочное среднее равно нулю. Дискретный DGP вполне может
+#: выдать 25 одинаковых НЕнулевых значений — тогда s = 0 при популяционном
+#: нуле.
+#:
+#: Правильная формулировка — соглашение теста, а не вывод о покрытии:
+#:
+#:     s² = 0  ->  стьюдентизованная статистика не определена
+#:             ->  соглашение: НЕ ОТВЕРГАТЬ
+#:
+#: Оно жертвует МОЩНОСТЬЮ, а не покрытием: принять лишнее λ значит расширить
+#: множество, а расширение покрытие не роняет. Частота таких λ отчётна.
 ZERO_VARIANCE_IS_ACCEPTED = True
+ZERO_VARIANCE_COSTS_POWER_NOT_COVERAGE = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,31 +84,74 @@ def _breakpoints(periods, lo: float, hi: float) -> list[float]:
     return sorted(out)
 
 
+#: Наружное расширение корней. Как и у скобок `generalized_inverse`, численная
+#: ошибка обязана РАСШИРЯТЬ множество принятия, а не сужать: сузить значит
+#: выбросить λ, которое данные не исключают.
+OUTWARD_EPS = 1e-9
+
+#: Допуск на дискриминант. Двойной корень — самый мерзкий случай: ошибка на
+#: пару ulp превращает крошечную принимаемую область в «корней нет». Проиграть
+#: покрытие функции sqrt() после всего остального было бы издевательством.
+DISCRIMINANT_TOLERANCE = 1e-12
+
+
+def _widen(lo: float, hi: float, span: float) -> tuple[float, float]:
+    eps = OUTWARD_EPS * max(1.0, abs(lo), abs(hi), span)
+    return lo - eps, hi + eps
+
+
+def _roots(a: float, b: float, c: float) -> tuple[float, float] | None:
+    """Корни, устойчивой формулой. None — если их нет ЗАВЕДОМО.
+
+    Прямая формула (−b ± sqrt(D))/(2a) теряет значащие цифры, когда b² >> 4ac:
+    один из корней считается вычитанием близких чисел. Классический приём
+    q = −(b + sign(b)·sqrt(D))/2 от этого избавляет.
+    """
+    disc = b * b - 4.0 * a * c
+    scale = max(abs(b * b), abs(4.0 * a * c), 1.0)
+    if disc < -DISCRIMINANT_TOLERANCE * scale:
+        return None
+    root = math.sqrt(max(0.0, disc))          # |disc| в допуске -> двойной корень
+    if b == 0.0:
+        first = root / (2.0 * a)
+        return (-abs(first), abs(first)) if a > 0 else (abs(first), -abs(first))
+    q = -0.5 * (b + math.copysign(root, b))
+    first, second = q / a, (c / q if q != 0.0 else q / a)
+    return (min(first, second), max(first, second))
+
+
 def _solve(coefficients: tuple[float, float, float], lo: float, hi: float):
-    """{λ ∈ [lo, hi] : Aλ² + Bλ + C <= 0}, точно."""
+    """{λ ∈ [lo, hi] : Aλ² + Bλ + C <= 0}, с округлением НАРУЖУ."""
     a, b, c = coefficients
+    span = hi - lo
     if abs(a) < 1e-12:
         if abs(b) < 1e-12:
             return [(lo, hi)] if c <= 0.0 else []
         edge = -c / b
-        return ([(lo, min(hi, edge))] if b > 0 else [(max(lo, edge), hi)])
-    disc = b * b - 4 * a * c
-    if a > 0:
-        if disc <= 0.0:
-            return []
-        root = math.sqrt(disc)
-        left, right = (-b - root) / (2 * a), (-b + root) / (2 * a)
+        left, right = (lo, min(hi, edge)) if b > 0 else (max(lo, edge), hi)
+        left, right = _widen(left, right, span)
         left, right = max(lo, left), min(hi, right)
         return [(left, right)] if left <= right else []
-    if disc <= 0.0:
+
+    found = _roots(a, b, c)
+    if a > 0:
+        if found is None:
+            return []
+        left, right = _widen(*found, span)
+        left, right = max(lo, left), min(hi, right)
+        return [(left, right)] if left <= right else []
+
+    if found is None:
         return [(lo, hi)]
-    root = math.sqrt(disc)
-    left, right = (-b + root) / (2 * a), (-b - root) / (2 * a)   # a < 0
+    # a < 0: принимается ВНЕ корней, поэтому наружу = границы сдвигаются внутрь
+    low, high = found
+    eps = OUTWARD_EPS * max(1.0, abs(low), abs(high), span)
+    low, high = low + eps, high - eps
     out = []
-    if lo < left:
-        out.append((lo, min(hi, left)))
-    if right < hi:
-        out.append((max(lo, right), hi))
+    if lo < low:
+        out.append((lo, min(hi, low)))
+    if high < hi:
+        out.append((max(lo, high), hi))
     return out
 
 

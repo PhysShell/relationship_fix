@@ -197,6 +197,21 @@ DIVERSIONS = (
      "    return components[0][0], components[-1][1]",
      "    return components[0][0], components[0][1]",
      ["tests.test_inversion"]),
+    ("корни округляются ВНУТРЬ", "coarsening/inversion.py",
+     "    eps = OUTWARD_EPS * max(1.0, abs(lo), abs(hi), span)\n"
+     "    return lo - eps, hi + eps",
+     "    eps = OUTWARD_EPS * max(1.0, abs(lo), abs(hi), span)\n"
+     "    return lo + eps, hi - eps",
+     ["tests.test_inversion"]),
+    ("двойной корень теряется", "coarsening/inversion.py",
+     "    if disc < -DISCRIMINANT_TOLERANCE * scale:\n        return None",
+     "    if disc < 0.0:\n        return None",
+     ["tests.test_inversion"]),
+    ("неустойчивая формула корней", "coarsening/inversion.py",
+     "    q = -0.5 * (b + math.copysign(root, b))\n"
+     "    first, second = q / a, (c / q if q != 0.0 else q / a)",
+     "    first, second = (-b - root) / (2.0 * a), (-b + root) / (2.0 * a)",
+     ["tests.test_inversion"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
