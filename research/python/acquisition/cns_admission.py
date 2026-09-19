@@ -24,6 +24,11 @@ FINDINGS: tuple[tuple[str, CheckVerdict, str], ...] = (
      f"Figshare API запись 7267433: license.name=MIT, "
      f"url=opensource.org/licenses/MIT; DOI {FIGSHARE_DOI}. Статья — CC BY 4.0. "
      f"Использование разрешено."),
+    ("licence.derivative_reach", CheckVerdict.PASSED,
+     "MIT производное не ограничивает: генератор, откалиброванный на CNS, не "
+     "утаскивается ни в non-commercial, ни в share-alike. Это, как выяснилось "
+     "при осмотре ландшафта, редкость — и главное преимущество CNS перед более "
+     "богатыми кандидатами."),
     ("licence.redistribution", CheckVerdict.PASSED,
      "MIT допускает распространение, но соглашение проекта не меняется: корпус "
      "остаётся вне репозитория, гарнесс принимает путь."),

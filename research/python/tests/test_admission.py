@@ -9,7 +9,7 @@ import unittest
 
 from acquisition.admission import (
     CORPORA, MESSAGING_MATTERS, Access, Admission, AdmissionCheck, AdmissionError,
-    CheckVerdict, corpus_admission, require_admission,
+    CheckVerdict, LicenceTerms, Permission, corpus_admission, require_admission,
 )
 
 
@@ -115,19 +115,38 @@ class CorpusAdmissionTests(unittest.TestCase):
                 self.assertIs(entry.verdict, CheckVerdict.UNKNOWN, f"{name}.{entry.key}")
 
     def test_access_and_licence_are_separate_fields(self):
-        """«Скачивается» не значит «разрешено» — самая дорогая из наших привычных
-        ошибок. CollegeMsg публичен и лицензии не имеет вовсе."""
-        access, licence, _ = CORPORA["CollegeMsg"]
-        self.assertIs(access, Access.PUBLIC)
-        self.assertIn("NEEDS_VERIFICATION", licence)
-        access, licence, _ = CORPORA["SMS-A"]
-        self.assertIs(access, Access.PUBLIC)
-        self.assertIn("NEEDS_VERIFICATION", licence)
+        """«Скачивается» не значит «разрешено» — самая дорогая из привычных
+        ошибок. Четыре корпуса публичны и лицензии не имеют вовсе."""
+        for name in ("CollegeMsg", "SMS-A", "NetHealth", "StudentLife"):
+            access, licence, _ = CORPORA[name]
+            self.assertIs(access, Access.PUBLIC, name)
+            self.assertIs(licence.research_use, Permission.UNKNOWN, name)
+            self.assertFalse(licence.known, name)
+
+    def test_a_licence_is_several_answers_and_not_one_word(self):
+        """CC BY-NC-SA даёт research YES и commercial NO ОДНОВРЕМЕННО. Плоское
+        «PERMISSIVE» этого сказать не умеет."""
+        _, licence, _ = CORPORA["CES"]
+        self.assertIs(licence.research_use, Permission.YES)
+        self.assertIs(licence.commercial_reuse, Permission.NO)
+        self.assertTrue(licence.share_alike)
+        self.assertIn("SOLELY for academic", licence.extra_terms)
 
     def test_only_the_verified_licence_is_stated_as_known(self):
         _, licence, _ = CORPORA["CNS"]
-        self.assertIn("MIT", licence)
-        self.assertNotIn("NEEDS_VERIFICATION", licence)
+        self.assertEqual(licence.name, "MIT")
+        self.assertIs(licence.research_use, Permission.YES)
+        self.assertIs(licence.commercial_reuse, Permission.YES)
+        self.assertIn("7267433", licence.evidence)
+
+    def test_unknown_licence_is_not_read_as_permission(self):
+        for name, (_, licence, _) in CORPORA.items():
+            if licence.name == "UNKNOWN":
+                self.assertIsNot(licence.commercial_reuse, Permission.YES, name)
+
+    def test_derivative_reach_is_a_blocking_check(self):
+        """Калибровка на NC/SA-данных может утащить сам генератор."""
+        self.assertTrue(corpus_admission("x").check("licence.derivative_reach").blocking)
 
     def test_the_deferred_corpus_is_kept_rather_than_deleted(self):
         access, _, admission = CORPORA["MessagingMatters"]

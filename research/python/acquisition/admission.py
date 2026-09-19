@@ -134,6 +134,48 @@ class Access(Enum):
     RESTRICTED = "RESTRICTED"
 
 
+class Permission(Enum):
+    YES = "YES"
+    NO = "NO"
+    #: условия есть, но ответ на этот вопрос из них не следует однозначно
+    UNSETTLED = "UNSETTLED"
+    #: условий найти не удалось. НЕ «значит можно»
+    UNKNOWN = "UNKNOWN"
+
+
+@dataclass(frozen=True, slots=True)
+class LicenceTerms:
+    """Право — это не одна строка «PERMISSIVE», а несколько разных ответов.
+
+    Плоская строка уже подводила: «скачивается» принимали за «разрешено». Но и
+    «есть лицензия» недостаточно — CC BY-NC-SA даёт research YES и commercial
+    NO одновременно, и для проекта с продуктом это две разные судьбы.
+    """
+
+    name: str
+    research_use: Permission
+    commercial_reuse: Permission
+    share_alike: bool
+    attribution_required: bool
+    evidence: str
+    #: дополнительные условия сверх самой лицензии (DUA, terms of use)
+    extra_terms: str = ""
+
+    @property
+    def known(self) -> bool:
+        return self.research_use is not Permission.UNKNOWN
+
+    def render(self) -> str:
+        return (f"{self.name} · research={self.research_use.value} · "
+                f"commercial={self.commercial_reuse.value} · "
+                f"share-alike={'yes' if self.share_alike else 'no'}")
+
+
+UNKNOWN_LICENCE = LicenceTerms(
+    "UNKNOWN", Permission.UNKNOWN, Permission.UNKNOWN, False, False,
+    "лицензия не найдена ни в записи, ни на странице проекта")
+
+
 def corpus_admission(corpus: str, *, extra: tuple[AdmissionCheck, ...] = ()) -> Admission:
     """Стандартный набор вопросов к любому внешнему корпусу.
 
@@ -146,6 +188,16 @@ def corpus_admission(corpus: str, *, extra: tuple[AdmissionCheck, ...] = ()) -> 
             "Какая лицензия/DUA у файлов и разрешает ли она это использование?",
             "«Скачивается» не значит «разрешено». CollegeMsg скачивается и "
             "лицензии не имеет вовсе.",
+            blocking=True),
+        AdmissionCheck(
+            "licence.derivative_reach",
+            "Ограничивает ли эта лицензия ПРОИЗВОДНОЕ от корпуса — то есть "
+            "откалиброванный на нём генератор и всё, что из него следует?",
+            "Самая дорогая из возможных ошибок здесь. Калибровка на NC/SA-данных "
+            "может утащить сам генератор в non-commercial, а генератор — не "
+            "промежуточный файл, а несущий исследовательский актив проекта, у "
+            "которого есть продуктовая ветка. Узнать это после калибровки — "
+            "значит узнать поздно.",
             blocking=True),
         AdmissionCheck(
             "licence.redistribution",
@@ -231,18 +283,48 @@ def corpus_admission(corpus: str, *, extra: tuple[AdmissionCheck, ...] = ()) -> 
 #: Все проверки начинаются с UNKNOWN. Ни одна не «проходит по умолчанию»
 #: потому, что файл наконец приехал и его хочется посмотреть.
 #:
-#: `access` и `data_license` — РАЗНЫЕ поля, и это не педантизм: CollegeMsg
-#: публичен и лицензии не имеет, SMS-A лежит в supplementary и лицензии тоже
-#: пока не имеет.
-CORPORA: dict[str, tuple[Access, str, Admission]] = {
-    "CNS": (Access.PUBLIC, "MIT (проверено через Figshare API, запись 7267433)",
-            corpus_admission("Copenhagen Networks Study — sms.csv (S4-primary)")),
-    "SMS-A": (Access.PUBLIC, "NEEDS_VERIFICATION",
-              corpus_admission("SMS-A, Wu et al. supplementary (S4-secondary)")),
-    "CollegeMsg": (Access.PUBLIC, "NEEDS_VERIFICATION (SNAP лицензии не указывает)",
-                   corpus_admission("CollegeMsg, SNAP (S4-sensitivity)")),
-    "MessagingMatters": (Access.RESTRICTED, "Apache-2.0 у supplement, файлы restricted",
-                         corpus_admission("Messaging Matters (DEFERRED)")),
+#: `access` и `licence` — РАЗНЫЕ поля, и это не педантизм. Ландшафт кандидатов
+#: устроен так, что чистая лицензия и богатые данные пока не встретились в
+#: одном корпусе ни разу.
+CORPORA: dict[str, tuple[Access, LicenceTerms, Admission]] = {
+    "CNS": (
+        Access.PUBLIC,
+        LicenceTerms(
+            "MIT", Permission.YES, Permission.YES, False, True,
+            "Figshare API, запись 7267433: license.name=MIT; статья CC BY 4.0"),
+        corpus_admission("Copenhagen Networks Study — sms.csv (S4-primary)")),
+    "CES": (
+        Access.PUBLIC,
+        LicenceTerms(
+            "CC BY-NC-SA 4.0", Permission.YES, Permission.NO, True, True,
+            "Kaggle API: licenseNameNullable='CC BY-NC-SA 4.0'; 2 759 192 661 байт",
+            extra_terms="Terms of Use датасета: «Users shall utilize the dataset "
+                        "SOLELY for academic, research, or educational purposes»; "
+                        "запрет реидентификации; условия распространяются на "
+                        "«any team members, including agents»"),
+        corpus_admission("College Experience Study (S4-candidate-2)")),
+    "NetHealth": (
+        Access.PUBLIC, UNKNOWN_LICENCE,
+        corpus_admission("NetHealth CommEvents (S4-candidate-3)")),
+    "SMS-A": (
+        Access.PUBLIC, UNKNOWN_LICENCE,
+        corpus_admission("SMS-A, Wu et al. supplementary")),
+    "CollegeMsg": (
+        Access.PUBLIC, UNKNOWN_LICENCE,
+        corpus_admission("CollegeMsg, SNAP")),
+    "StudentLife": (
+        Access.PUBLIC, UNKNOWN_LICENCE,
+        corpus_admission("StudentLife, Dartmouth")),
+    "MessagingMatters": (
+        Access.RESTRICTED,
+        LicenceTerms(
+            "Apache-2.0 (supplement)", Permission.UNSETTLED, Permission.UNSETTLED,
+            False, True,
+            "Zenodo 19428331: Apache-2.0 у supplement, САМИ ФАЙЛЫ restricted"),
+        corpus_admission("Messaging Matters (DEFERRED)")),
+    "FriendsFamily": (
+        Access.ON_REQUEST, UNKNOWN_LICENCE,
+        corpus_admission("Friends & Family (DEFERRED)")),
 }
 
 #: Оставлено ради существующих ссылок; корпус отложен, не удалён.
