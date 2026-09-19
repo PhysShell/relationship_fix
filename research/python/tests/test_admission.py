@@ -285,3 +285,61 @@ class CopenhagenAdmissionTests(unittest.TestCase):
     def test_reading_the_corpus_is_refused_today(self):
         with self.assertRaises(AdmissionError):
             require_admission(self.admission)
+
+
+class NetHealthAdmissionTests(unittest.TestCase):
+    """Осмотр NetHealth: лицензия чистая, но мины на месте."""
+
+    @classmethod
+    def setUpClass(cls):
+        from acquisition import nethealth_admission
+        cls.module = nethealth_admission
+        cls.admission = nethealth_admission.admission()
+
+    def test_the_corpus_is_not_admitted(self):
+        self.assertFalse(self.admission.admitted)
+
+    def test_the_licence_permits_commercial_reuse_unlike_ces(self):
+        _, licence, _ = CORPORA["NetHealth"]
+        self.assertIs(licence.commercial_reuse, Permission.YES)
+        self.assertFalse(licence.share_alike)
+
+    def test_the_timestamp_unit_was_derived_not_guessed(self):
+        """Две колонки сведены друг с другом. Угадывать «ms по величине» —
+        ровно то, чего делать было нельзя."""
+        finding = self.admission.check("time.semantics").finding
+        self.assertIn("-5.00", finding)
+        self.assertIn("UTC", finding)
+
+    def test_the_resolution_check_failed_because_it_is_mixed(self):
+        """94.3% записей округлены до секунды. Смешанное разрешение решает Q3."""
+        entry = self.admission.check("time.resolution")
+        self.assertIs(entry.verdict, CheckVerdict.FAILED)
+        self.assertIn("94.3", entry.finding)
+
+    def test_direction_comes_from_outgoing_and_not_from_egoid(self):
+        """egoid — владелец устройства, а не отправитель. Спутать значит
+        развернуть половину возможностей задом наперёд, ничего не уронив."""
+        finding = self.admission.check("direction.sender_receiver").finding
+        self.assertIn("outgoing", finding)
+        self.assertIn("владелец устройства", finding)
+
+    def test_the_dangerous_checks_are_documented_as_pending(self):
+        for key in ("events.duplicate_semantics", "coverage.capture_window",
+                    "identity.resolution_quality", "channel.mixing"):
+            self.assertIn(key, self.module.PENDING)
+            self.assertTrue(self.module.PENDING[key])
+            self.assertIs(self.admission.check(key).verdict, CheckVerdict.UNKNOWN)
+
+    def test_the_dedup_signature_is_stated_before_it_is_looked_for(self):
+        """Иначе после просмотра легко «увидеть» ту сигнатуру, которая удобна."""
+        note = self.module.PENDING["events.duplicate_semantics"]
+        self.assertIn("epochtime", note)
+        self.assertIn("outgoing", note)
+
+    def test_channel_mixing_is_inside_the_type_not_only_between_types(self):
+        """eventtype='SMS' мешает iMessage и SMS, а iMessage есть только на
+        iPhone — platform confounding внутри «чистого» канала."""
+        note = self.module.PENDING["channel.mixing"]
+        self.assertIn("iM", note)
+        self.assertIn("iPhone", note)
