@@ -1344,3 +1344,40 @@ class PrecisionRadiusTests(unittest.TestCase):
             self.assertIn(claim, flat, claim)
             paragraph = next(part for part in raw.split("\n\n") if claim in part)
             self.assertIn(marker, paragraph, (claim, marker))
+
+
+class PrecisionQualificationTests(unittest.TestCase):
+    """Амендмент вступает в силу только после квалификации (B-7)."""
+
+    def _note(self):
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return (root / "docs/research/s5b-mcse-specification-gap.md").read_text()
+
+    def test_the_qualification_is_recorded_with_its_negative_controls(self):
+        note = self._note()
+        self.assertIn("Квалификация процедуры — выполнена", note)
+        self.assertIn("0.9363", note)          # худший сценарий
+        self.assertIn("0.0550", note)          # отрицательный контроль
+        self.assertIn("БЕЗ поправки", note)
+
+    def test_the_bonferroni_correction_is_shown_to_be_necessary(self):
+        """Без неё покрытие падает на 8-10 пунктов во всех сценариях."""
+        note = self._note()
+        for without in ("0.8675", "0.8800", "0.8550"):
+            self.assertIn(without, note, without)
+
+    def test_the_acceptance_rule_was_not_tuned_after_seeing_numbers(self):
+        note = self._note()
+        self.assertIn("уже существующему", note)
+        self.assertIn("не тронутому после того, как", note)
+        self.assertEqual(prereg.COVERAGE_ACCEPTANCE_FLOOR, 0.93)
+
+    def test_what_is_not_established_is_stated(self):
+        """Номинал 0.95 доказан только в одном сценарии из трёх."""
+        note = self._note()
+        self.assertIn("Чего НЕ установлено", note)
+        self.assertIn("`≥ 0.93`, и не больше", note)
+
+    def test_both_branches_of_the_ladder_were_exercised(self):
+        note = self._note()
+        self.assertIn("Обе ветви исполнены", note)
