@@ -398,6 +398,58 @@ CORPORA: dict[str, tuple[Access, LicenceTerms, Admission]] = {
                         "упоминается форма-уведомление о скачивании — вежливость, "
                         "а не условие, но заполнить её стоит"),
         corpus_admission("NetHealth CommEvents (S4-primary-candidate)")),
+    "ShareAndMultiply": (
+        Access.PUBLIC,
+        LicenceTerms(
+            "CC BY 4.0", Permission.YES, Permission.YES, False, True,
+            "Figshare API, запись 19785193 v1: license={'value': 1, 'name': "
+            "'CC BY 4.0'}. Лицензия стоит НА ЧИТАЕМОМ АРТЕФАКТЕ: файлы той же "
+            "записи, md5 архива сверен после скачивания",
+            extra_terms="Отдельного DUA нет. Ограничений по цели в записи нет. "
+                        "Атрибуция обязательна"),
+        corpus_admission(
+            "Share and Multiply / WhatsApp Data Set (S4-Q1c-only)",
+            extra=(
+                AdmissionCheck(
+                    "format.deserialisation_safety",
+                    "Читаем ли мы формат, который нельзя выполнить — или тот, "
+                    "который выполняется при чтении?",
+                    "В записи лежит `data.pkl` на 3.7 ГБ, и README прямо "
+                    "предлагает `pandas.read_pickle`. Unpickling ИСПОЛНЯЕТ "
+                    "произвольный код из файла, скачанного по сети. Разница "
+                    "между «прочитать данные» и «запустить чужую программу с "
+                    "правами своего процесса» — не стилистическая.",
+                    blocking=True),
+                AdmissionCheck(
+                    "selection.donation_mechanism",
+                    "Как чат попал в корпус, и кто решал, попадёт ли он?",
+                    "Донация пользовательского экспорта — это выборка, "
+                    "собранная добровольцами о себе. Абсолютную величину "
+                    "incidence по такой выборке заявлять нельзя. Проверка "
+                    "существует затем, чтобы Q1a отказывался ВЫВОДИМО, а не по "
+                    "памяти о том, что мы так решили.",
+                    blocking=True),
+                AdmissionCheck(
+                    "time.absolute_offset",
+                    "Известен ли АБСОЛЮТНЫЙ момент события — или только его "
+                    "положение относительно других событий того же чата?",
+                    "Отдельно от `time.semantics` НАМЕРЕННО, по тому же "
+                    "уроку, что развёл `coverage.target_dyad_filtering` и "
+                    "`coverage.capture_window`: одна проверка не может быть "
+                    "пройденной для интервалов и проваленной для времени "
+                    "суток. Интервалы сдвиг не чувствуют, night-suppression и "
+                    "суточные профили — чувствуют целиком.",
+                    blocking=True),
+                AdmissionCheck(
+                    "subset.q1c_dyadic_seconds",
+                    "Существует ли пересечение «ровно два актёра» И "
+                    "«разрешение не грубее секунды», и хватает ли его?",
+                    "Весь смысл этого корпуса под Q1c держится на этом "
+                    "пересечении: на минутной шкале слияние серий уже "
+                    "произошло, и измерять его нечем. Пустое пересечение — "
+                    "это ОТВЕТ, а не повод смягчить определение «секундного».",
+                    blocking=True),
+            ))),
     "SMS-A": (
         Access.PUBLIC, UNKNOWN_LICENCE,
         corpus_admission("SMS-A, Wu et al. supplementary")),

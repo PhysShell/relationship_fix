@@ -143,7 +143,7 @@ class CorpusAdmissionTests(unittest.TestCase):
         некоммерческую родословную генератора ненужной."""
         clean = {n for n, (_, l, _) in CORPORA.items()
                  if l.commercial_reuse is Permission.YES}
-        self.assertEqual(clean, {"CNS", "NetHealth"})
+        self.assertEqual(clean, {"CNS", "NetHealth", "ShareAndMultiply"})
 
     def test_a_licence_is_several_answers_and_not_one_word(self):
         """CC BY-NC-SA даёт research YES и commercial NO ОДНОВРЕМЕННО. Плоское
@@ -175,12 +175,22 @@ class CorpusAdmissionTests(unittest.TestCase):
         self.assertIs(access, Access.RESTRICTED)
         self.assertIs(admission, MESSAGING_MATTERS)
 
-    def test_every_corpus_gets_the_same_questions(self):
+    def test_every_corpus_gets_at_least_the_same_questions(self):
         """Вопрос «что на самом деле в файле» не зависит от того, насколько
-        симпатична аннотация."""
-        key_sets = {name: tuple(c.key for c in admission.checks)
-                    for name, (_, _, admission) in CORPORA.items()}
-        self.assertEqual(len(set(key_sets.values())), 1, key_sets)
+        симпатична аннотация.
+
+        Общая часть обязана быть У ВСЕХ и в одном порядке: короче базового
+        набора не бывает ни у кого, и «этому корпусу столько вопросов не
+        нужно» не является аргументом. Сверх базы корпус может получить СВОИ
+        проверки — ради этого `extra` и существует: у Share and Multiply, к
+        примеру, добавлен вопрос о том, читаем ли мы формат, который
+        исполняется при чтении, а у CNS такого файла просто нет.
+        """
+        baseline = tuple(c.key for c in corpus_admission("baseline").checks)
+        for name, (_, _, admission) in CORPORA.items():
+            keys = tuple(c.key for c in admission.checks)
+            self.assertEqual(keys[:len(baseline)], baseline, name)
+            self.assertGreaterEqual(len(keys), len(baseline), name)
 
     def test_direction_is_a_blocking_check(self):
         """Перепутанные sender/receiver не роняют ничего — они молча меняют
