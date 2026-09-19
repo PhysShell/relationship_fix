@@ -170,6 +170,8 @@ REFINEMENT_REFERENCE = "identified region at 1 s, not a single 1 s truth"
 #:   остаётся допустимой при 60 с. Значит вложение обязано выполняться —
 #:   это теорема, и её нарушение есть БАГ в огрублении, сборке корзин,
 #:   состоянии возможности или самом DP. Секунды тут ни при чём.
+#:   ОГОВОРКА, см. `N_REFINEMENT_SCOPE`: безусловно это верно для
+#:   `NTopological`; production `N_eligible` требует устойчивой eligibility.
 #:
 #:   То же для чистого слоя порядка у RMTR: множество резкое, вложение
 #:   обязательно.
@@ -179,6 +181,38 @@ REFINEMENT_REFERENCE = "identified region at 1 s, not a single 1 s truth"
 #:   содержать РЕЗКОЕ множество при 60 с, а не все ложноположительные точки
 #:   мелкой аппроксимации. Поэтому её вложение — диагностика, а не инвариант,
 #:   и его нарушение багом само по себе не является.
+#: ОБЛАСТЬ ДЕЙСТВИЯ ТЕОРЕМЫ ПРО N — уточнена, и уточнение неприятное.
+#:
+#: Доказанная в Lean монотонность относится к `NTopological`: числу серий
+#: партнёра, БЕЗ календарного отсечения. Production `count_bounds` отсекает
+#: по правилу `start + H <= window_end`, и огрубление двигает `start` НАЗАД,
+#: поэтому грубая рука может признать eligible то, что мелкая не признала.
+#:
+#: Контрпример проверен на самом коде: одно партнёрское сообщение в t = 119,
+#: H = 60, окно кончается в 120.
+#:
+#:     N(1 с)  = [0, 0]      119 + 60 = 179 > 120, не eligible
+#:     N(60 с) = [1, 1]      корзина начинается в 60, 60 + 60 = 120, eligible
+#:     {0} НЕ вложено в {1}
+#:
+#: Значит «вложение N — теорема» верно БЕЗУСЛОВНО только для
+#: `NTopological`, а для `N_eligible` — при УСТОЙЧИВОЙ eligibility: когда
+#: отсечение одинаково на обеих шкалах.
+#:
+#: ПРОГОН Q1c ЭТОМУ УСЛОВИЮ УДОВЛЕТВОРЯЕТ, и это не везение, а следствие
+#: строки `window = last + horizon` в `tools/bounded_q1c.py`: любая корзина
+#: начинается не позже последнего события, поэтому eligible ВСЕ, на обеих
+#: шкалах, и там `N_eligible = NTopological`. Результаты 517 диад этим не
+#: затрагиваются.
+#:
+#: Общая семантика eligibility на грубой границе (корзина ПЕРЕСЕКАЕТ отсечку,
+#: и тогда сама eligibility становится частично идентифицированной) —
+#: DEFERRED до настоящих person-period окон в S6. Строить её сейчас только
+#: потому, что обнаружился край света, незачем.
+N_REFINEMENT_SCOPE = "NTopological unconditionally; N_eligible under stable eligibility"
+STABLE_ELIGIBILITY_HOLDS_IN_Q1C = True
+ELIGIBILITY_BOUNDARY_SEMANTICS = "DEFERRED to S6 (fixed person-period windows)"
+
 REFINEMENT_STATUS = {
     "N": "HARD INVARIANT — a theorem; failure is a bug",
     "R_outer_envelope": "DIAGNOSTIC ONLY — failure is not automatically a bug",

@@ -43,11 +43,19 @@ import RelationshipFix.Verification.StatementIntegrity
 
 /-
   А это — проверка в ДРУГУЮ сторону, и она не менее важна. Открытый вопрос
-  обязан оставаться дырой. В тот день, когда `sound_sharp_bounds_exist`
-  перестанет зависеть от `sorryAx`, строка покраснеет, и это будет ровно
-  то место, где надо переносить теорему из Challenge в Solution, а не
-  тихо радоваться зелёной сборке.
+  обязан оставаться дырой. В тот день, когда любая из строк ниже перестанет
+  зависеть от `sorryAx`, она покраснеет — и это будет ровно то место, где
+  теорему надо переносить из Challenge в Solution, а не тихо радоваться
+  зелёной сборке.
 -/
-/-- info: 'RelationshipFix.Challenge.sound_sharp_bounds_exist' depends on axioms: [sorryAx] -/
+/-- info: 'RelationshipFix.Challenge.dp_bounds_sound' depends on axioms: [sorryAx] -/
 #guard_msgs in
-#print axioms RelationshipFix.Challenge.sound_sharp_bounds_exist
+#print axioms RelationshipFix.Challenge.dp_bounds_sound
+
+/-- info: 'RelationshipFix.Challenge.dp_bounds_sharp' depends on axioms: [sorryAx] -/
+#guard_msgs in
+#print axioms RelationshipFix.Challenge.dp_bounds_sharp
+
+/-- info: 'RelationshipFix.Challenge.sharp_bounds_exist_abstract' depends on axioms: [sorryAx] -/
+#guard_msgs in
+#print axioms RelationshipFix.Challenge.sharp_bounds_exist_abstract

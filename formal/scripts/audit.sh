@@ -30,7 +30,11 @@ fi
 echo "  none"
 
 echo "== 3. build =="
+# Verification НЕ входит в дефолтный таргет намеренно: дерево доказательств
+# не должно импортировать Challenge. Поэтому судья и вопрос собираются явно,
+# иначе FinalCheck проверял бы протухшие olean и радостно зеленел
 lake build
+lake build RelationshipFix.Verification
 
 echo "== 4. statement integrity + final check =="
 lake env lean RelationshipFix/Verification/FinalCheck.lean

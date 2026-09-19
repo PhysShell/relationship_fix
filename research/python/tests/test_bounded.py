@@ -15,6 +15,7 @@
 """
 
 import itertools
+import pathlib
 import random
 import unittest
 
@@ -397,3 +398,77 @@ class TerminologyAndAggregationTests(unittest.TestCase):
         self.assertAlmostEqual(verdict.multiplicative_width(1.85, 8.76),
                                8.76 / 1.85, 6)
         self.assertEqual(verdict.multiplicative_width(0.0, 5.0), float("inf"))
+
+
+class EligibilityBoundaryTests(unittest.TestCase):
+    """Граница eligibility — единственное место, где «теорема про N» не теорема.
+
+    Найдено разбором, а не тестом: property-тест этого не ловил, потому что
+    брал `window = stamps[-1] + horizon`, то есть НИКОГДА не заходил в
+    область, где утверждение ложно. Тест, который не может упасть, ничего и
+    не проверяет.
+    """
+
+    def test_coarsening_can_make_an_ineligible_opportunity_eligible(self):
+        """Одно сообщение в t=119, H=60, окно до 120. {0} не вложено в {1}."""
+        from coarsening import verdict
+        stream = order([119.0], [0], ["a"])
+        fine = to_bins(stream, 1, delta=1.0)
+        coarse = to_bins(stream, 1, delta=DELTA)
+        inner = count_bounds(fine, horizon=60.0, window_end=120.0)
+        outer = count_bounds(coarse, horizon=60.0, window_end=120.0)
+        self.assertEqual((inner.low, inner.high), (0.0, 0.0))
+        self.assertEqual((outer.low, outer.high), (1.0, 1.0))
+        self.assertNotIn(inner, outer)
+        self.assertIn("stable eligibility", verdict.N_REFINEMENT_SCOPE)
+
+    def test_stable_eligibility_restores_the_invariant(self):
+        """`window = last + horizon` — ровно то, что делает прогон Q1c."""
+        stream = order([119.0], [0], ["a"])
+        window = stream.stamps[-1] + 60.0
+        inner = count_bounds(to_bins(stream, 1, delta=1.0),
+                             horizon=60.0, window_end=window)
+        outer = count_bounds(to_bins(stream, 1, delta=DELTA),
+                             horizon=60.0, window_end=window)
+        self.assertIn(inner, outer)
+
+    def test_the_corpus_run_uses_the_stable_window(self):
+        """Иначе результат по 517 диадам опирался бы на неверную область."""
+        from coarsening import verdict
+        source = pathlib.Path(__file__).resolve().parent.parent / "tools" / "bounded_q1c.py"
+        self.assertIn("window = last + horizon", source.read_text(encoding="utf-8"))
+        self.assertTrue(verdict.STABLE_ELIGIBILITY_HOLDS_IN_Q1C)
+        self.assertTrue(verdict.ELIGIBILITY_BOUNDARY_SEMANTICS.startswith("DEFERRED"))
+
+
+class Q1cIsClosedTests(unittest.TestCase):
+    """Результат запечатан: цифры, дайджесты и запрет продолжать."""
+
+    def test_the_result_carries_its_inputs_and_outputs(self):
+        from coarsening import q1c_result as q
+        self.assertEqual(q.STATUS, "CLOSED")
+        self.assertEqual(q.CORPUS_ARCHIVE_MD5, "dd3dce055158e70a891e8db49dd2678f")
+        self.assertTrue(q.ROWS_SHA256_16 and q.LOG_SHA256_16)
+        self.assertEqual(q.DYADS_ANALYSED, 517)
+
+    def test_the_declared_trigger_decided_against_more_work(self):
+        from coarsening import q1c_result as q, verdict
+        self.assertEqual(q.SHARP_TIME_LAYER, "NOT_WORTH_BUILDING")
+        for share in q.ORDER_SHARE_MEDIAN.values():
+            self.assertGreater(share, verdict.SHARPEN_TIME_IF_ORDER_SHARE_BELOW)
+
+    def test_the_violation_is_one_directional(self):
+        """N всегда ниже, RMTR почти всегда выше — это не шум."""
+        from coarsening import q1c_result as q
+        self.assertEqual(q.STRICT_N_ABOVE, 0)
+        self.assertGreater(q.STRICT_N_BELOW, 500)
+        for horizon, above in q.STRICT_RMTR_ABOVE.items():
+            self.assertGreater(above, q.STRICT_RMTR_BELOW[horizon])
+
+    def test_the_theorem_applies_because_eligibility_is_stable(self):
+        from coarsening import q1c_result as q
+        self.assertTrue(q.ELIGIBILITY_IS_STABLE_HERE)
+
+    def test_reopening_is_forbidden_by_name(self):
+        from coarsening import q1c_result as q
+        self.assertIn("sharper temporal bounds", q.DO_NOT_REOPEN)

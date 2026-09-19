@@ -26,9 +26,17 @@ theorem identified_nonempty : Spec.IdentifiedNonempty := sorry
 
 theorem n_identified_set_collapses : Spec.NIdentifiedSetCollapses := sorry
 
-/-- ОТКРЫТЫЙ ВОПРОС. Формулировка заморожена ДО начала доказательства —
-    чтобы не вышло «неделя в Lean, получилась удобная форма, назовём её
-    soundness». Решения пока нет, и это видно машине, а не только человеку. -/
-theorem sound_sharp_bounds_exist : Spec.SoundSharpBoundsExist := sorry
+/-- ОТКРЫТЫЙ ВОПРОС №1. Корректность ИМЕННО ТЕХ границ, которые выдаёт
+    `dpBounds`. Формулировка заморожена ДО начала доказательства. -/
+theorem dp_bounds_sound : Spec.DPBoundsSound := sorry
+
+/-- ОТКРЫТЫЙ ВОПРОС №2. Резкость. Отдельной теоремой: провал резкости не
+    обесценивает корректность. -/
+theorem dp_bounds_sharp : Spec.DPBoundsSharp := sorry
+
+/-- Слабая абстрактная лемма. НЕ является целью сертификации: в ней не
+    фигурирует ни алгоритм, ни его границы. Оставлена, чтобы разница между
+    ней и двумя предыдущими была видна в одном файле. -/
+theorem sharp_bounds_exist_abstract : Spec.SharpBoundsExistAbstract := sorry
 
 end RelationshipFix.Challenge

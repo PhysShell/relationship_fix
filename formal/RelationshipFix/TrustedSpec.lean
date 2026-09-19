@@ -2,4 +2,5 @@ import RelationshipFix.TrustedSpec.Observation
 import RelationshipFix.TrustedSpec.Coarsening
 import RelationshipFix.TrustedSpec.Opportunities
 import RelationshipFix.TrustedSpec.IdentifiedSet
+import RelationshipFix.TrustedSpec.ReferenceDP
 import RelationshipFix.TrustedSpec.Statements

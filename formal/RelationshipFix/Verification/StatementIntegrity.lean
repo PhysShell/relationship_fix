@@ -55,8 +55,12 @@ def claimed : List (Name × Name × Name) :=
 /-- Вопросы, заданные и пока не закрытые. Их отсутствие в solution — не
     недосмотр, а состояние работ, видимое машине. -/
 def openQuestions : List (Name × Name) :=
-  [(`RelationshipFix.Challenge.sound_sharp_bounds_exist,
-    `RelationshipFix.Spec.SoundSharpBoundsExist)]
+  [(`RelationshipFix.Challenge.dp_bounds_sound,
+    `RelationshipFix.Spec.DPBoundsSound),
+   (`RelationshipFix.Challenge.dp_bounds_sharp,
+    `RelationshipFix.Spec.DPBoundsSharp),
+   (`RelationshipFix.Challenge.sharp_bounds_exist_abstract,
+    `RelationshipFix.Spec.SharpBoundsExistAbstract)]
 
 run_cmd do
   let env ← getEnv
