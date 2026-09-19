@@ -256,3 +256,23 @@ class StageTwoTests(unittest.TestCase):
     def test_the_phase_check_passed_and_is_recorded(self):
         from coarsening import measured
         self.assertLess(measured.PHASE_SPREAD_PP, 5.0)
+
+
+class GeneratorHandoffTests(unittest.TestCase):
+    """Таблица — цель калибровки, а не генератор неоднозначностей."""
+
+    def test_the_table_is_not_a_bernoulli_parameter(self):
+        from coarsening import measured
+        self.assertEqual(measured.USE_AS_GENERATIVE_BERNOULLI, "FORBIDDEN")
+        self.assertEqual(measured.ROLE, "calibration target / diagnostic")
+
+    def test_occupancy_is_declared_insufficient_as_state(self):
+        """Доказательство лежит в самих числах: при occupancy = 1 уже 0.228.
+
+        Возможность касается соседних корзин, поэтому занятость ОДНОЙ корзины
+        процесс не описывает, и Бернулли по ней порождал бы неоднозначности,
+        независимые от структуры, которая их на самом деле порождает.
+        """
+        from coarsening import measured
+        self.assertTrue(measured.OCCUPANCY_IS_NOT_A_SUFFICIENT_STATE)
+        self.assertGreater(measured.probability(1), 0.2)
