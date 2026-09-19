@@ -376,6 +376,32 @@ SAMPLING_INFERENCE = (
 BOOTSTRAP_REPLICATES = 2_000
 BOOTSTRAP_INTERVAL = "percentile at CONFIDENCE_LEVEL"
 BOOTSTRAP_RESAMPLES_RANDOMISED_UNITS = True
+
+#: ЧТО ИМЕННО ПЕРЕСЕМПЛИРУЕТСЯ — поправка четвёртого чтения, и она про две
+#: РАЗНЫЕ причины выбора единицы, которые здесь случайно совпали.
+#:
+#:     единица рандомизации      — чей жребий бросается
+#:     независимый кластер       — что можно пересемплировать, не разрушив
+#:                                 зависимость внутри
+#:
+#: «One vote per person-period, matching the unit of randomisation» из
+#: `estimands.py` — довод ПЕРВОГО рода (взвешивание). Механически перенести
+#: его в бутстрап было бы подменой второго рода первым, и особенно смешно
+#: было бы сделать это сразу после разговора о том, чем они различаются.
+#:
+#: Сегодня вопрос снимается фактом дизайна: `recovery.run_arm` строит РОВНО
+#: ОДИН person-period на пару. Диада = единица рандомизации = независимый
+#: кластер = единица пересемплирования. Совпадение, а не следствие.
+RANDOMISATION_UNIT = "dyad"
+INDEPENDENT_SAMPLING_CLUSTER = "dyad"
+RESAMPLING_UNIT_COINCIDES_BECAUSE = ("the design yields exactly one person-period "
+                                     "per dyad — see recovery.run_arm")
+#: И растяжка на тот день, когда перестанет. Несколько периодов на человека
+#: делают их зависимыми, и поячеечный бутстрап эту зависимость уничтожает.
+IF_A_DYAD_EVER_YIELDS_SEVERAL_PERIODS = ("the unit bootstrap becomes invalid; "
+                                         "cluster bootstrap by dyad is required "
+                                         "and the run STOPS until it is in place")
+MULTI_PERIOD_PER_UNIT_IS_A_TRIPWIRE = True
 #: Реплика, в которой ΣN = 0 во всей руке, эстиманда не имеет. Она НЕ
 #: выбрасывается молча: доля таких реплик отчётна, и если она превышает
 #: долю ниже, интервал не строится, а ячейка идёт в BOTH_AMBIGUOUS.
@@ -406,15 +432,80 @@ CONFIDENCE_LEVEL = 0.95
 SAMPLING_METHOD_COVERAGE_STUDY = True
 COVERAGE_TARGET = "P(outer union ⊇ population identified interval) >= 0.95"
 COVERAGE_IS_OF_THE_SET_NOT_OF_A_POINT = True
+
+#: ПОПРАВКА ЧЕТВЁРТОГО ЧТЕНИЯ №1: проверять покрытие на одном уютном DGP
+#: бессмысленно. Неспецифический бутстрап для негладкого экстремального
+#: функционала прекрасно работает в центре пространства и разваливается
+#: ровно по краям. Поэтому суита объявлена, и края в ней НАЗВАНЫ.
+COVERAGE_DGP_SUITE: tuple[str, ...] = (
+    "central: the reference cell",
+    "near-zero denominator: lowest rate, shortest window",
+    "tied extrema: 60 s resolution at the highest rate",
+    "weak identification: interval width comparable to delta",
+    "heavy censoring: shortest horizon at the lowest rate",
+    "the ΣN = 0 / ΣN > 0 boundary: highest zero_incidence_share on the grid",
+    "flat-root probe: a hand-built arm where the slope bound is 1",
+)
+COVERAGE_IS_NOT_CHECKED_ONLY_WHERE_IT_IS_EASY = True
+#: И решает ХУДШИЙ сценарий. Среднее по суите позволило бы утопить край в
+#: центре — тот самый приём, которым power-таблицы и живут.
+WORST_SCENARIO_DECIDES = True
+
+#: ПОПРАВКА №2: приёмка учитывает монте-карловскую ошибку самой оценки
+#: покрытия. «coverage >= 0.95» на 1000 репликах — это утверждение с
+#: собственным доверительным интервалом, и делать вид, что его нет, значит
+#: повторять ту же ошибку этажом ниже.
 COVERAGE_REPLICATES = 1_000
-#: Ячейки объявлены заранее и не выбираются после взгляда: четыре узла
-#: плотности на двух крайних разрешениях, опорный режим, нейтральная точка C.
-COVERAGE_STUDY_CELLS = ("all four opportunity_rate nodes x {1 s, 60 s} "
-                        "at the reference regime and the neutral C point")
-#: Провал — это СТАТУС, а не приглашение попробовать другой бутстрап.
-COVERAGE_FAILURE_RULE = ("if the Wilson lower limit of measured coverage falls "
-                         "below 0.93, the method is SAMPLING_METHOD_INVALID and "
-                         "the prereg is amended before any main run")
+COVERAGE_SEEDS = "derived from one declared root seed per scenario, recorded"
+COVERAGE_ACCEPTANCE_FLOOR = 0.93
+COVERAGE_ACCEPTANCE = ("the Wilson LOWER limit of measured coverage must be "
+                       ">= COVERAGE_ACCEPTANCE_FLOOR in EVERY scenario")
+COVERAGE_ACCEPTANCE_ACCOUNTS_FOR_MC_ERROR = True
+
+
+def wilson_lower(successes: int, trials: int,
+                 z: float = 1.959963984540054) -> float:
+    """Нижний предел Уилсона. Чистая функция — правило приёмки ИСПОЛНЯЕМО.
+
+    Урок поправки III-6: правило, записанное прозой, runner дочитает
+    по-своему. Здесь читать нечего.
+    """
+    if trials <= 0:
+        return 0.0
+    phat = successes / trials
+    denominator = 1.0 + z * z / trials
+    centre = phat + z * z / (2 * trials)
+    spread = z * math.sqrt(phat * (1 - phat) / trials + z * z / (4 * trials * trials))
+    return max(0.0, (centre - spread) / denominator)
+
+
+def coverage_is_accepted(successes: int, trials: int) -> bool:
+    """Приёмка одного сценария суиты."""
+    return wilson_lower(successes, trials) >= COVERAGE_ACCEPTANCE_FLOOR
+
+
+#: ПОПРАВКА №3: ЧТО ДЕЛАТЬ ПРИ ПРОВАЛЕ — заморожено ЗАРАНЕЕ. Прежнее слово
+#: «поправка» оставляло prereg ровно в том месте, где становится интересно:
+#: «не прошло -> придумаем, как поправить» это не preregistration, а
+#: обещание подумать.
+#:
+#: Method B назван заранее и НЕ ПРОИЗВОЛЕН: конец — негладкий экстремальный
+#: функционал, а это известный класс, где n-из-n бутстрап отказывает, и
+#: стандартное лекарство — субсэмплинг (Politis-Romano). Выбор из литературы,
+#: а не из вкуса.
+SAMPLING_METHOD_LADDER: tuple[str, ...] = (
+    "A: bootstrap over independent clusters + full bound recomputation",
+    "B: subsampling m out of n, m = ceil(n ** 0.6), full recomputation",
+    "STOP: SAMPLING_METHOD_INVALID",
+)
+METHOD_B_IS_NAMED_IN_ADVANCE = True
+WHY_SUBSAMPLING = ("the endpoint is a non-smooth extremal functional — the known "
+                   "failure case for the n-out-of-n bootstrap")
+#: Каждая ступень проходит S5a-RATIO ЦЕЛИКОМ заново. Иначе «B» унаследует
+#: сертификат «A» — та же болезнь, что вылечена в §4b, этажом ниже.
+EACH_RUNG_REPEATS_S5A_RATIO_IN_FULL = True
+#: Третьей попытки нет. Иначе лестница превращается в перебор до успеха.
+NO_THIRD_ATTEMPT = True
 SAMPLING_METHOD_INVALID = "SAMPLING_METHOD_INVALID"
 NO_SHOPPING_FOR_A_BOOTSTRAP_THAT_COVERS = True
 
@@ -456,8 +547,45 @@ MEASUREMENT_GATE_IS_A_POPULATION_OBJECT = True
 #:
 #:     [ λ⁻_T − λ⁺_K ,  λ⁺_T − λ⁻_K ]
 #:
-#: Оба g монотонно не возрастают по λ (каждый min и max не возрастает),
-#: поэтому корень единственный и дихотомия законна.
+#: ПОПРАВКА ЧЕТВЁРТОГО ЧТЕНИЯ, и она математическая. Стояло: «оба g не
+#: возрастают, поэтому корень единственный». ЭТО НЕВЕРНО. Из монотонности
+#: следует только существование точки смены знака. Возможно ПЛАТО
+#:
+#:     g > 0 при λ < a,   g = 0 на [a, b],   g < 0 при λ > b
+#:
+#: и тогда «корень» перестаёт быть определением. Среда для плато
+#: подозрительно подходящая: N = 0, экстремумы, ties, частичная
+#: идентификация.
+#:
+#: ПОЭТОМУ КОНЕЦ ОПРЕДЕЛЯЕТСЯ ОБОБЩЁННО-ОБРАТНОЙ, а не «корнем»:
+#:
+#:     λ* = inf { λ : g(λ) <= 0 }
+#:
+#: При плато это ЛЕВЫЙ край, однозначно и независимо от числа итераций.
+#: Уникальность перестаёт быть нужна ОПРЕДЕЛЕНИЮ.
+ARM_ENDPOINT_DEFINITION = "λ* = inf{λ : g(λ) <= 0} — generalized inverse, not 'the root'"
+MONOTONICITY_DOES_NOT_BUY_UNIQUENESS = True
+PLATEAU_RESOLVES_TO = "the left edge, by definition, not by the stopping rule"
+
+#: А уникальность всё же есть — но куплена она ДРУГИМ, и это стоит записать,
+#: потому что предусловие общее с уже известным.
+#:
+#: Каждое min_h (B_h − λN_h) — минимум аффинных функций с наклонами −N_h. По
+#: теореме N_min = 0 => N_max = 0 непустой период имеет N >= 1 при КАЖДОЙ
+#: допустимой истории, значит его наклон <= −1, а сумма по руке убывает с
+#: наклоном не более −(число непустых периодов). Плато невозможно, пока это
+#: число положительно. Проверено: 300 случайных периодов, самый пологий
+#: наклон ровно −1; плоских участков ноль.
+#:
+#: То есть уникальность куплена ТОЙ ЖЕ теоремой, которая закрыла претензию
+#: про плавающий знаменатель. Одно предусловие держит оба ответа — и
+#: сломается тоже сразу для обоих. Это не изящество, а предупреждение.
+UNIQUENESS_SUFFICIENT_CONDITION = ("every non-empty period has N >= 1 in every "
+                                   "admissible history, so each g is an extremum "
+                                   "of affine functions with slope <= -1")
+UNIQUENESS_RESTS_ON_THE_SAME_THEOREM_AS_THE_DENOMINATOR = True
+POPULATION_UNIQUENESS_CONDITION = "E[N] > 0 in the arm"
+MONOTONICITY_ALONE_IS_NOT_THE_ARGUMENT = True
 POPULATION_ARM_BOUNDS = "roots of g∓(λ) = E[extremum over admissible histories of (B − λN)]"
 POPULATION_MEASUREMENT_BOUNDS = "[λ⁻_T − λ⁺_K, λ⁺_T − λ⁻_K]"
 MEAN_OF_ENDPOINTS_IS_THE_WRONG_POPULATION_OBJECT = True
@@ -965,9 +1093,14 @@ STOP_RULES: dict[str, str] = {
         "прошёл S5a-RATIO на том же замороженном DGP: сертификат от другого "
         "эстиманда не наследуется",
     "coverage_failure":
-        "если измеренное покрытие выборочного метода не держится, статус "
-        "SAMPLING_METHOD_INVALID и поправка к prereg — а не подбор другого "
-        "бутстрапа до тех пор, пока покрытие не понравится",
+        "если нижний предел Уилсона измеренного покрытия падает ниже пола "
+        "ХОТЯ БЫ В ОДНОМ сценарии суиты, метод переходит на следующую "
+        "ступень SAMPLING_METHOD_LADDER и ЗАНОВО проходит S5a-RATIO целиком; "
+        "после ступени B третьей попытки нет — SAMPLING_METHOD_INVALID",
+    "multi_period_unit":
+        "если диада когда-нибудь даст больше одного person-period, поячеечный "
+        "бутстрап становится невалидным: нужен кластерный, и до него прогон "
+        "ОСТАНАВЛИВАЕТСЯ",
     "s6_gate":
         "S5b выдаёт поверхность и не выбирает точку на ней. Целевой дизайн "
         "замораживается по внешним ограничениям ПОСЛЕ S5b, и уже его "
@@ -998,6 +1131,9 @@ FORBIDDEN_INTERPRETATIONS: tuple[str, ...] = (
     "θ_1 и θ_0 считаются на общем наборе возможностей",
     "S5a уже квалифицировал этот анализ",
     "границы руки — это среднее поячеечных границ",
+    "монотонность g даёт единственный корень",
+    "покрытие проверено — в опорной ячейке",
+    "бутстрап валиден, потому что это бутстрап",
 )
 
 #: Q4 СУЖЕН. Вопрос обещал «разрешение И contract покрытия», но оси покрытия

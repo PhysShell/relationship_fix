@@ -5,10 +5,12 @@ STRICT не может стать primary, два гейта не сливают
 выходит одним числом.
 """
 
+import itertools
 import math
 import random
 import unittest
 
+from coarsening.bounded import Bin, burden_bounds, count_bounds
 from simulation import s5b_prereg as prereg
 from simulation.s5b_prereg import Admissibility, Gate, Verdict, verdict
 
@@ -489,7 +491,7 @@ class SamplingInferenceTests(unittest.TestCase):
         self.assertTrue(prereg.SAMPLING_METHOD_COVERAGE_STUDY)
         self.assertTrue(prereg.COVERAGE_IS_OF_THE_SET_NOT_OF_A_POINT)
         self.assertIn("⊇", prereg.COVERAGE_TARGET)
-        self.assertIn("SAMPLING_METHOD_INVALID", prereg.COVERAGE_FAILURE_RULE)
+        self.assertIn("SAMPLING_METHOD_INVALID", prereg.SAMPLING_METHOD_LADDER[2])
         self.assertTrue(prereg.NO_SHOPPING_FOR_A_BOOTSTRAP_THAT_COVERS)
         self.assertIn("SAMPLING_METHOD_INVALID", prereg.STOP_RULES["coverage_failure"])
 
@@ -568,3 +570,212 @@ class InitiationBridgeTests(unittest.TestCase):
                                    initiation_end=60.0))
         self.assertFalse(opens_here(120.0, horizon=300.0, window_end=600.0,
                                     initiation_end=60.0))
+
+
+def _reference(bins, *, horizon, window_end, eligible, time_layer=False):
+    """МЕДЛЕННАЯ эталонная реализация: ЯВНЫЙ предикат и ЯВНЫЕ истории.
+
+    Предикат здесь — функция, а не скаляр, и в этом весь смысл проверки:
+    оптимизированный путь сворачивает область инициации в одно число, и если
+    свёртка неверна, сравнение со скаляром этого не покажет. Правило вклада
+    повторено НАМЕРЕННО, а не импортировано.
+
+    Возвращает (N_min, N_max, B_min, B_max) по всем допустимым историям.
+    """
+    def arrangements(bucket):
+        letters = "P" * bucket.partner + "A" * bucket.participant
+        return sorted(set(itertools.permutations(letters)))
+
+    rows = []
+    for combination in itertools.product(*[arrangements(b) for b in bins]):
+        sequence = []
+        for bucket, arrangement in zip(bins, combination):
+            sequence.extend((bucket.start, actor) for actor in arrangement)
+        count, low, high = 0, 0.0, 0.0
+        index = 0
+        while index < len(sequence):
+            start, actor = sequence[index]
+            if actor != "P" or (index > 0 and sequence[index - 1][1] == "P"):
+                index += 1
+                continue
+            end = index
+            while end + 1 < len(sequence) and sequence[end + 1][1] == "P":
+                end += 1
+            reply = sequence[end + 1] if end + 1 < len(sequence) else None
+            index = end + 1
+            if not eligible(start):
+                continue
+            count += 1
+            if reply is None:
+                low += horizon
+                high += horizon
+            elif reply[0] != start:
+                gap = reply[0] - start
+                low += min(gap, horizon)
+                high += min(gap, horizon)
+        rows.append((count, low, high))
+    return (min(r[0] for r in rows), max(r[0] for r in rows),
+            min(r[1] for r in rows), max(r[2] for r in rows))
+
+
+class InitiationDifferentialOracleTests(unittest.TestCase):
+    """Урок №6 прошлого чтения: детерминированно неправильный тест всё ещё
+    неправильный. Поэтому шести регрессий мало — нужен эталон и генератор."""
+
+    HORIZON = 300.0
+
+    def _compare(self, bins, window_end):
+        cutoff = prereg.initiation_cutoff(window_end, self.HORIZON)
+        predicate = lambda t: prereg.is_eligible(t, window_end=window_end,
+                                                 horizon=self.HORIZON)
+        want = _reference(bins, horizon=self.HORIZON, window_end=window_end,
+                          eligible=predicate)
+        counts = count_bounds(bins, horizon=self.HORIZON, window_end=window_end,
+                              initiation_end=cutoff)
+        burden = burden_bounds(bins, horizon=self.HORIZON, window_end=window_end,
+                               time_layer=False, initiation_end=cutoff)
+        self.assertEqual((counts.low, counts.high), (float(want[0]), float(want[1])),
+                         (bins, window_end))
+        self.assertAlmostEqual(burden.low, want[2], 6, (bins, window_end))
+        self.assertAlmostEqual(burden.high, want[3], 6, (bins, window_end))
+
+    def test_the_scalar_path_matches_the_explicit_predicate_on_random_timelines(self):
+        rng = random.Random(1234)
+        sizes = [(p, q) for p in range(3) for q in range(3) if p or q]
+        for _ in range(250):
+            window = rng.choice([600.0, 900.0, 1200.0, 1800.0])
+            step = prereg.ELIGIBILITY_REFERENCE_RESOLUTION_SECONDS
+            bins = [Bin(i * step, *rng.choice(sizes))
+                    for i in range(rng.randint(1, 4))]
+            self._compare(bins, window)
+
+    def test_the_named_edge_cases_are_forced_not_hoped_for(self):
+        """Сгенерированное может не попасть в край; эти попадают всегда."""
+        window = 900.0
+        cutoff = prereg.initiation_cutoff(window, self.HORIZON)
+        self.assertGreater(cutoff, 0.0)
+        step = prereg.ELIGIBILITY_REFERENCE_RESOLUTION_SECONDS
+        for at in (cutoff - step, cutoff, cutoff + step):
+            with self.subTest(at=at):
+                self._compare([Bin(at, 1, 0), Bin(at + step, 0, 1)], window)
+
+    def test_an_opening_before_the_cutoff_closed_after_it(self):
+        """Открытие внутри области, ответ — за отсечкой, но В ПРЕДЕЛАХ
+        горизонта. Именно здесь наивная обрезка корзин дала бы полный H.
+
+        Первая редакция этого теста ставила ответ ДАЛЬШЕ горизонта и падала:
+        там min(gap, H) = H законно, и падал тест, а не движок. Эталон при
+        этом соглашался с движком в обоих вариантах — то есть дифференциальная
+        часть работала, а моё дополнительное утверждение было просто неверным.
+        """
+        window = 1800.0
+        cutoff = prereg.initiation_cutoff(window, self.HORIZON)
+        step = prereg.ELIGIBILITY_REFERENCE_RESOLUTION_SECONDS
+        bins = [Bin(cutoff - step, 1, 0), Bin(cutoff + step, 0, 1)]
+        self._compare(bins, window)
+        burden = burden_bounds(bins, horizon=self.HORIZON, window_end=window,
+                               time_layer=False, initiation_end=cutoff)
+        self.assertEqual(burden.high, 2 * step)
+        self.assertLess(burden.high, self.HORIZON,
+                        "возможность стала цензурированной, хотя ответ был")
+
+    def test_a_window_admitting_nothing_agrees_with_the_reference(self):
+        self._compare([Bin(0.0, 1, 1)], 100.0)
+
+    def test_the_legacy_semantics_still_agrees_with_its_own_reference(self):
+        """initiation_end=None — историческое правило; эталон тот же, предикат
+        другой. Иначе «совместимость» проверялась бы сама собой."""
+        rng = random.Random(99)
+        sizes = [(p, q) for p in range(3) for q in range(3) if p or q]
+        horizon, window = 300.0, 900.0
+        for _ in range(120):
+            step = 60.0
+            bins = [Bin(i * step, *rng.choice(sizes))
+                    for i in range(rng.randint(1, 4))]
+            want = _reference(bins, horizon=horizon, window_end=window,
+                              eligible=lambda t: t + horizon <= window)
+            counts = count_bounds(bins, horizon=horizon, window_end=window)
+            self.assertEqual((counts.low, counts.high),
+                             (float(want[0]), float(want[1])), bins)
+
+
+class RootDefinitionTests(unittest.TestCase):
+    """Монотонность не покупает уникальность. Определение не должно на неё
+    опираться, а уникальность — быть отдельным проверяемым свойством."""
+
+    def test_the_endpoint_is_defined_by_generalized_inverse(self):
+        self.assertTrue(prereg.MONOTONICITY_DOES_NOT_BUY_UNIQUENESS)
+        self.assertIn("inf{λ", prereg.ARM_ENDPOINT_DEFINITION)
+        self.assertIn("not 'the root'", prereg.ARM_ENDPOINT_DEFINITION)
+        self.assertIn("left edge", prereg.PLATEAU_RESOLVES_TO)
+        self.assertIn("монотонность g даёт единственный корень",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_uniqueness_has_a_named_sufficient_condition(self):
+        self.assertIn("slope <= -1", prereg.UNIQUENESS_SUFFICIENT_CONDITION)
+        self.assertIn("E[N] > 0", prereg.POPULATION_UNIQUENESS_CONDITION)
+        self.assertTrue(prereg.MONOTONICITY_ALONE_IS_NOT_THE_ARGUMENT)
+
+    def test_uniqueness_and_the_denominator_share_one_precondition(self):
+        """Одно предусловие держит оба ответа и сломается сразу для обоих."""
+        self.assertTrue(prereg.UNIQUENESS_RESTS_ON_THE_SAME_THEOREM_AS_THE_DENOMINATOR)
+        self.assertTrue(prereg.N_ZERO_IS_ORDER_INVARIANT)
+
+
+class ResamplingUnitTests(unittest.TestCase):
+    """Единица рандомизации и независимый кластер — разные причины."""
+
+    def test_the_cluster_is_named_and_justified_by_the_design(self):
+        self.assertEqual(prereg.RANDOMISATION_UNIT, prereg.INDEPENDENT_SAMPLING_CLUSTER)
+        self.assertIn("one person-period per dyad",
+                      prereg.RESAMPLING_UNIT_COINCIDES_BECAUSE)
+
+    def test_the_design_claim_is_checked_against_the_code(self):
+        """Если этот факт изменится, prereg обязан узнать об этом здесь."""
+        import inspect
+        from simulation import recovery
+        source = inspect.getsource(recovery.run_arm)
+        self.assertIn("по одному person-period на пару", source)
+
+    def test_several_periods_per_unit_is_a_tripwire_not_a_footnote(self):
+        self.assertTrue(prereg.MULTI_PERIOD_PER_UNIT_IS_A_TRIPWIRE)
+        self.assertIn("STOPS", prereg.IF_A_DYAD_EVER_YIELDS_SEVERAL_PERIODS)
+        self.assertIn("кластерный", prereg.STOP_RULES["multi_period_unit"])
+
+
+class CoverageGateTests(unittest.TestCase):
+    """Провал покрытия должен иметь заранее замороженное продолжение."""
+
+    def test_the_fallback_ladder_is_frozen_with_a_named_method_b(self):
+        self.assertEqual(len(prereg.SAMPLING_METHOD_LADDER), 3)
+        self.assertTrue(prereg.METHOD_B_IS_NAMED_IN_ADVANCE)
+        self.assertIn("subsampling", prereg.SAMPLING_METHOD_LADDER[1])
+        self.assertIn("non-smooth extremal", prereg.WHY_SUBSAMPLING)
+        self.assertTrue(prereg.SAMPLING_METHOD_LADDER[2].startswith("STOP"))
+
+    def test_each_rung_re_earns_its_certificate(self):
+        """Иначе B унаследует сертификат A — болезнь §4b этажом ниже."""
+        self.assertTrue(prereg.EACH_RUNG_REPEATS_S5A_RATIO_IN_FULL)
+        self.assertTrue(prereg.NO_THIRD_ATTEMPT)
+
+    def test_coverage_is_checked_where_it_is_hard_not_only_where_it_is_easy(self):
+        self.assertGreaterEqual(len(prereg.COVERAGE_DGP_SUITE), 6)
+        joined = " ".join(prereg.COVERAGE_DGP_SUITE)
+        for edge in ("near-zero denominator", "tied extrema", "weak identification",
+                     "heavy censoring", "boundary", "flat-root"):
+            self.assertIn(edge, joined)
+        self.assertTrue(prereg.WORST_SCENARIO_DECIDES)
+        self.assertIn("покрытие проверено — в опорной ячейке",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_acceptance_is_executable_and_accounts_for_mc_error(self):
+        """95% на 1000 репликах проходит; 95% на 20 — нет, и это верно."""
+        self.assertTrue(prereg.COVERAGE_ACCEPTANCE_ACCOUNTS_FOR_MC_ERROR)
+        self.assertTrue(prereg.coverage_is_accepted(950, 1000))
+        self.assertFalse(prereg.coverage_is_accepted(940, 1000))
+        self.assertFalse(prereg.coverage_is_accepted(19, 20))
+        self.assertEqual(prereg.wilson_lower(0, 0), 0.0)
+
+    def test_the_wilson_limit_is_below_the_point_estimate(self):
+        for k, n in ((950, 1000), (500, 1000), (990, 1000)):
+            self.assertLess(prereg.wilson_lower(k, n), k / n)

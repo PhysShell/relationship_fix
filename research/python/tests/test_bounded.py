@@ -15,13 +15,15 @@
 """
 
 import itertools
+import math
 import pathlib
 import random
 import unittest
 
 from coarsening.bounded import (
     Bin, Definedness, Identified, Interval, RATIO_TOLERANCE_SECONDS,
-    arm_ratio_bounds, burden_bounds, count_bounds, definedness, identified,
+    _count, _optimise, arm_ratio_bounds, burden_bounds, count_bounds,
+    definedness, dinkelbach_slope_bound, generalized_inverse, identified,
     moves, patterns, ratio_bounds, to_bins)
 from coarsening.paired import Stream, apply_operator, opportunities, order, rmtr
 from coarsening.prereg import coarsen
@@ -682,3 +684,110 @@ class InitiationCutoffTests(unittest.TestCase):
                 seen += 1
                 self.assertEqual(counts.high, 0.0, bins)
         self.assertGreater(seen, 50)
+
+
+class GeneralizedInverseTests(unittest.TestCase):
+    """«Монотонность => единственный корень» — неверно. Найдено четвёртым
+    враждебным чтением, и проверяется независимо от движка."""
+
+    def test_a_strictly_decreasing_function_gives_its_root(self):
+        root = generalized_inverse(lambda x: 10.0 - x, 0.0, 100.0)
+        self.assertAlmostEqual(root, 10.0, delta=RATIO_TOLERANCE_SECONDS)
+
+    def test_a_flat_zero_interval_gives_its_LEFT_edge(self):
+        """Вот он, случай, ради которого всё переписано: обычная дихотомия
+        вернула бы точку внутри [3, 7], зависящую от числа итераций."""
+        def g(x):
+            if x < 3.0:
+                return 1.0
+            if x <= 7.0:
+                return 0.0
+            return -1.0
+
+        root = generalized_inverse(g, 0.0, 100.0)
+        self.assertAlmostEqual(root, 3.0, delta=RATIO_TOLERANCE_SECONDS)
+
+    def test_the_left_edge_does_not_depend_on_the_iteration_budget(self):
+        """Детерминизм должен быть свойством ОПРЕДЕЛЕНИЯ, а не бюджета."""
+        def g(x):
+            return 1.0 if x < 3.0 else (0.0 if x <= 7.0 else -1.0)
+
+        roots = {round(generalized_inverse(g, 0.0, 100.0, iterations=n), 6)
+                 for n in (20, 40, 60, 200)}
+        self.assertEqual(len(roots), 1, roots)
+
+    def test_non_positive_everywhere_gives_the_left_bracket(self):
+        self.assertEqual(generalized_inverse(lambda x: -1.0, 2.0, 100.0), 2.0)
+
+    def test_positive_everywhere_gives_the_right_bracket(self):
+        self.assertAlmostEqual(generalized_inverse(lambda x: 1.0, 0.0, 50.0),
+                               50.0, delta=RATIO_TOLERANCE_SECONDS)
+
+    def test_a_none_anywhere_propagates_as_nan(self):
+        self.assertTrue(math.isnan(generalized_inverse(lambda x: None, 0.0, 1.0)))
+
+
+class RootUniquenessTests(unittest.TestCase):
+    """Уникальность куплена НЕ монотонностью, а теоремой про N = 0."""
+
+    def test_every_non_empty_period_has_slope_at_most_minus_one(self):
+        """Механизм: min аффинных функций с наклонами −N_h, а N >= 1 при
+        каждой истории непустого периода. Отсюда строгое убывание."""
+        rng = random.Random(5)
+        checked = 0
+        for _ in range(300):
+            bins = random_bins(rng, rng.randint(1, 3))
+            horizon, window = 300.0, 10 * DELTA
+            if _count(bins, horizon, window, True) == 0:
+                continue
+            checked += 1
+            for maximise in (False, True):
+                a = _optimise(bins, delta=DELTA, horizon=horizon,
+                              window_end=window, time_layer=False, lam=10.0,
+                              maximise=maximise, require_any=False)
+                b = _optimise(bins, delta=DELTA, horizon=horizon,
+                              window_end=window, time_layer=False, lam=11.0,
+                              maximise=maximise, require_any=False)
+                self.assertLessEqual(b - a, -1.0 + 1e-9, bins)
+        self.assertGreater(checked, 100)
+
+    def test_the_slope_bound_counts_non_empty_periods(self):
+        periods = [[Bin(0.0, 1, 1)], [Bin(0.0, 0, 2)], [Bin(0.0, 2, 1)]]
+        kw = dict(horizon=300.0, window_end=600.0)
+        self.assertEqual(dinkelbach_slope_bound(periods, **kw), 2)
+
+    def test_a_zero_slope_bound_means_there_is_no_estimand(self):
+        periods = [[Bin(0.0, 0, 2)], [Bin(0.0, 0, 1)]]
+        kw = dict(horizon=300.0, window_end=600.0)
+        self.assertEqual(dinkelbach_slope_bound(periods, **kw), 0)
+        self.assertIsNone(arm_ratio_bounds(periods, **kw))
+
+    def test_an_arm_mixing_empty_and_non_empty_periods_is_fine(self):
+        """Смесь на уровне РУКИ законна; запрещена она внутри периода."""
+        periods = [[Bin(0.0, 0, 3)], [Bin(0.0, 1, 0), Bin(60.0, 0, 1)]]
+        kw = dict(horizon=300.0, window_end=600.0, time_layer=False)
+        self.assertEqual(dinkelbach_slope_bound(periods, horizon=300.0,
+                                                window_end=600.0), 1)
+        got = arm_ratio_bounds(periods, **kw)
+        self.assertIsNotNone(got)
+        self.assertAlmostEqual(got.low, 60.0, delta=RATIO_TOLERANCE_SECONDS)
+
+    def test_the_smallest_possible_denominator_still_gives_a_finite_root(self):
+        """ΣN = 1 — наименьший непустой знаменатель."""
+        periods = [[Bin(0.0, 1, 0), Bin(120.0, 0, 1)]]
+        kw = dict(horizon=300.0, window_end=600.0, time_layer=False)
+        self.assertEqual(dinkelbach_slope_bound(periods, horizon=300.0,
+                                                window_end=600.0), 1)
+        got = arm_ratio_bounds(periods, **kw)
+        self.assertAlmostEqual(got.low, 120.0, delta=RATIO_TOLERANCE_SECONDS)
+        self.assertAlmostEqual(got.high, 120.0, delta=RATIO_TOLERANCE_SECONDS)
+
+    def test_no_period_admits_both_an_empty_and_a_non_empty_history(self):
+        """Предусловие уникальности — то же, что закрыло плавающий знаменатель.
+        Одно предусловие держит оба ответа и сломается сразу для обоих."""
+        rng = random.Random(77)
+        for _ in range(2000):
+            bins = random_bins(rng, rng.randint(1, 3))
+            counts = count_bounds(bins, horizon=300.0, window_end=10 * DELTA)
+            if counts.low == 0.0:
+                self.assertEqual(counts.high, 0.0, bins)

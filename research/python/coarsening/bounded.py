@@ -371,6 +371,73 @@ def burden_bounds(bins: list[Bin], *, horizon: float, window_end: float,
 RATIO_TOLERANCE_SECONDS = 5e-2
 
 
+def generalized_inverse(g, lo: float, hi: float, *,
+                        tolerance: float = RATIO_TOLERANCE_SECONDS,
+                        iterations: int = 60) -> float:
+    """inf{ λ ∈ [lo, hi] : g(λ) <= 0 } дихотомией. Чистая функция от `g`.
+
+    ЗАЧЕМ ОТДЕЛЬНО, И ЭТО ПОПРАВКА ЧЕТВЁРТОГО ЧТЕНИЯ. В комментариях стояло
+    «g не возрастает, значит корень единственный». Это НЕВЕРНО: из
+    монотонности следует только существование точки смены знака. Функция
+    может иметь ПЛАТО
+    
+        g > 0 при λ < a,   g = 0 на [a, b],   g < 0 при λ > b
+    
+    и тогда обычная дихотомия вернёт точку внутри [a, b], зависящую от
+    stopping rule, скобки и округления: снова детерминированный ответ не на
+    тот вопрос, только теперь красиво математический.
+    
+    Поэтому конец определяется ОБОБЩЁННО-ОБРАТНОЙ, а не «корнем». При плато
+    она даёт ЛЕВЫЙ край `a` — однозначно и независимо от числа итераций.
+    Уникальность перестаёт быть нужна определению; она остаётся отдельным,
+    доказываемым и проверяемым свойством (см. `dinkelbach_slope_bound`).
+    
+    Инвариант дихотомии: g(lo) > 0, g(hi) <= 0. Если g <= 0 уже в `lo`,
+    возвращается `lo`; если g > 0 всюду до `hi` — `hi`.
+    """
+    value = g(lo)
+    if value is None:
+        return math.nan
+    if value <= 0.0:
+        return lo
+    low, high = lo, hi
+    for _ in range(iterations):
+        mid = (low + high) / 2.0
+        value = g(mid)
+        if value is None:
+            return math.nan
+        if value > 0.0:
+            low = mid
+        else:
+            high = mid
+        if high - low < tolerance:
+            break
+    return high
+
+
+def dinkelbach_slope_bound(periods: list[list[Bin]], *, horizon: float,
+                           window_end: float,
+                           initiation_end: float | None = None) -> int:
+    """Сколько НЕПУСТЫХ периодов в руке — то же, что верхняя оценка наклона.
+
+    ДОСТАТОЧНОЕ УСЛОВИЕ СТРОГОГО УБЫВАНИЯ, названное явно вместо ссылки на
+    монотонность. Каждое `min_h (B_h − λN_h)` — минимум аффинных функций с
+    наклонами `−N_h`. По теореме `N_min = 0 => N_max = 0` непустой период
+    имеет `N >= 1` при КАЖДОЙ допустимой истории, значит его наклон `<= −1`.
+    Сумма по руке убывает с наклоном не более `−(число непустых периодов)`.
+    
+    Отсюда: пока результат этой функции положителен, плато невозможно и
+    обобщённо-обратная совпадает с единственным корнем. Ноль означает, что
+    эстиманда нет вовсе.
+    
+    То есть уникальность корня куплена ровно той теоремой, которая закрыла
+    претензию про плавающий знаменатель. Одно предусловие держит оба ответа,
+    и сломается оно тоже сразу для обоих.
+    """
+    return sum(1 for bins in periods
+               if _count(bins, horizon, window_end, True, initiation_end) > 0)
+
+
 def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
                  delta: float = OBSERVED_RESOLUTION_SECONDS,
                  time_layer: bool = True,
@@ -417,24 +484,14 @@ def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
     hi_bracket = burden.high / counts.low if counts.low else horizon
 
     def solve(maximise: bool) -> float:
-        lo, hi = max(0.0, lo_bracket), min(horizon, hi_bracket) + 1e-9
-        for _ in range(60):
-            mid = (lo + hi) / 2.0
-            value = _optimise(bins, delta=delta, horizon=horizon,
-                              window_end=window_end, time_layer=time_layer,
-                              lam=mid, maximise=maximise, require_any=True,
-                              initiation_end=initiation_end)
-            if value is None:
-                return math.nan
-            # f(λ) = extremum(B − λN) не возрастает по λ и обращается в ноль
-            # ровно на искомом экстремуме отношения — для обоих направлений
-            if value > 0.0:
-                lo = mid
-            else:
-                hi = mid
-            if hi - lo < RATIO_TOLERANCE_SECONDS:
-                break
-        return (lo + hi) / 2.0
+        # f(λ) = extremum(B − λN) не возрастает по λ; искомый конец — её
+        # ОБОБЩЁННО-ОБРАТНАЯ, а не «корень»: см. `generalized_inverse`
+        return generalized_inverse(
+            lambda lam: _optimise(bins, delta=delta, horizon=horizon,
+                                  window_end=window_end, time_layer=time_layer,
+                                  lam=lam, maximise=maximise, require_any=True,
+                                  initiation_end=initiation_end),
+            max(0.0, lo_bracket), min(horizon, hi_bracket) + 1e-9)
 
     return Interval(solve(False), solve(True))
 
@@ -570,15 +627,7 @@ def arm_ratio_bounds(periods: list[list[Bin]], *, horizon: float,
                    for bins in periods)
 
     def solve(maximise: bool) -> float:
-        lo, hi = 0.0, horizon + 1e-9
-        for _ in range(60):
-            mid = (lo + hi) / 2.0
-            if total(mid, maximise) > 0.0:
-                lo = mid
-            else:
-                hi = mid
-            if hi - lo < RATIO_TOLERANCE_SECONDS:
-                break
-        return (lo + hi) / 2.0
+        return generalized_inverse(lambda lam: total(lam, maximise),
+                                   0.0, horizon + 1e-9)
 
     return Interval(solve(False), solve(True))
