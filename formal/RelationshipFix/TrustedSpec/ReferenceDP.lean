@@ -67,9 +67,34 @@ def dpStep (acc : List (Nat × Bool)) (b : List Actor) : List (Nat × Bool) :=
 def dpReachable (o : Observation) : List (Nat × Bool) :=
   o.foldl dpStep [(0, false)]
 
-/-- Границы, которые выдаёт DP. ИМЕННО ОНИ подлежат сертификации. -/
+/-- Границы, которые выдаёт DP. ИМЕННО ОНИ подлежат сертификации.
+
+    ВНИМАНИЕ К СЛОВУ. Это SHARP IDENTIFIED BOUNDS, а не «идентифицированное
+    множество равно `[lo, hi]`». Достижимость ОБОИХ КОНЦОВ не влечёт
+    достижимости каждого целого между ними: это отдельное утверждение
+    (`Spec.IdentifiedSetIsContiguous`), и оно НЕ доказано. Для нынешнего
+    вывода «STRICT N ниже любой совместимой величины» достаточно резкой
+    нижней границы, поэтому чулан не открывается. -/
 def dpBounds (o : Observation) : Bounds :=
   let ns := (dpReachable o).map Prod.fst
   { lo := ns.foldl min (ns.headD 0), hi := ns.foldl max 0 }
+
+-- --------------------------------------------------------------------------
+-- Сканирование истории с булевым состоянием — язык промежуточных лемм.
+-- --------------------------------------------------------------------------
+
+/-- Состояние после просмотра списка: открыта ли серия партнёра.
+    Для диады важно только это, а не сам предыдущий актёр. -/
+def stateAfter (carried : Bool) : List Actor → Bool
+  | [] => carried
+  | a :: as => stateAfter (decide (a = Actor.partner)) as
+
+/-- Сколько возможностей открывает список, если серия уже несёт состояние
+    `carried`. Та же величина, что `opps`, но с булевым состоянием. -/
+def countFrom (carried : Bool) : List Actor → Nat
+  | [] => 0
+  | a :: as =>
+      (if a = Actor.partner ∧ carried = false then 1 else 0)
+        + countFrom (decide (a = Actor.partner)) as
 
 end RelationshipFix

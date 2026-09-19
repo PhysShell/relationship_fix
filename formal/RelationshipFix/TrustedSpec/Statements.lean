@@ -99,4 +99,63 @@ def DPBoundsSharp : Prop :=
   ∀ o, (∃ l, Admissible o l ∧ NTopological l = (dpBounds o).lo) ∧
        (∃ l, Admissible o l ∧ NTopological l = (dpBounds o).hi)
 
+/-- НЕ ЦЕЛЬ, но должно быть названо, чтобы не подразумеваться молча.
+
+    `DPBoundsSharp` говорит, что достижимы ОБА КОНЦА. Из этого НЕ следует,
+    что достижимо каждое целое между ними. Поэтому в документации пишется
+    «sharp identified BOUNDS `[lo, hi]`», а не «identified set = `[lo, hi]`»:
+    второе сильнее и не доказано.
+
+    Для нынешнего вывода — «STRICT N ниже ЛЮБОЙ совместимой величины» —
+    достаточно резкой нижней границы, поэтому этот чулан не открывается. -/
+def IdentifiedSetIsContiguous : Prop :=
+  ∀ o n, (dpBounds o).lo ≤ n → n ≤ (dpBounds o).hi → IdentifiedN o n
+
+-- --------------------------------------------------------------------------
+-- ПРОМЕЖУТОЧНЫЕ ЦЕЛИ. План доказательства заморожен вместе с целью, чтобы
+-- «мы пошли другим путём» было видно, а не подразумевалось.
+-- --------------------------------------------------------------------------
+
+/-- ЛОКАЛЬНАЯ ТОЧНОСТЬ ОДНОЙ КОРЗИНЫ — самое трудное место, и оно нарочно
+    вынесено в отдельную лемму.
+
+    `bucketEffects` перечисляет эффекты через ЧИСЛО БЛОКОВ, а допустимые
+    истории — через перестановки. Утверждается, что это одно и то же
+    множество эффектов. Если лемма не пройдёт, расхождение найдётся
+    максимально локально, а не на четырёхсотой строке доказательства про
+    весь DP. -/
+def BucketEffectExact : Prop :=
+  ∀ (b : List Actor) (carried : Bool) (e : Nat × Bool),
+    e ∈ bucketEffects b carried ↔
+      ∃ l, b.Perm l ∧ countFrom carried l = e.1 ∧ stateAfter carried l = e.2
+
+/-- ПОЛОВИНА, НУЖНАЯ ДЛЯ SOUNDNESS: перечисление НИЧЕГО НЕ ТЕРЯЕТ — эффект
+    любой перестановки в нём есть.
+
+    Разделение не косметическое. Корректность границ требует только этой
+    половины: чтобы ни одна реальная история не выпала из рассмотрения.
+    Резкость требует второй. Доказав первую, мы уже получаем работающий
+    вывод, даже если вторая застрянет. -/
+def BucketEffectComplete : Prop :=
+  ∀ (b : List Actor) (carried : Bool) (l : List Actor), b.Perm l →
+    (countFrom carried l, stateAfter carried l) ∈ bucketEffects b carried
+
+/-- ПОЛОВИНА, НУЖНАЯ ДЛЯ SHARPNESS: перечисление НИЧЕГО НЕ ВЫДУМЫВАЕТ —
+    каждый перечисленный эффект материализуется перестановкой. -/
+def BucketEffectRealizable : Prop :=
+  ∀ (b : List Actor) (carried : Bool) (e : Nat × Bool),
+    e ∈ bucketEffects b carried →
+      ∃ l, b.Perm l ∧ countFrom carried l = e.1 ∧ stateAfter carried l = e.2
+
+/-- КАЖДАЯ реальная история присутствует среди достижимых пар DP.
+    Отсюда `DPBoundsSound` становится следствием, а не подвигом. -/
+def HistoryToReachable : Prop :=
+  ∀ o l, Admissible o l → (countFrom false l, stateAfter false l) ∈ dpReachable o
+
+/-- И обратно: КАЖДАЯ достижимая пара материализуется ЦЕЛОСТНОЙ историей.
+    Отсюда следует `DPBoundsSharp`. -/
+def ReachableToHistory : Prop :=
+  ∀ o e, e ∈ dpReachable o →
+    ∃ l, Admissible o l ∧ countFrom false l = e.1 ∧ stateAfter false l = e.2
+
 end RelationshipFix.Spec

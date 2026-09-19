@@ -59,3 +59,27 @@ import RelationshipFix.Verification.StatementIntegrity
 /-- info: 'RelationshipFix.Challenge.sharp_bounds_exist_abstract' depends on axioms: [sorryAx] -/
 #guard_msgs in
 #print axioms RelationshipFix.Challenge.sharp_bounds_exist_abstract
+
+/-- info: 'RelationshipFix.Challenge.bucket_effect_exact' depends on axioms: [sorryAx] -/
+#guard_msgs in
+#print axioms RelationshipFix.Challenge.bucket_effect_exact
+
+/-- info: 'RelationshipFix.Challenge.bucket_effect_complete' depends on axioms: [sorryAx] -/
+#guard_msgs in
+#print axioms RelationshipFix.Challenge.bucket_effect_complete
+
+/-- info: 'RelationshipFix.Challenge.bucket_effect_realizable' depends on axioms: [sorryAx] -/
+#guard_msgs in
+#print axioms RelationshipFix.Challenge.bucket_effect_realizable
+
+/-- info: 'RelationshipFix.Challenge.history_to_reachable' depends on axioms: [sorryAx] -/
+#guard_msgs in
+#print axioms RelationshipFix.Challenge.history_to_reachable
+
+/-- info: 'RelationshipFix.Challenge.reachable_to_history' depends on axioms: [sorryAx] -/
+#guard_msgs in
+#print axioms RelationshipFix.Challenge.reachable_to_history
+
+/-- info: 'RelationshipFix.Challenge.identified_set_is_contiguous' depends on axioms: [sorryAx] -/
+#guard_msgs in
+#print axioms RelationshipFix.Challenge.identified_set_is_contiguous

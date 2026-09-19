@@ -34,6 +34,28 @@ theorem dp_bounds_sound : Spec.DPBoundsSound := sorry
     обесценивает корректность. -/
 theorem dp_bounds_sharp : Spec.DPBoundsSharp := sorry
 
+/-- ОТКРЫТЫЙ ВОПРОС №3 — локальная точность одной корзины. Самое трудное
+    место плана, вынесено отдельно намеренно: расхождение найдётся локально. -/
+theorem bucket_effect_exact : Spec.BucketEffectExact := sorry
+
+/-- ОТКРЫТЫЙ ВОПРОС №3a — половина, нужная для SOUNDNESS: перечисление
+    ничего не теряет. -/
+theorem bucket_effect_complete : Spec.BucketEffectComplete := sorry
+
+/-- ОТКРЫТЫЙ ВОПРОС №3b — половина, нужная для SHARPNESS: перечисление
+    ничего не выдумывает. -/
+theorem bucket_effect_realizable : Spec.BucketEffectRealizable := sorry
+
+/-- ОТКРЫТЫЙ ВОПРОС №4. Из него следует soundness. -/
+theorem history_to_reachable : Spec.HistoryToReachable := sorry
+
+/-- ОТКРЫТЫЙ ВОПРОС №5. Из него следует sharpness. -/
+theorem reachable_to_history : Spec.ReachableToHistory := sorry
+
+/-- НЕ ЦЕЛЬ сейчас. Достижимость обоих концов не влечёт достижимости всего
+    между ними; заморожено, чтобы разница не подразумевалась молча. -/
+theorem identified_set_is_contiguous : Spec.IdentifiedSetIsContiguous := sorry
+
 /-- Слабая абстрактная лемма. НЕ является целью сертификации: в ней не
     фигурирует ни алгоритм, ни его границы. Оставлена, чтобы разница между
     ней и двумя предыдущими была видна в одном файле. -/

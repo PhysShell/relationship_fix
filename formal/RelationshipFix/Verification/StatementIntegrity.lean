@@ -60,7 +60,19 @@ def openQuestions : List (Name × Name) :=
    (`RelationshipFix.Challenge.dp_bounds_sharp,
     `RelationshipFix.Spec.DPBoundsSharp),
    (`RelationshipFix.Challenge.sharp_bounds_exist_abstract,
-    `RelationshipFix.Spec.SharpBoundsExistAbstract)]
+    `RelationshipFix.Spec.SharpBoundsExistAbstract),
+   (`RelationshipFix.Challenge.bucket_effect_exact,
+    `RelationshipFix.Spec.BucketEffectExact),
+   (`RelationshipFix.Challenge.bucket_effect_complete,
+    `RelationshipFix.Spec.BucketEffectComplete),
+   (`RelationshipFix.Challenge.bucket_effect_realizable,
+    `RelationshipFix.Spec.BucketEffectRealizable),
+   (`RelationshipFix.Challenge.history_to_reachable,
+    `RelationshipFix.Spec.HistoryToReachable),
+   (`RelationshipFix.Challenge.reachable_to_history,
+    `RelationshipFix.Spec.ReachableToHistory),
+   (`RelationshipFix.Challenge.identified_set_is_contiguous,
+    `RelationshipFix.Spec.IdentifiedSetIsContiguous)]
 
 run_cmd do
   let env ← getEnv

@@ -4,7 +4,7 @@
 
 Считает по каждой диаде:
 
-    N     SHARP identified set — слой порядка точен;
+    N     SHARP identified BOUNDS — слой порядка точен (концы, не всё между);
     RMTR  VALID OUTER ENVELOPE — слой времени оболочка, не резкая граница.
 
 Различие терминов существенно и работает НА УСИЛЕНИЕ вывода: если оценка
@@ -84,7 +84,7 @@ def main(argv: list[str]) -> int:
         sink.write("\t".join(COLUMNS) + "\n")
 
     print(f"BOUNDED vs STRICT — {len(names)} admitted dyads", flush=True)
-    print(f"  N: sharp identified set   RMTR: {verdict.RMTR_TERM}", flush=True)
+    print(f"  N: sharp identified bounds   RMTR: {verdict.RMTR_TERM}", flush=True)
 
     rows = {h: [] for h in HORIZONS_SECONDS}
     analysed = 0
@@ -136,7 +136,7 @@ def main(argv: list[str]) -> int:
             if hit.outside:
                 r_out.append(hit.absolute_seconds)
                 r_rel.append(hit.relative_to_width)
-        print(f"  STRICT N outside the SHARP set:      {len(n_out)}/{len(data)}"
+        print(f"  STRICT N outside the SHARP bounds:   {len(n_out)}/{len(data)}"
               f"  ({100 * len(n_out) / max(len(data), 1):.1f}%)")
         print(f"    miss, opportunities: {quantiles(n_out)}")
         print(f"    miss, envelope widths: {quantiles(n_rel)}")
