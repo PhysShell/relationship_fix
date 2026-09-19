@@ -311,11 +311,31 @@ class NetHealthAdmissionTests(unittest.TestCase):
         self.assertIn("-5.00", finding)
         self.assertIn("UTC", finding)
 
-    def test_the_resolution_check_failed_because_it_is_mixed(self):
-        """94.3% записей округлены до секунды. Смешанное разрешение решает Q3."""
+    def test_the_resolution_verdict_was_overturned_by_stratification(self):
+        """Вердикт по выборке («смешанное, Q3 закрыт») был преждевременным.
+        Разрешение — отпечаток пути сбора: iPhone даёт ровные секунды, Android
+        доли секунды. Для primary-канала `SM` оно равномерное."""
         entry = self.admission.check("time.resolution")
-        self.assertIs(entry.verdict, CheckVerdict.FAILED)
-        self.assertIn("94.3", entry.finding)
+        self.assertIs(entry.verdict, CheckVerdict.PASSED)
+        self.assertIn("ПЕРЕСМОТРЕН", entry.finding)
+        self.assertIn("РОВНО НОЛЬ", entry.finding)
+
+    def test_q3_is_answerable_on_the_primary_channel(self):
+        from acquisition import nethealth_rules
+        self.assertTrue(nethealth_rules.RESOLUTION_PRIMARY_IS_UNIFORM_SECONDS)
+
+    def test_the_primary_channel_selects_a_platform_by_construction(self):
+        """`SM` и `iM` бывают только на iPhone. Конфаунд не фильтруется —
+        равномерного по разрешению канала на Android не существует."""
+        entry = self.admission.check("channel.mixing")
+        self.assertIs(entry.verdict, CheckVerdict.PASSED)
+        self.assertIn("ПО ПОСТРОЕНИЮ", entry.finding)
+
+    def test_android_sms_is_a_separate_stratum_never_pooled(self):
+        from acquisition import nethealth_rules as r
+        self.assertEqual(r.channel_role("SMS", "", "0"), "android_sms_stratum")
+        self.assertEqual(r.channel_role("SMS", "SM"), "primary")
+        self.assertNotIn(("SMS", ""), r.CHANNEL_PRIMARY)
 
     def test_direction_comes_from_outgoing_and_not_from_egoid(self):
         """egoid — владелец устройства, а не отправитель. Спутать значит
@@ -367,7 +387,7 @@ class NetHealthAdmissionTests(unittest.TestCase):
         self.assertEqual(self.module.PARTICIPANTS, 587)
 
     def test_the_dangerous_checks_are_documented_as_pending(self):
-        for key in ("coverage.capture_window", "channel.mixing"):
+        for key in ("coverage.capture_window",):
             self.assertIn(key, self.module.PENDING)
             self.assertTrue(self.module.PENDING[key])
             self.assertIs(self.admission.check(key).verdict, CheckVerdict.UNKNOWN)
@@ -381,9 +401,4 @@ class NetHealthAdmissionTests(unittest.TestCase):
         finding = self.admission.check("events.duplicate_semantics").finding
         self.assertIn("[0,5)", finding)
 
-    def test_channel_mixing_is_inside_the_type_not_only_between_types(self):
-        """eventtype='SMS' мешает iMessage и SMS, а iMessage есть только на
-        iPhone — platform confounding внутри «чистого» канала."""
-        note = self.module.PENDING["channel.mixing"]
-        self.assertIn("iM", note)
-        self.assertIn("iPhone", note)
+

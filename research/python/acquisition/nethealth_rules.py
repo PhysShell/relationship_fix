@@ -301,13 +301,22 @@ def primary_identity_regime(surviving_dyads: dict[str, int]) -> str | None:
 #: `eventtype='SMS'` смешивает iMessage и собственно SMS, а iMessage бывает
 #: только на iPhone. Platform confounding сидит ВНУТРИ канала, который
 #: планировался как чистый.
+#: ИЗМЕРЕНО: `SM` и `iM` встречаются ТОЛЬКО при `iphone=1`. У Android нет
+#: iMessage вовсе, и его SMS приезжают с ПУСТЫМ `eventtypedetail`. Значит выбор
+#: `SM` как primary — это по построению ещё и выбор платформы, и отфильтровать
+#: этот конфаунд нельзя: чистого по разрешению канала на Android просто нет.
 CHANNEL_PRIMARY = (("SMS", "SM"),)
 CHANNEL_SENSITIVITY = (("SMS", "iM"), ("WhatsApp", "DM"))
+#: SMS с Android: настоящие SMS, но ДРУГОЕ разрешение (83.11% долей секунды
+#: против ровно нуля у iPhone). Держится отдельной стратой и НИКОГДА не
+#: сливается с primary: слияние вернуло бы смешанное разрешение, ради ухода от
+#: которого страта и выделена.
+CHANNEL_ANDROID_SMS = (("SMS", ""),)
 #: Групповой чат — другая топология, а не шумная диада.
 CHANNEL_EXCLUDED = (("WhatsApp", "GC"),)
 
 
-def channel_role(eventtype: str, detail: str) -> str:
+def channel_role(eventtype: str, detail: str, iphone: str | None = None) -> str:
     key = (eventtype, detail)
     if key in CHANNEL_PRIMARY:
         return "primary"
@@ -315,6 +324,8 @@ def channel_role(eventtype: str, detail: str) -> str:
         return "sensitivity"
     if key in CHANNEL_EXCLUDED:
         return "excluded"
+    if key in CHANNEL_ANDROID_SMS and iphone == "0":
+        return "android_sms_stratum"
     return "unassigned"
 
 
@@ -338,5 +349,25 @@ RESOLUTION_STRATA = ("eventtypedetail", "iphone", "outgoing", "insession")
 #: отправительские SM — почти целиком ровные секунды. Тогда глобальное
 #: «mixed resolution» перестаёт быть свойством источника анализа вовсе.
 RESOLUTION_REPORTS = ("R-recording", "R-analysis")
+
+#: ИТОГ R-recording (полный файл, 60 486 564 строки). Доля записей с ненулевым
+#: остатком миллисекунд:
+#:
+#:     SMS / iM   (iPhone)   46 342 967 строк   0 долей секунды   РОВНО НОЛЬ
+#:     SMS / SM   (iPhone)    3 683 429 строк   0 долей секунды   РОВНО НОЛЬ
+#:     SMS / ""   (Android)   2 693 572 строки  83.59%
+#:     WhatsApp/DM            2 222 545 строк   46.23%
+#:     Call / V               1 388 326 строк   99.54%
+#:
+#: Разрешение оказалось ОТПЕЧАТКОМ ПУТИ СБОРА, а не свойством канала: записи
+#: с iPhone — ровные секунды, записи с Android — доли секунды. Прежний вердикт
+#: «смешанное разрешение, Q3 закрыт» был преждевременным ровно так, как и
+#: предупреждали: 94.3% относились к СТРОКАМ вообще, а не к каналу анализа.
+#:
+#: Для primary-канала `SM` разрешение РОВНОЕ, СЕКУНДНОЕ. Значит Q3 на нём
+#: определим честно на родной секундной шкале при `TiePolicy.STRICT` — то
+#: есть мы наконец меряем цену неоднозначности там, где про Telegram могли
+#: только гадать.
+RESOLUTION_PRIMARY_IS_UNIFORM_SECONDS = True
 RESOLUTION_SIDE_STRATA = ("matched_sender", "matched_receiver",
                           "unmatched_sender", "unmatched_receiver")
