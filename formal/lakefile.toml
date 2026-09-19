@@ -1,0 +1,9 @@
+name = "relationshipfix"
+defaultTargets = ["RelationshipFix"]
+
+# НАМЕРЕННО БЕЗ ЗАВИСИМОСТЕЙ. Mathlib сюда не тянется: ядро должно собираться
+# из одного тулчейна, чтобы «доказано» не зависело от нескольких гигабайт
+# чужого кода и от доступа к сети. Всё, что нужно, — `List.Perm` из core.
+
+[[lean_lib]]
+name = "RelationshipFix"
