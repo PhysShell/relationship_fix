@@ -7,6 +7,7 @@ STRICT не может стать primary, два гейта не сливают
 
 import itertools
 import math
+import pathlib
 import random
 import unittest
 
@@ -474,17 +475,23 @@ class SamplingInferenceTests(unittest.TestCase):
     def test_welch_is_retired_with_a_named_reason(self):
         self.assertTrue(prereg.BONFERRONI_DOES_NOT_PROVE_COMPONENT_VALIDITY)
         self.assertIn("root of a whole-arm", prereg.WELCH_NO_LONGER_APPLIES_BECAUSE)
-        self.assertIn("bootstrap", prereg.SAMPLING_INTERVAL)
+        self.assertIn("outer union", prereg.SAMPLING_INTERVAL)
 
-    def test_the_bootstrap_is_frozen_end_to_end(self):
-        self.assertEqual(len(prereg.SAMPLING_INFERENCE), 5)
-        self.assertIn("no linearisation", prereg.SAMPLING_INFERENCE[1])
-        self.assertTrue(prereg.BOOTSTRAP_RESAMPLES_RANDOMISED_UNITS)
-        self.assertGreater(prereg.BOOTSTRAP_REPLICATES, 0)
+    def test_the_analytic_method_is_frozen_end_to_end(self):
+        self.assertEqual(len(prereg.ANALYTIC_INFERENCE), 5)
+        self.assertIn("envelope theorem", prereg.ANALYTIC_INFERENCE[1])
+        self.assertIn("no differencing", prereg.ANALYTIC_INFERENCE[1])
+        self.assertIn("smaller N", prereg.ARGEXTREMUM_TIE_BREAK)
+        self.assertIn("carry N", prereg.ANALYTIC_REQUIRES_MACHINERY)
+
+    def test_the_jacobian_bound_is_the_same_theorem_a_third_time(self):
+        """Уникальность, фиксированный знаменатель и CLT — одно предусловие."""
+        self.assertTrue(prereg.ANALYTIC_JACOBIAN_IS_BOUNDED_BY_THE_SAME_THEOREM)
+        self.assertTrue(prereg.N_ZERO_IS_ORDER_INVARIANT)
 
     def test_degenerate_replicates_are_counted_not_dropped(self):
-        self.assertTrue(prereg.BOOTSTRAP_DEGENERATE_SHARE_IS_REPORTED)
-        self.assertGreater(prereg.BOOTSTRAP_DEGENERATE_REPLICATE_LIMIT, 0.0)
+        self.assertTrue(prereg.DEGENERATE_SHARE_IS_REPORTED)
+        self.assertGreater(prereg.DEGENERATE_REPLICATE_LIMIT, 0.0)
 
     def test_coverage_is_checked_not_assumed(self):
         """Иначе метод снова выбирается после того, как видно, какой нравится."""
@@ -492,8 +499,8 @@ class SamplingInferenceTests(unittest.TestCase):
         self.assertTrue(prereg.COVERAGE_IS_OF_THE_SET_NOT_OF_A_POINT)
         self.assertIn("⊇", prereg.COVERAGE_TARGET)
         self.assertIn("SAMPLING_METHOD_INVALID", prereg.SAMPLING_METHOD_LADDER[2])
-        self.assertTrue(prereg.NO_SHOPPING_FOR_A_BOOTSTRAP_THAT_COVERS)
-        self.assertIn("SAMPLING_METHOD_INVALID", prereg.STOP_RULES["coverage_failure"])
+        self.assertTrue(prereg.NO_SHOPPING_FOR_A_METHOD_THAT_COVERS)
+        self.assertIn("STOP", prereg.STOP_RULES["coverage_failure"])
 
 
 class EstimandTradeTests(unittest.TestCase):
@@ -751,6 +758,12 @@ class CoverageGateTests(unittest.TestCase):
         self.assertTrue(prereg.METHOD_B_IS_NAMED_IN_ADVANCE)
         self.assertIn("subsampling", prereg.SAMPLING_METHOD_LADDER[1])
         self.assertIn("non-smooth extremal", prereg.WHY_SUBSAMPLING)
+        for field in ("draw", "scaling", "centering", "interval", "seeds",
+                      "degenerate_subsample", "statistic", "subsamples"):
+            self.assertIn(field, prereg.SUBSAMPLING_SPEC)
+        self.assertIn("without replacement", prereg.SUBSAMPLING_SPEC["draw"])
+        self.assertIn("sqrt(m / n)", prereg.SUBSAMPLING_SPEC["scaling"])
+        self.assertTrue(prereg.SUBSAMPLING_RATE_IS_ASSUMED_NOT_ESTIMATED)
         self.assertTrue(prereg.SAMPLING_METHOD_LADDER[2].startswith("STOP"))
 
     def test_each_rung_re_earns_its_certificate(self):
@@ -779,3 +792,110 @@ class CoverageGateTests(unittest.TestCase):
     def test_the_wilson_limit_is_below_the_point_estimate(self):
         for k, n in ((950, 1000), (500, 1000), (990, 1000)):
             self.assertLess(prereg.wilson_lower(k, n), k / n)
+
+
+class NumericalContractTests(unittest.TestCase):
+    """Численная ошибка обязана расширять множество, а не сужать."""
+
+    def test_the_engine_returns_a_bracket_and_rounds_outward(self):
+        from coarsening.bounded import Bracket, generalized_inverse
+        got = generalized_inverse(lambda x: 10.0 - x, 0.0, 100.0)
+        self.assertIsInstance(got, Bracket)
+        self.assertLessEqual(got.low, 10.0)
+        self.assertGreaterEqual(got.high, 10.0)
+
+    def test_shrinking_the_identified_set_is_a_forbidden_reading(self):
+        self.assertIn("численная скобка сузила интервал — зато точнее",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+
+class SimultaneousCoverageTests(unittest.TestCase):
+    """Семь утверждений уровня 95% не составляют одного уровня 95%."""
+
+    def test_the_criterion_is_family_wise(self):
+        self.assertTrue(prereg.COVERAGE_CRITERION_IS_SIMULTANEOUS)
+        self.assertAlmostEqual(prereg.COVERAGE_ALPHA_EACH,
+                               prereg.SIMULTANEOUS_ALPHA / len(prereg.COVERAGE_DGP_SUITE))
+        self.assertGreater(prereg.COVERAGE_Z, 2.4)
+        self.assertIn("покрытие 95% на семи сценариях — это 95%",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_the_replicate_count_follows_from_a_power_rule(self):
+        """R=1000 отвергал бы валидный метод в 69 случаях из 70."""
+        self.assertIn("probability >= 0.95", prereg.GATE_POWER_RULE)
+        self.assertEqual(prereg.COVERAGE_REPLICATES, 4_000)
+        self.assertIn("not by taste", prereg.COVERAGE_REPLICATES_CHOSEN_BY)
+
+    def test_the_gate_actually_passes_a_nominal_method_at_the_chosen_R(self):
+        """Проверка правила, а не веры в него: k* при R и вероятность пройти."""
+        R = prereg.COVERAGE_REPLICATES
+        kstar = next(k for k in range(R + 1) if prereg.coverage_is_accepted(k, R))
+        self.assertLessEqual(kstar / R, 0.95,
+                             "порог выше номинального: валидный метод не пройдёт")
+
+    def test_the_worst_scenario_decides_not_the_average(self):
+        self.assertTrue(prereg.WORST_SCENARIO_DECIDES)
+        good, bad = (3980, 4000), (3600, 4000)
+        self.assertTrue(prereg.suite_is_accepted([good, good]))
+        self.assertFalse(prereg.suite_is_accepted([good, bad]))
+        self.assertFalse(prereg.suite_is_accepted([]))
+
+
+class ComputeBudgetTests(unittest.TestCase):
+    """Метод, покрытие которого нельзя проверить, не используется."""
+
+    def test_the_ladder_is_ordered_by_a_measured_budget(self):
+        self.assertTrue(prereg.BUDGET_DECIDES_THE_LADDER_ORDER)
+        self.assertGreater(prereg.MEASURED_MS_PER_PERIOD_RECOMPUTE, 0.0)
+        self.assertIn("analytic", prereg.SAMPLING_METHOD_LADDER[0])
+        self.assertIn("OVER BUDGET", prereg.SAMPLING_METHOD_LADDER[1])
+
+    def test_the_n_out_of_n_bootstrap_is_dropped_for_two_reasons(self):
+        self.assertIn("known failure case", prereg.N_OUT_OF_N_BOOTSTRAP_IS_DROPPED)
+        self.assertIn("unvalidatable", prereg.N_OUT_OF_N_BOOTSTRAP_IS_DROPPED)
+
+    def test_an_unvalidatable_fallback_is_never_used(self):
+        self.assertIn("never used", prereg.IF_METHOD_A_FAILS)
+        self.assertIn("DESIGN changes", prereg.IF_METHOD_A_FAILS)
+        self.assertIn("НЕ используется", prereg.STOP_RULES["unvalidatable_method"])
+
+    def test_the_budget_arithmetic_reproduces(self):
+        """Числа в prereg должны СЛЕДОВАТЬ из замера, а не стоять рядом с ним.
+
+        Сценарии идут на крайних точках лестницы диад (25 и 400), поэтому
+        стоимость усредняется по ним — как и при выборе порядка лестницы.
+        """
+        ms = prereg.MEASURED_MS_PER_PERIOD_RECOMPUTE
+        arms, boot, R = 2, 2_000, prereg.COVERAGE_REPLICATES
+        scenarios = len(prereg.COVERAGE_DGP_SUITE)
+        recompute = lambda n: ms * n / 1000.0
+
+        boot_days = (sum(recompute(n) * boot * arms for n in (25, 400)) / 2
+                     * R * scenarios / 86_400)
+        self.assertGreater(boot_days, 100, "бутстрап обязан выходить за бюджет")
+
+        analytic_hours = (sum(recompute(n) * arms * 2 for n in (25, 400)) / 2
+                          * R * scenarios / 3_600)
+        self.assertLess(analytic_hours, prereg.COVERAGE_GATE_COMPUTE_BUDGET_HOURS)
+
+
+class DiversionProtocolTests(unittest.TestCase):
+    """Протокол, проверяющий гейты, сам нуждался в гейте."""
+
+    def test_the_protocol_is_executable_and_isolated(self):
+        self.assertTrue(prereg.DIVERSION_PROTOCOL_REQUIRES_BYTECODE_ISOLATION)
+        path = pathlib.Path(prereg.DIVERSION_PROTOCOL_IS_EXECUTABLE)
+        self.assertTrue((pathlib.Path(__file__).resolve().parents[3] / path).exists())
+
+    def test_every_declared_diversion_has_a_unique_anchor(self):
+        """Иначе протокол падает на якоре, а не на гейте."""
+        from tools import diversion
+        root = pathlib.Path(diversion.__file__).resolve().parent.parent
+        for name, rel, old, _new, _mods in diversion.DIVERSIONS:
+            self.assertEqual((root / rel).read_text().count(old), 1, name)
+
+    def test_the_declared_diversions_cover_the_new_gates(self):
+        from tools import diversion
+        names = " ".join(d[0] for d in diversion.DIVERSIONS)
+        for gate in ("наружу", "плато", "отказ", "поправка", "реплик", "отсечка"):
+            self.assertIn(gate, names)

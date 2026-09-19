@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from statistics import NormalDist
 from enum import Enum
 
 # ---------------------------------------------------------------------------
@@ -361,52 +362,147 @@ CONTRAST_BOUNDS = "[λ⁻T − λ⁺K, λ⁺T − λ⁻K]"
 WELCH_NO_LONGER_APPLIES_BECAUSE = ("the endpoint is a root of a whole-arm "
                                    "optimisation, not a mean of per-unit values")
 
-#: ЗАМОРОЖЕННЫЙ ИНФЕРЕНС. λ̂⁻ решает (1/n)Σ min(B_i − λN_i) = 0 — это
-#: Z-оценка с монотонной по λ оценивающей функцией, и непараметрический
-#: бутстрап по единицам рандомизации для неё стандартен. Пересчёт ПОЛНЫЙ:
-#: никакой линеаризации, потому что дешёвая линеаризация здесь была бы ещё
-#: одним незаявленным решением.
-SAMPLING_INFERENCE = (
-    "resample randomized units within each arm",
-    "recompute arm_ratio_bounds completely — no linearisation",
-    "recompute both contrast endpoints",
-    "percentile interval per endpoint",
-    "outer union of the two",
-)
-BOOTSTRAP_REPLICATES = 2_000
-BOOTSTRAP_INTERVAL = "percentile at CONFIDENCE_LEVEL"
-BOOTSTRAP_RESAMPLES_RANDOMISED_UNITS = True
+#: ЗАМОРОЖЕННЫЙ ИНФЕРЕНС, ПЕРЕПИСАННЫЙ ПОСЛЕ ХРОНОМЕТРАЖА. Прошлая редакция
+#: объявляла непараметрический бутстрап с ПОЛНЫМ пересчётом границ. Метод
+#: правильный по духу и НЕИСПОЛНИМЫЙ по бюджету, и выяснилось это не рассуж-
+#: дением, а замером: 27.7 мс на пересчёт руки из 25 периодов, линейно по
+#: числу периодов. Отсюда арифметика объявленного исследования покрытия:
+#:
+#:     bootstrap n-из-n        305 СУТОК
+#:     субсэмплинг m=n^0.6      32 СУТОК
+#:     аналитический сэндвич     7.3 часа
+#:
+#: при бюджете гейта 24 часа. То есть заморозить бутстрап и потребовать
+#: проверки его покрытия значило бы заморозить процедуру, которую нельзя
+#: провалидировать — ровно то, против чего вводился сам гейт покрытия.
+MEASURED_MS_PER_PERIOD_RECOMPUTE = 27.7 / 25
+COVERAGE_GATE_COMPUTE_BUDGET_HOURS = 24.0
+BUDGET_DECIDES_THE_LADDER_ORDER = True
 
-#: ЧТО ИМЕННО ПЕРЕСЕМПЛИРУЕТСЯ — поправка четвёртого чтения, и она про две
-#: РАЗНЫЕ причины выбора единицы, которые здесь случайно совпали.
+#: И ПРОТОКОЛ ПРОВЕРКИ ГЕЙТОВ САМ ПОТРЕБОВАЛ ГЕЙТА. Диверсия «SIMULTANEOUS_
+#: ALPHA / 7 -> / 2» не меняет размер файла, а восстановление уложилось в ту
+#: же секунду; Python признаёт `.pyc` свежим по паре (mtime до секунды,
+#: размер) — и набор «падал» на уже исправленном коде. Здесь направление было
+#: безобидным, ложное падение. Обратное столь же возможно: диверсия жива, а
+#: набор зелёный на байт-коде ДО неё.
+#:
+#: Тот же класс, что протухший `.olean` в `formal/scripts/audit.sh`. Изоляция
+#: теперь структурная (`-B` плюс снос кэшей), и протокол исполняем:
+#: `tools/diversion.py`. На первом же запуске он нашёл дыру — разворот
+#: округления в ПОЯЧЕЕЧНЫХ границах проходил незамеченным, потому что
+#: контейнмент-тесты покрывали только арм-уровень.
+DIVERSION_PROTOCOL_REQUIRES_BYTECODE_ISOLATION = True
+DIVERSION_PROTOCOL_IS_EXECUTABLE = "research/python/tools/diversion.py"
+
+#: МЕТОД A — АНАЛИТИЧЕСКИЙ САНДВИЧ. λ̂ решает (1/n)Σ ψ_i(λ) = 0, где
+#: ψ_i(λ) = extremum по допустимым историям (B_i − λN_i). Это Z-оценка, и
+#: якобиан у неё берётся ТОЧНО, теоремой об огибающей:
+#:
+#:     d/dλ ψ_i = −N_i*     (N оптимизирующей истории)
+#:
+#: а не численным дифференцированием, которое на кусочно-линейной функции с
+#: изломами дало бы шум вместо производной.
+#:
+#: И ЗДЕСЬ ТА ЖЕ ТЕОРЕМА ПЛАТИТ ТРЕТИЙ РАЗ. Невырожденность якобиана —
+#: условие, без которого Z-оценка не имеет нормального предела. У нас
+#: |d/dλ E ψ| >= 1 ровно потому, что непустой период имеет N >= 1 при каждой
+#: истории. Одно предусловие дало уникальность корня, фиксированный
+#: знаменатель и теперь CLT.
+ANALYTIC_INFERENCE = (
+    "λ̂ solves the sample estimating equation; bracket from generalized_inverse",
+    "Jacobian by the envelope theorem: mean of N* over units — no differencing",
+    "se = sd(ψ_i(λ̂)) / (sqrt(n) * |mean N*|)",
+    "two-sided normal interval per endpoint at CONFIDENCE_LEVEL",
+    "outer union of the two endpoints",
+)
+#: Ничьи в аргэкстремуме разрешаются в сторону МЕНЬШЕГО N: меньший якобиан
+#: даёт БОЛЬШУЮ стандартную ошибку. Наружу, как и округление скобки.
+ARGEXTREMUM_TIE_BREAK = "the smaller N — a smaller Jacobian widens the interval"
+#: Требуемая машинерия, и она объявлена как задача S5a-RATIO, а не как
+#: «как-нибудь возьмём производную».
+ANALYTIC_REQUIRES_MACHINERY = "the DP must carry N of the optimising history"
+ANALYTIC_JACOBIAN_IS_BOUNDED_BY_THE_SAME_THEOREM = True
+
+#: ЧТО СЧИТАЕТСЯ НЕЗАВИСИМОЙ ЕДИНИЦЕЙ — условие ОБОИХ методов, а не только
+#: ресэмплинга: аналитический сандвич тоже считает ψ_i независимыми. И это
+#: про две РАЗНЫЕ причины выбора единицы, которые здесь случайно совпали.
 #:
 #:     единица рандомизации      — чей жребий бросается
-#:     независимый кластер       — что можно пересемплировать, не разрушив
+#:     независимый кластер       — что можно пересемплировать (или считать
+#:                                 независимым слагаемым), не разрушив
 #:                                 зависимость внутри
 #:
 #: «One vote per person-period, matching the unit of randomisation» из
 #: `estimands.py` — довод ПЕРВОГО рода (взвешивание). Механически перенести
-#: его в бутстрап было бы подменой второго рода первым, и особенно смешно
-#: было бы сделать это сразу после разговора о том, чем они различаются.
+#: его во второй было бы подменой, и особенно смешно сразу после разговора о
+#: том, чем они различаются.
 #:
 #: Сегодня вопрос снимается фактом дизайна: `recovery.run_arm` строит РОВНО
 #: ОДИН person-period на пару. Диада = единица рандомизации = независимый
-#: кластер = единица пересемплирования. Совпадение, а не следствие.
+#: кластер. Совпадение, а не следствие.
 RANDOMISATION_UNIT = "dyad"
 INDEPENDENT_SAMPLING_CLUSTER = "dyad"
 RESAMPLING_UNIT_COINCIDES_BECAUSE = ("the design yields exactly one person-period "
                                      "per dyad — see recovery.run_arm")
 #: И растяжка на тот день, когда перестанет. Несколько периодов на человека
-#: делают их зависимыми, и поячеечный бутстрап эту зависимость уничтожает.
-IF_A_DYAD_EVER_YIELDS_SEVERAL_PERIODS = ("the unit bootstrap becomes invalid; "
-                                         "cluster bootstrap by dyad is required "
-                                         "and the run STOPS until it is in place")
+#: делают их зависимыми, и поячеечная независимость рушится в обоих методах.
+IF_A_DYAD_EVER_YIELDS_SEVERAL_PERIODS = ("independence across units fails; the "
+                                         "cluster version is required and the "
+                                         "run STOPS until it is in place")
 MULTI_PERIOD_PER_UNIT_IS_A_TRIPWIRE = True
-#: Реплика, в которой ΣN = 0 во всей руке, эстиманда не имеет. Она НЕ
-#: выбрасывается молча: доля таких реплик отчётна, и если она превышает
-#: долю ниже, интервал не строится, а ячейка идёт в BOTH_AMBIGUOUS.
-BOOTSTRAP_DEGENERATE_REPLICATE_LIMIT = 0.01
-BOOTSTRAP_DEGENERATE_SHARE_IS_REPORTED = True
+
+#: МЕТОД B — СУБСЭМПЛИНГ, И ЭТО МЕТОД, А НЕ РАЗМЕР ПОДВЫБОРКИ. Прошлая
+#: редакция писала «B = subsampling, m = ceil(n**0.6)» и останавливалась —
+#: то есть называла одну константу и считала процедуру заданной. Формула для
+#: m сама по себе не превращает негладкий функционал в валидную процедуру;
+#: содержательная часть там центрирование и МАСШТАБИРОВАНИЕ.
+SUBSAMPLING_SPEC: dict[str, str] = {
+    "draw": "without replacement — this is subsampling, not a bootstrap",
+    "subsample_size": "m = ceil(n ** 0.6)",
+    "subsamples": "2000, drawn uniformly from the C(n, m) subsets",
+    "statistic": "the endpoint, recomputed from scratch — no linearisation",
+    "centering": "on the full-sample endpoint λ̂_n",
+    "scaling": "sqrt(m / n); the sqrt-n rate is ASSUMED, never estimated",
+    "interval": "percentile of sqrt(m)(λ̂_m − λ̂_n), inverted around λ̂_n",
+    "degenerate_subsample": "ΣN = 0 -> discarded and redrawn, capped; share reported",
+    "seeds": "one declared root seed per scenario, recorded",
+}
+SUBSAMPLING_RATE_IS_ASSUMED_NOT_ESTIMATED = True
+#: Оценивать скорость сходимости — ТРЕТЬЯ попытка, а её нет.
+IF_THE_ASSUMED_RATE_IS_WRONG = "the coverage gate fails and the ladder ends at STOP"
+
+#: ЛЕСТНИЦА, УПОРЯДОЧЕННАЯ ПО ИЗМЕРЕННОМУ БЮДЖЕТУ, а не по вкусу.
+SAMPLING_METHOD_LADDER: tuple[str, ...] = (
+    "A: analytic sandwich (envelope-theorem Jacobian) — coverage study 7.3 h",
+    "B: subsampling per SUBSAMPLING_SPEC — coverage study 32 days, OVER BUDGET",
+    "STOP: SAMPLING_METHOD_INVALID",
+)
+METHOD_B_IS_NAMED_IN_ADVANCE = True
+#: n-из-n бутстрап ВЫБРОШЕН, и по двум причинам сразу: это известный случай
+#: отказа для негладких экстремальных функционалов, И его покрытие нельзя
+#: проверить (305 суток). Метод, который нельзя провалидировать, не лучше
+#: метода, который не работает: разница только в том, когда мы узнаем.
+N_OUT_OF_N_BOOTSTRAP_IS_DROPPED = ("known failure case for non-smooth extremal "
+                                   "functionals AND unvalidatable at this budget")
+WHY_SUBSAMPLING = ("the endpoint is a non-smooth extremal functional — the known "
+                   "failure case for the n-out-of-n bootstrap")
+
+#: И ЧЕСТНОЕ СЛЕДСТВИЕ, которое хочется не писать. Ступень B за бюджет не
+#: влезает, значит при провале A лестница фактически кончается на STOP:
+#: неподтверждённый запасной метод в ход не идёт. Тогда меняется ДИЗАЙН —
+#: быстрее движок, меньше сценариев, другой эстиманд, — и это новая поправка
+#: к prereg, а не решение runner'а в три часа ночи.
+IF_METHOD_A_FAILS = ("B does not fit the budget, so the ladder ends at STOP and "
+                     "the DESIGN changes by amendment — an unvalidated fallback "
+                     "is never used")
+NO_THIRD_ATTEMPT = True
+EACH_RUNG_REPEATS_S5A_RATIO_IN_FULL = True
+SAMPLING_METHOD_INVALID = "SAMPLING_METHOD_INVALID"
+NO_SHOPPING_FOR_A_METHOD_THAT_COVERS = True
+
+#: Вырожденные реплики/подвыборки не выбрасываются молча ни в одном методе.
+DEGENERATE_REPLICATE_LIMIT = 0.01
+DEGENERATE_SHARE_IS_REPORTED = True
 
 #: РЕШАЮЩАЯ ОБОЛОЧКА — по-прежнему внешнее объединение:
 #:
@@ -415,7 +511,7 @@ BOOTSTRAP_DEGENERATE_SHARE_IS_REPORTED = True
 #: Бонферрони: каждый удерживаемый ОДНОСТОРОННИЙ предел несёт 97.5%,
 #: совместное покрытие обоих нужных концов не хуже 95% — ПРИ УСЛОВИИ, что
 #: компонентные интервалы валидны. Это условие и проверяется ниже.
-SAMPLING_INTERVAL = "separate two-sided bootstrap CI per endpoint, then outer union"
+SAMPLING_INTERVAL = "separate two-sided CI per endpoint, then outer union"
 SAMPLING_INTERVAL_IS_CONSERVATIVE = True
 SAMPLING_ENVELOPE_COVERAGE = ("each retained one-sided limit carries 97.5%; "
                               "Bonferroni gives >= 95% jointly IF the "
@@ -451,24 +547,50 @@ COVERAGE_IS_NOT_CHECKED_ONLY_WHERE_IT_IS_EASY = True
 #: центре — тот самый приём, которым power-таблицы и живут.
 WORST_SCENARIO_DECIDES = True
 
-#: ПОПРАВКА №2: приёмка учитывает монте-карловскую ошибку самой оценки
-#: покрытия. «coverage >= 0.95» на 1000 репликах — это утверждение с
-#: собственным доверительным интервалом, и делать вид, что его нет, значит
-#: повторять ту же ошибку этажом ниже.
-COVERAGE_REPLICATES = 1_000
-COVERAGE_SEEDS = "derived from one declared root seed per scenario, recorded"
+#: ПОПРАВКА №2: приёмка ОДНОВРЕМЕННА ПО ВСЕЙ СУИТЕ. Семь утверждений уровня
+#: 95% не составляют одного утверждения уровня 95%:
+#:
+#:     P(каждая из семи границ верна)  <  0.95  без поправки
+#:
+#: Поправка скучная и прозрачная — Бонферрони. Скучные методы иногда
+#: великолепны именно тем, что не пытаются стать следующей диссертацией.
+SIMULTANEOUS_ALPHA = 0.05
+COVERAGE_ALPHA_EACH = SIMULTANEOUS_ALPHA / 7          # = len(COVERAGE_DGP_SUITE)
+COVERAGE_Z = NormalDist().inv_cdf(1.0 - COVERAGE_ALPHA_EACH)   # ≈ 2.45
+COVERAGE_CRITERION_IS_SIMULTANEOUS = True
+
+#: И РЕШАЕТ ХУДШИЙ сценарий. Среднее по суите позволило бы утопить край в
+#: центре — приём, которым power-таблицы и живут.
+WORST_SCENARIO_DECIDES = True
 COVERAGE_ACCEPTANCE_FLOOR = 0.93
-COVERAGE_ACCEPTANCE = ("the Wilson LOWER limit of measured coverage must be "
+COVERAGE_ACCEPTANCE = ("the Wilson LOWER limit at COVERAGE_ALPHA_EACH must be "
                        ">= COVERAGE_ACCEPTANCE_FLOOR in EVERY scenario")
 COVERAGE_ACCEPTANCE_ACCOUNTS_FOR_MC_ERROR = True
 
+#: ЧИСЛО РЕПЛИК ВЫБРАНО ПРАВИЛОМ, А НЕ ВКУСОМ, и это прямое следствие
+#: одновременности. После ужесточения z с 1.96 до 2.45 прежние 1000 реплик
+#: стали отвергать ВАЛИДНЫЙ метод:
+#:
+#:     R      одна ячейка при p=0.95     все семь
+#:     1000        0.538                   0.013
+#:     2000        0.899                   0.473
+#:     4000        0.998                   0.986
+#:
+#: То есть при R = 1000 метод с истинным покрытием РОВНО номинальным прошёл
+#: бы суиту в одном случае из семидесяти. Гейт, отвергающий правильный
+#: ответ, не строг — он сломан, просто в другую сторону.
+GATE_POWER_RULE = ("a method whose true coverage is exactly nominal must pass "
+                   "ALL scenarios with probability >= 0.95")
+COVERAGE_REPLICATES = 4_000
+COVERAGE_REPLICATES_CHOSEN_BY = "GATE_POWER_RULE, not by taste"
+COVERAGE_SEEDS = "derived from one declared root seed per scenario, recorded"
 
-def wilson_lower(successes: int, trials: int,
-                 z: float = 1.959963984540054) -> float:
+
+def wilson_lower(successes: int, trials: int, z: float = COVERAGE_Z) -> float:
     """Нижний предел Уилсона. Чистая функция — правило приёмки ИСПОЛНЯЕМО.
 
     Урок поправки III-6: правило, записанное прозой, runner дочитает
-    по-своему. Здесь читать нечего.
+    по-своему. Здесь читать нечего. `z` по умолчанию УЖЕ семейный.
     """
     if trials <= 0:
         return 0.0
@@ -480,34 +602,16 @@ def wilson_lower(successes: int, trials: int,
 
 
 def coverage_is_accepted(successes: int, trials: int) -> bool:
-    """Приёмка одного сценария суиты."""
+    """Приёмка ОДНОГО сценария суиты — на семейном уровне."""
     return wilson_lower(successes, trials) >= COVERAGE_ACCEPTANCE_FLOOR
 
 
-#: ПОПРАВКА №3: ЧТО ДЕЛАТЬ ПРИ ПРОВАЛЕ — заморожено ЗАРАНЕЕ. Прежнее слово
-#: «поправка» оставляло prereg ровно в том месте, где становится интересно:
-#: «не прошло -> придумаем, как поправить» это не preregistration, а
-#: обещание подумать.
-#:
-#: Method B назван заранее и НЕ ПРОИЗВОЛЕН: конец — негладкий экстремальный
-#: функционал, а это известный класс, где n-из-n бутстрап отказывает, и
-#: стандартное лекарство — субсэмплинг (Politis-Romano). Выбор из литературы,
-#: а не из вкуса.
-SAMPLING_METHOD_LADDER: tuple[str, ...] = (
-    "A: bootstrap over independent clusters + full bound recomputation",
-    "B: subsampling m out of n, m = ceil(n ** 0.6), full recomputation",
-    "STOP: SAMPLING_METHOD_INVALID",
-)
-METHOD_B_IS_NAMED_IN_ADVANCE = True
-WHY_SUBSAMPLING = ("the endpoint is a non-smooth extremal functional — the known "
-                   "failure case for the n-out-of-n bootstrap")
-#: Каждая ступень проходит S5a-RATIO ЦЕЛИКОМ заново. Иначе «B» унаследует
-#: сертификат «A» — та же болезнь, что вылечена в §4b, этажом ниже.
-EACH_RUNG_REPEATS_S5A_RATIO_IN_FULL = True
-#: Третьей попытки нет. Иначе лестница превращается в перебор до успеха.
-NO_THIRD_ATTEMPT = True
-SAMPLING_METHOD_INVALID = "SAMPLING_METHOD_INVALID"
-NO_SHOPPING_FOR_A_BOOTSTRAP_THAT_COVERS = True
+def suite_is_accepted(outcomes) -> bool:
+    """Приёмка всей суиты: решает худший сценарий, а не среднее."""
+    outcomes = list(outcomes)
+    return bool(outcomes) and all(coverage_is_accepted(k, n) for k, n in outcomes)
+
+#: Лестница методов и их бюджет объявлены выше, в §4 инференса.
 
 
 class Gate(Enum):
@@ -1093,10 +1197,14 @@ STOP_RULES: dict[str, str] = {
         "прошёл S5a-RATIO на том же замороженном DGP: сертификат от другого "
         "эстиманда не наследуется",
     "coverage_failure":
-        "если нижний предел Уилсона измеренного покрытия падает ниже пола "
-        "ХОТЯ БЫ В ОДНОМ сценарии суиты, метод переходит на следующую "
-        "ступень SAMPLING_METHOD_LADDER и ЗАНОВО проходит S5a-RATIO целиком; "
-        "после ступени B третьей попытки нет — SAMPLING_METHOD_INVALID",
+        "если семейный нижний предел Уилсона падает ниже пола ХОТЯ БЫ В ОДНОМ "
+        "сценарии суиты, метод переходит на следующую ступень и ЗАНОВО "
+        "проходит S5a-RATIO целиком; ступень B за бюджет не влезает, поэтому "
+        "при провале A лестница кончается на STOP и меняется ДИЗАЙН",
+    "unvalidatable_method":
+        "метод, покрытие которого нельзя проверить в пределах бюджета, НЕ "
+        "используется: неподтверждённый запасной вариант не лучше заведомо "
+        "негодного, разница только в том, когда мы узнаем",
     "multi_period_unit":
         "если диада когда-нибудь даст больше одного person-period, поячеечный "
         "бутстрап становится невалидным: нужен кластерный, и до него прогон "
@@ -1134,6 +1242,9 @@ FORBIDDEN_INTERPRETATIONS: tuple[str, ...] = (
     "монотонность g даёт единственный корень",
     "покрытие проверено — в опорной ячейке",
     "бутстрап валиден, потому что это бутстрап",
+    "метод валидирован, потому что он стандартный",
+    "численная скобка сузила интервал — зато точнее",
+    "покрытие 95% на семи сценариях — это 95%",
 )
 
 #: Q4 СУЖЕН. Вопрос обещал «разрешение И contract покрытия», но оси покрытия

@@ -21,10 +21,11 @@ import random
 import unittest
 
 from coarsening.bounded import (
-    Bin, Definedness, Identified, Interval, RATIO_TOLERANCE_SECONDS,
-    _count, _optimise, arm_ratio_bounds, burden_bounds, count_bounds,
-    definedness, dinkelbach_slope_bound, generalized_inverse, identified,
-    moves, patterns, ratio_bounds, to_bins)
+    Bin, Bracket, Definedness, Identified, Interval, NoCrossing,
+    RATIO_TOLERANCE_SECONDS, _count, _optimise, arm_ratio_bounds,
+    burden_bounds, count_bounds, definedness, dinkelbach_slope_bound,
+    generalized_inverse, identified, moves, patterns, ratio_bounds,
+    to_bins)
 from coarsening.paired import Stream, apply_operator, opportunities, order, rmtr
 from coarsening.prereg import coarsen
 
@@ -691,8 +692,18 @@ class GeneralizedInverseTests(unittest.TestCase):
     враждебным чтением, и проверяется независимо от движка."""
 
     def test_a_strictly_decreasing_function_gives_its_root(self):
-        root = generalized_inverse(lambda x: 10.0 - x, 0.0, 100.0)
-        self.assertAlmostEqual(root, 10.0, delta=RATIO_TOLERANCE_SECONDS)
+        got = generalized_inverse(lambda x: 10.0 - x, 0.0, 100.0)
+        self.assertLessEqual(got.low, 10.0)
+        self.assertGreaterEqual(got.high, 10.0)
+        self.assertLessEqual(got.width, RATIO_TOLERANCE_SECONDS)
+
+    def test_the_bracket_always_straddles_the_true_value(self):
+        """Контракт: low <= λ* <= high при любом бюджете итераций."""
+        for iterations in (5, 10, 20, 60):
+            got = generalized_inverse(lambda x: 10.0 - x, 0.0, 100.0,
+                                      iterations=iterations)
+            self.assertLessEqual(got.low, 10.0, iterations)
+            self.assertGreaterEqual(got.high, 10.0, iterations)
 
     def test_a_flat_zero_interval_gives_its_LEFT_edge(self):
         """Вот он, случай, ради которого всё переписано: обычная дихотомия
@@ -704,27 +715,37 @@ class GeneralizedInverseTests(unittest.TestCase):
                 return 0.0
             return -1.0
 
-        root = generalized_inverse(g, 0.0, 100.0)
-        self.assertAlmostEqual(root, 3.0, delta=RATIO_TOLERANCE_SECONDS)
+        got = generalized_inverse(g, 0.0, 100.0)
+        self.assertLessEqual(got.low, 3.0)
+        self.assertGreaterEqual(got.high, 3.0)
+        self.assertLess(got.high, 7.0, "ушли на ПРАВЫЙ край плато")
 
     def test_the_left_edge_does_not_depend_on_the_iteration_budget(self):
         """Детерминизм должен быть свойством ОПРЕДЕЛЕНИЯ, а не бюджета."""
         def g(x):
             return 1.0 if x < 3.0 else (0.0 if x <= 7.0 else -1.0)
 
-        roots = {round(generalized_inverse(g, 0.0, 100.0, iterations=n), 6)
-                 for n in (20, 40, 60, 200)}
-        self.assertEqual(len(roots), 1, roots)
+        for n in (20, 40, 60, 200):
+            got = generalized_inverse(g, 0.0, 100.0, iterations=n)
+            self.assertLessEqual(got.low, 3.0, n)
+            self.assertLess(got.high, 7.0, n)
 
-    def test_non_positive_everywhere_gives_the_left_bracket(self):
-        self.assertEqual(generalized_inverse(lambda x: -1.0, 2.0, 100.0), 2.0)
+    def test_non_positive_everywhere_gives_a_degenerate_bracket_at_the_left(self):
+        got = generalized_inverse(lambda x: -1.0, 2.0, 100.0)
+        self.assertEqual((got.low, got.high), (2.0, 2.0))
 
-    def test_positive_everywhere_gives_the_right_bracket(self):
-        self.assertAlmostEqual(generalized_inverse(lambda x: 1.0, 0.0, 50.0),
-                               50.0, delta=RATIO_TOLERANCE_SECONDS)
+    def test_no_crossing_inside_the_bracket_is_an_explicit_refusal(self):
+        """Дихотомия не обязана героически искать корень, которого нет."""
+        with self.assertRaises(NoCrossing):
+            generalized_inverse(lambda x: 1.0, 0.0, 50.0)
 
-    def test_a_none_anywhere_propagates_as_nan(self):
-        self.assertTrue(math.isnan(generalized_inverse(lambda x: None, 0.0, 1.0)))
+    def test_a_none_or_nan_anywhere_is_an_explicit_refusal(self):
+        with self.assertRaises(NoCrossing):
+            generalized_inverse(lambda x: None, 0.0, 1.0)
+        with self.assertRaises(NoCrossing):
+            generalized_inverse(lambda x: math.nan, 0.0, 1.0)
+        with self.assertRaises(NoCrossing):
+            generalized_inverse(lambda x: math.inf, 0.0, 1.0)
 
 
 class RootUniquenessTests(unittest.TestCase):
@@ -791,3 +812,90 @@ class RootUniquenessTests(unittest.TestCase):
             counts = count_bounds(bins, horizon=300.0, window_end=10 * DELTA)
             if counts.low == 0.0:
                 self.assertEqual(counts.high, 0.0, bins)
+
+
+class NumericalConservativenessTests(unittest.TestCase):
+    """Численная ошибка обязана РАСШИРЯТЬ идентифицированное множество.
+
+    Иначе компьютер ради красивой цифры выбросит допустимые значения — а это
+    ровно то, чего частичная идентификация не делает по определению."""
+
+    #: НЕ подмена модульной константы: она в сигнатуре разрешалась при
+    #: импорте, и «высокоточный» прогон был грубым. Точность передаётся явно.
+    def _high_precision(self, periods, **kw):
+        return arm_ratio_bounds(periods, tolerance=1e-7, **kw)
+
+    def test_the_precision_knob_actually_changes_the_answer(self):
+        """Иначе весь этот класс тестов сравнивает грубое само с собой."""
+        rng = random.Random(606)
+        periods = [random_bins(rng, 2) for _ in range(3)]
+        kw = dict(horizon=300.0, window_end=10 * DELTA, time_layer=False)
+        coarse = arm_ratio_bounds(periods, tolerance=5.0, **kw)
+        fine = arm_ratio_bounds(periods, tolerance=1e-7, **kw)
+        self.assertNotEqual((coarse.low, coarse.high), (fine.low, fine.high))
+        self.assertGreater((coarse.high - coarse.low) - (fine.high - fine.low), 1.0)
+
+    def test_the_reported_set_contains_the_high_precision_set(self):
+        rng = random.Random(404)
+        horizon, window = 300.0, 10 * DELTA
+        checked = 0
+        for _ in range(120):
+            periods = [random_bins(rng, rng.randint(1, 2))
+                       for _ in range(rng.randint(1, 3))]
+            kw = dict(horizon=horizon, window_end=window, time_layer=False)
+            coarse = arm_ratio_bounds(periods, **kw)
+            if coarse is None:
+                continue
+            fine = self._high_precision(periods, **kw)
+            checked += 1
+            self.assertLessEqual(coarse.low, fine.low + 1e-9, periods)
+            self.assertGreaterEqual(coarse.high, fine.high - 1e-9, periods)
+        self.assertGreater(checked, 80)
+
+    def test_a_smaller_iteration_budget_never_shrinks_the_set(self):
+        """Бюджет итераций меняет ШИРИНУ, но не может отрезать допустимое."""
+        rng = random.Random(505)
+        periods = [random_bins(rng, 2) for _ in range(3)]
+        kw = dict(horizon=300.0, window_end=10 * DELTA, time_layer=False)
+        fine = self._high_precision(periods, **kw)
+        for tolerance in (5.0, 1.0, 0.05):
+            coarse = arm_ratio_bounds(periods, tolerance=tolerance, **kw)
+            self.assertLessEqual(coarse.low, fine.low + 1e-9, tolerance)
+            self.assertGreaterEqual(coarse.high, fine.high - 1e-9, tolerance)
+
+    def test_per_period_bounds_round_outward_too(self):
+        """Найдено `tools/diversion.py` на первом запуске: контейнмент-тесты
+        покрывали только арм-уровень, и разворот округления в поячеечных
+        границах проходил незамеченным. Q1c считался именно ими."""
+        rng = random.Random(707)
+        horizon, window = 300.0, 10 * DELTA
+        checked = 0
+        for _ in range(150):
+            bins = random_bins(rng, rng.randint(1, 3))
+            kw = dict(horizon=horizon, window_end=window, time_layer=False)
+            coarse = ratio_bounds(bins, tolerance=5.0, **kw)
+            if coarse is None:
+                continue
+            fine = ratio_bounds(bins, tolerance=1e-7, **kw)
+            checked += 1
+            self.assertLessEqual(coarse.low, fine.low + 1e-9, bins)
+            self.assertGreaterEqual(coarse.high, fine.high - 1e-9, bins)
+        self.assertGreater(checked, 80)
+
+    def test_the_per_period_precision_knob_actually_bites(self):
+        rng = random.Random(808)
+        for _ in range(60):
+            bins = random_bins(rng, 2)
+            kw = dict(horizon=300.0, window_end=10 * DELTA, time_layer=False)
+            coarse = ratio_bounds(bins, tolerance=5.0, **kw)
+            fine = ratio_bounds(bins, tolerance=1e-7, **kw)
+            if coarse is None or fine is None:
+                continue
+            if (coarse.high - coarse.low) - (fine.high - fine.low) > 1.0:
+                return
+        self.fail("точность не влияет на поячеечные границы — тест пустой")
+
+    def test_an_arm_without_an_estimand_refuses_rather_than_returns_a_number(self):
+        periods = [[Bin(0.0, 0, 2)], [Bin(0.0, 0, 1)]]
+        self.assertIsNone(arm_ratio_bounds(periods, horizon=300.0,
+                                           window_end=600.0))

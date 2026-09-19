@@ -371,48 +371,93 @@ def burden_bounds(bins: list[Bin], *, horizon: float, window_end: float,
 RATIO_TOLERANCE_SECONDS = 5e-2
 
 
-def generalized_inverse(g, lo: float, hi: float, *,
-                        tolerance: float = RATIO_TOLERANCE_SECONDS,
-                        iterations: int = 60) -> float:
-    """inf{ λ ∈ [lo, hi] : g(λ) <= 0 } дихотомией. Чистая функция от `g`.
+class NoCrossing(ValueError):
+    """g не пересекает ноль внутри скобки, или обратилась в None/NaN.
 
-    ЗАЧЕМ ОТДЕЛЬНО, И ЭТО ПОПРАВКА ЧЕТВЁРТОГО ЧТЕНИЯ. В комментариях стояло
-    «g не возрастает, значит корень единственный». Это НЕВЕРНО: из
-    монотонности следует только существование точки смены знака. Функция
-    может иметь ПЛАТО
-    
-        g > 0 при λ < a,   g = 0 на [a, b],   g < 0 при λ > b
-    
-    и тогда обычная дихотомия вернёт точку внутри [a, b], зависящую от
-    stopping rule, скобки и округления: снова детерминированный ответ не на
-    тот вопрос, только теперь красиво математический.
-    
-    Поэтому конец определяется ОБОБЩЁННО-ОБРАТНОЙ, а не «корнем». При плато
-    она даёт ЛЕВЫЙ край `a` — однозначно и независимо от числа итераций.
-    Уникальность перестаёт быть нужна определению; она остаётся отдельным,
-    доказываемым и проверяемым свойством (см. `dinkelbach_slope_bound`).
-    
-    Инвариант дихотомии: g(lo) > 0, g(hi) <= 0. Если g <= 0 уже в `lo`,
-    возвращается `lo`; если g > 0 всюду до `hi` — `hi`.
+    ЯВНЫЙ ОТКАЗ вместо героического поиска корня, которого нет. Люди и так
+    умеют находить смысл там, где его нет; помогать в этом библиотечной
+    функции не обязательно.
     """
-    value = g(lo)
-    if value is None:
-        return math.nan
-    if value <= 0.0:
-        return lo
+
+
+@dataclass(frozen=True, slots=True)
+class Bracket:
+    """low <= λ* <= high, и `width` — гарантированная односторонняя ошибка.
+
+    ПОЧЕМУ НЕ ЧИСЛО. Математически λ* = inf{λ : g(λ) <= 0} от бюджета
+    итераций не зависит. ЧИСЛЕННО — зависит, какую сторону скобки вернуть, и
+    это не вопрос шестой цифры: конец руки входит в
+
+        [λ⁻T − λ⁺K,  λ⁺T − λ⁻K]
+
+    и выбор не той стороны СУЖАЕТ идентифицированное множество. Компьютер
+    ради красивого округления выбросит допустимые значения — а выбрасывать
+    допустимые значения это ровно то, чего частичная идентификация не делает
+    по определению.
+
+    Поэтому возвращается скобка, а сторону выбирает вызывающий: нижний конец
+    руки берётся ВНИЗ, верхний ВВЕРХ. Наружу, всегда наружу.
+    """
+
+    low: float
+    high: float
+
+    @property
+    def width(self) -> float:
+        return self.high - self.low
+
+
+def generalized_inverse(g, lo: float, hi: float, *,
+                        tolerance: float | None = None,
+                        iterations: int = 60) -> Bracket:
+    """Скобка вокруг inf{ λ ∈ [lo, hi] : g(λ) <= 0 }. Чистая функция от `g`.
+
+    В комментариях когда-то стояло «g не возрастает, значит корень
+    единственный». Это НЕВЕРНО: из монотонности следует только существование
+    точки смены знака. Функция может иметь ПЛАТО
+
+        g > 0 при λ < a,   g = 0 на [a, b],   g < 0 при λ > b
+
+    и тогда «корень» перестаёт быть определением. Обобщённо-обратная при
+    плато даёт ЛЕВЫЙ край `a`, и уникальность определению больше не нужна;
+    она остаётся отдельным проверяемым свойством (`dinkelbach_slope_bound`).
+
+    Инвариант: g(low) > 0 и g(high) <= 0 на каждом шаге, поэтому искомое
+    значение лежит в (low, high]. Ширина доводится до `tolerance`.
+
+    Отказы ЯВНЫЕ: `NoCrossing`, если g(hi) > 0 (скобка мала), если g(lo) уже
+    <= 0 при lo, не равном левой границе области, или если g вернула
+    None/NaN/inf.
+    """
+    # РАЗРЕШАЕТСЯ ПРИ ВЫЗОВЕ, а не при определении. Аргумент по умолчанию
+    # вычисляется один раз при импорте, поэтому `tolerance=RATIO_TOLERANCE`
+    # в сигнатуре делал точность НЕПОДМЕНЯЕМОЙ — и тест, сравнивавший
+    # «грубый» прогон с «высокоточным», сравнивал грубый сам с собой.
+    # Ровно тот класс пустого теста, против которого он и писался.
+    if tolerance is None:
+        tolerance = RATIO_TOLERANCE_SECONDS
+
+    def value(at: float) -> float:
+        got = g(at)
+        if got is None or not math.isfinite(got):
+            raise NoCrossing(f"g({at}) = {got}")
+        return got
+
+    if value(lo) <= 0.0:
+        return Bracket(lo, lo)          # λ* <= lo: скобка вырождена, но верна
+    if value(hi) > 0.0:
+        raise NoCrossing(f"g({hi}) > 0 — искомое значение вне скобки")
+
     low, high = lo, hi
     for _ in range(iterations):
+        if high - low < tolerance:
+            break
         mid = (low + high) / 2.0
-        value = g(mid)
-        if value is None:
-            return math.nan
-        if value > 0.0:
+        if value(mid) > 0.0:
             low = mid
         else:
             high = mid
-        if high - low < tolerance:
-            break
-    return high
+    return Bracket(low, high)
 
 
 def dinkelbach_slope_bound(periods: list[list[Bin]], *, horizon: float,
@@ -441,7 +486,8 @@ def dinkelbach_slope_bound(periods: list[list[Bin]], *, horizon: float,
 def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
                  delta: float = OBSERVED_RESOLUTION_SECONDS,
                  time_layer: bool = True,
-                 initiation_end: float | None = None) -> Interval | None:
+                 initiation_end: float | None = None,
+                 tolerance: float | None = None) -> Interval | None:
     """Границы для R = B / N через дробную оптимизацию.
 
     ЧТО ИМЕННО ВОЗВРАЩАЕТСЯ, и слово тут выбрано не для красоты. По ПОРЯДКУ
@@ -483,7 +529,7 @@ def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
     lo_bracket = burden.low / counts.high if counts.high else 0.0
     hi_bracket = burden.high / counts.low if counts.low else horizon
 
-    def solve(maximise: bool) -> float:
+    def solve(maximise: bool) -> Bracket:
         # f(λ) = extremum(B − λN) не возрастает по λ; искомый конец — её
         # ОБОБЩЁННО-ОБРАТНАЯ, а не «корень»: см. `generalized_inverse`
         return generalized_inverse(
@@ -491,9 +537,15 @@ def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
                                   window_end=window_end, time_layer=time_layer,
                                   lam=lam, maximise=maximise, require_any=True,
                                   initiation_end=initiation_end),
-            max(0.0, lo_bracket), min(horizon, hi_bracket) + 1e-9)
+            max(0.0, lo_bracket), min(horizon, hi_bracket) + 1e-9,
+            tolerance=tolerance)
 
-    return Interval(solve(False), solve(True))
+    try:
+        # НАРУЖУ: нижний конец вниз, верхний вверх. Численная ошибка обязана
+        # РАСШИРЯТЬ идентифицированное множество, а не сужать его
+        return Interval(solve(False).low, solve(True).high)
+    except NoCrossing:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -583,7 +635,8 @@ def definedness(counts: Interval) -> Definedness:
 def arm_ratio_bounds(periods: list[list[Bin]], *, horizon: float,
                      window_end: float, delta: float = OBSERVED_RESOLUTION_SECONDS,
                      time_layer: bool = True,
-                     initiation_end: float | None = None) -> Interval | None:
+                     initiation_end: float | None = None,
+                 tolerance: float | None = None) -> Interval | None:
     """Границы для ΣB / ΣN по ВСЕЙ руке. Найдено враждебным чтением S5b.
 
     ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ, если есть `ratio_bounds` на период. Потому что
@@ -626,8 +679,11 @@ def arm_ratio_bounds(periods: list[list[Bin]], *, horizon: float,
                              initiation_end=initiation_end) or 0.0
                    for bins in periods)
 
-    def solve(maximise: bool) -> float:
+    def solve(maximise: bool) -> Bracket:
         return generalized_inverse(lambda lam: total(lam, maximise),
-                                   0.0, horizon + 1e-9)
+                                   0.0, horizon + 1e-9, tolerance=tolerance)
 
-    return Interval(solve(False), solve(True))
+    try:
+        return Interval(solve(False).low, solve(True).high)
+    except NoCrossing:
+        return None
