@@ -33,7 +33,8 @@ def main() -> int:
         "PHASE S5a — K0 machinery qualification (model numbers, not people)",
         master_seed=500_000, replicates=TRIALS, dyads=DYADS, days=DAYS,
         horizon_hours=H, paired=False,
-        notes=("S5b (delta, variance, power, pilot N) is BLOCKED_ON_S4",
+        notes=("S5b is PARTIALLY_UNBLOCKED after S4-closure: the coarsening operator "
+        "and observer behaviour are calibratable; absolute incidence is NOT",
                "generator frozen; 0 of 8 parameters calibrated"),
     ).render())
     print()
@@ -91,7 +92,7 @@ def main() -> int:
         oc = operating_characteristics(REGIMES["R1"], trials=30, dyads=dyads,
                                        days=DAYS, delta=0.0, horizon_hours=H)
         print(f"  {dyads:7d} {oc.mean_difference:12.1f} {oc.mean_half_width:16.1f}")
-    print("  (monotonicity only — choosing pilot N is S5b, BLOCKED_ON_S4)")
+    print("  (monotonicity only — choosing pilot N is S5b, PARTIALLY_UNBLOCKED)")
     print()
 
     print("== Q7 ALGEBRA: which channel moves which estimand ==")
