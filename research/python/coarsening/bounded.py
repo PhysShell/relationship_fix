@@ -202,6 +202,35 @@ class Interval:
         return self.low <= other.low and other.high <= self.high
 
 
+#: Кэш допустимых ходов по ФОРМЕ корзины. Форм мало (корзины крошечные), а
+#: проходов DP много: дробная оптимизация зовёт его десятки раз. Собирается
+#: из `moves`, чтобы быстрый путь не разошёлся с читаемым определением.
+_MOVE_TABLE: dict[tuple[int, int, bool], tuple] = {}
+
+#: как кодируется исход корзины: 0 — серия закрыта, 1 — открыта ЗДЕСЬ,
+#: 2 — перенесена с прежней корзины без изменений
+_CLOSED, _HERE, _CARRY = 0, 1, 2
+
+
+def _table(partner: int, participant: int, carried: bool) -> tuple:
+    key = (partner, participant, carried)
+    cached = _MOVE_TABLE.get(key)
+    if cached is None:
+        rows = []
+        for move in moves(Bin(0.0, partner, participant), carried):
+            if move.state is None:
+                kind = _CLOSED
+            elif move.state == CARRY:
+                kind = _CARRY
+            else:
+                kind = _HERE
+            rows.append((move.opened, move.closed_carried,
+                         move.closed_inside, kind))
+        cached = tuple(rows)
+        _MOVE_TABLE[key] = cached
+    return cached
+
+
 def _optimise(bins: list[Bin], *, delta: float, horizon: float,
               window_end: float, time_layer: bool, lam: float,
               maximise: bool, require_any: bool) -> float | None:
@@ -212,23 +241,41 @@ def _optimise(bins: list[Bin], *, delta: float, horizon: float,
     которую нельзя обойти поопортунитно: минимум одной возможности и минимум
     другой могут требовать взаимоисключающих порядков одной корзины.
     """
-    better = max if maximise else min
-    start = (None, False)
-    frontier: dict[tuple[float | None, bool], float] = {start: 0.0}
+    frontier: dict[tuple[float | None, bool], float] = {(None, False): 0.0}
     for bucket in bins:
+        start = bucket.start
+        here_eligible = start + horizon <= window_end
         nxt: dict[tuple[float | None, bool], float] = {}
         for (state, seen), value in frontier.items():
-            for move in moves(bucket, state is not None):
-                target = state if move.state == CARRY else move.state
-                n_add, low, high = contribution(
-                    move, bucket, state, delta=delta, horizon=horizon,
-                    window_end=window_end, time_layer=time_layer)
-                gain = (high if maximise else low) - lam * n_add
+            carried = state is not None
+            carried_eligible = carried and state + horizon <= window_end
+            if carried_eligible:
+                gap = start - state
+                if time_layer:
+                    cross = (min(gap + delta, horizon) if maximise
+                             else min(max(0.0, gap - delta), horizon))
+                else:
+                    cross = min(gap, horizon)
+            else:
+                cross = 0.0
+            for opened, closes_carried, inside, kind in _table(
+                    bucket.partner, bucket.participant, carried):
+                n_add = opened if here_eligible else 0
+                gain = -lam * n_add
+                if closes_carried and carried:
+                    gain += cross
+                if inside and here_eligible and maximise and time_layer:
+                    gain += min(delta, inside * horizon)
+                target = state if kind == _CARRY else (
+                    start if kind == _HERE else None)
                 key = (target, seen or n_add > 0)
                 candidate = value + gain
-                if key not in nxt or better(nxt[key], candidate) == candidate:
+                previous = nxt.get(key)
+                if previous is None or (candidate > previous if maximise
+                                        else candidate < previous):
                     nxt[key] = candidate
         frontier = nxt
+    better = max if maximise else min
     best = None
     for (state, seen), value in frontier.items():
         if require_any and not seen:
@@ -287,7 +334,21 @@ RATIO_TOLERANCE_SECONDS = 1e-3
 def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
                  delta: float = OBSERVED_RESOLUTION_SECONDS,
                  time_layer: bool = True) -> Interval | None:
-    """Резкие границы для R = B / N через дробную оптимизацию.
+    """Границы для R = B / N через дробную оптимизацию.
+
+    ЧТО ИМЕННО ВОЗВРАЩАЕТСЯ, и слово тут выбрано не для красоты. По ПОРЯДКУ
+    оптимизация точная, по ВРЕМЕНИ — внешняя оболочка (латентности берутся из
+    интервалов корзин с внутрикорзинным бюджетом, но без полной совместной
+    оптимизации положений). Поэтому при `time_layer=True` это
+    VALID OUTER IDENTIFICATION ENVELOPE, а не sharp bounds.
+
+    Разница работает НА УСИЛЕНИЕ вывода: точка снаружи заведомо слишком
+    широкой оболочки тем более лежит вне неизвестного резкого множества
+    внутри неё. И ослабляет только обратное утверждение — «точка внутри»
+    ничего не доказывает.
+
+    При `time_layer=False` остаётся чистый слой порядка, и вот он резкий.
+
 
     НЕЛЬЗЯ писать `R_min = B_min / N_max` и звать это границами: `B_min` и
     `N_max` достигаются, вообще говоря, на РАЗНЫХ допустимых порядках, и
@@ -302,8 +363,18 @@ def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,
     if _count(bins, horizon, window_end, True) == 0:
         return None                      # эстиманда нет: N = 0 при любом порядке
 
+    counts = count_bounds(bins, horizon=horizon, window_end=window_end)
+    burden = burden_bounds(bins, horizon=horizon, window_end=window_end,
+                           delta=delta, time_layer=time_layer)
+    # НАИВНАЯ оболочка B_lo/N_hi .. B_hi/N_lo не годится как ОТВЕТ — её
+    # концы достигаются на разных порядках. Но как СКОБКА ПОИСКА она
+    # безупречна: искомый экстремум отношения лежит внутри неё, и старт с
+    # [0, H] просто тратил бы итерации
+    lo_bracket = burden.low / counts.high if counts.high else 0.0
+    hi_bracket = burden.high / counts.low if counts.low else horizon
+
     def solve(maximise: bool) -> float:
-        lo, hi = 0.0, horizon
+        lo, hi = max(0.0, lo_bracket), min(horizon, hi_bracket) + 1e-9
         for _ in range(60):
             mid = (lo + hi) / 2.0
             value = _optimise(bins, delta=delta, horizon=horizon,

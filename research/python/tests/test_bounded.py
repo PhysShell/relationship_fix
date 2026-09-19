@@ -290,3 +290,43 @@ class PatternTests(unittest.TestCase):
         for a, b in ((4, 4), (5, 5), (6, 6)):
             arrangements = math.comb(a + b, a)
             self.assertLess(len(patterns(a, b)), arrangements)
+
+
+class TerminologyAndAggregationTests(unittest.TestCase):
+    """Правила счёта объявлены до просмотра распределений — и проверяются."""
+
+    def test_the_two_estimands_are_not_described_with_one_word(self):
+        from coarsening import verdict
+        self.assertTrue(verdict.N_IS_SHARP)
+        self.assertTrue(verdict.RMTR_IS_OUTER_ENVELOPE)
+        self.assertIn("outer", verdict.RMTR_TERM)
+        self.assertIn("envelope", verdict.WIDTH_TERM)
+
+    def test_a_hair_outside_is_not_counted_as_outside(self):
+        """11.0001 против 11.0000 формально снаружи, практически нет."""
+        from coarsening import verdict
+        self.assertFalse(verdict.violation(11.0001, 1.0, 11.0).outside)
+        self.assertTrue(verdict.violation(660.0, 111.0, 525.6).outside)
+
+    def test_violation_is_reported_in_widths_as_well_as_units(self):
+        from coarsening import verdict
+        hit = verdict.violation(660.0, 111.0, 525.6)
+        self.assertAlmostEqual(hit.absolute_seconds, 134.4, 6)
+        self.assertAlmostEqual(hit.relative_to_width, 134.4 / 414.6, 6)
+        self.assertTrue(hit.above)
+
+    def test_a_point_inside_yields_no_violation(self):
+        from coarsening import verdict
+        self.assertEqual(verdict.violation(5.0, 1.0, 9.0).absolute_seconds, 0.0)
+
+    def test_the_sharpening_trigger_is_a_number_declared_in_advance(self):
+        from coarsening import verdict
+        self.assertIsInstance(verdict.SHARPEN_TIME_IF_ORDER_SHARE_BELOW, float)
+        self.assertEqual(verdict.order_share(3.0, 6.0), 0.5)
+        self.assertTrue(verdict.SHARP_TIME_LAYER.startswith("DEFERRED"))
+
+    def test_multiplicative_width_is_used_for_a_positive_ratio(self):
+        from coarsening import verdict
+        self.assertAlmostEqual(verdict.multiplicative_width(1.85, 8.76),
+                               8.76 / 1.85, 6)
+        self.assertEqual(verdict.multiplicative_width(0.0, 5.0), float("inf"))
