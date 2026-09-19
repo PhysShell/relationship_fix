@@ -172,3 +172,57 @@ class CorpusAdmissionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CopenhagenAdmissionTests(unittest.TestCase):
+    """Осмотр CNS: гейт остановил корпус, и это его работа, а не сбой."""
+
+    @classmethod
+    def setUpClass(cls):
+        from acquisition import cns_admission
+        cls.module = cns_admission
+        cls.admission = cns_admission.admission()
+
+    def test_the_corpus_is_not_admitted(self):
+        self.assertFalse(self.admission.admitted)
+
+    def test_exactly_one_blocking_check_failed_and_it_is_coverage(self):
+        open_keys = [c.key for c in self.admission.blocking_open]
+        self.assertEqual(open_keys, ["coverage.semantics"])
+        self.assertIs(self.admission.check("coverage.semantics").verdict,
+                      CheckVerdict.FAILED)
+
+    def test_every_check_carries_an_observation(self):
+        """Вердикт без записанного наблюдения — это мнение."""
+        for entry in self.admission.checks:
+            self.assertIsNot(entry.verdict, CheckVerdict.UNKNOWN, entry.key)
+            self.assertTrue(entry.finding, entry.key)
+
+    def test_the_count_discrepancy_is_recorded_rather_than_smoothed(self):
+        """24 333 совпало точно, 568 против «577 total users» — нет."""
+        finding = self.admission.check("scale.counts").finding
+        self.assertIn("24 333", finding)
+        self.assertIn("568", finding)
+        self.assertIn("577", finding)
+
+    def test_the_licence_is_recorded_with_its_evidence(self):
+        finding = self.admission.check("licence.terms").finding
+        self.assertIn("MIT", finding)
+        self.assertIn(self.module.FIGSHARE_DOI, finding)
+
+    def test_the_unresolved_clock_side_is_named_as_a_limit_not_hidden(self):
+        finding = self.admission.check("time.semantics").finding
+        self.assertIn("НЕИЗВЕСТНЫМ", finding)
+        self.assertIn("Q3", finding)
+
+    def test_the_inspected_file_is_pinned_by_hash(self):
+        self.assertEqual(len(self.module.SMS_CSV_SHA256), 64)
+        self.assertEqual(self.module.SMS_CSV_BYTES, 368_659)
+
+    def test_what_would_admit_it_is_named_in_advance(self):
+        """Иначе «разблокируем как-нибудь» становится планом."""
+        self.assertIn("bt_symmetric", self.module.WHAT_WOULD_ADMIT)
+
+    def test_reading_the_corpus_is_refused_today(self):
+        with self.assertRaises(AdmissionError):
+            require_admission(self.admission)
