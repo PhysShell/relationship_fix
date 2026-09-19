@@ -22,10 +22,10 @@ import unittest
 
 from coarsening.bounded import (
     Bin, Bracket, Definedness, Identified, Interval, NoCrossing,
-    RATIO_TOLERANCE_SECONDS, _count, _optimise, arm_ratio_bounds,
-    burden_bounds, count_bounds, definedness, dinkelbach_slope_bound,
-    generalized_inverse, identified, moves, patterns, ratio_bounds,
-    to_bins)
+    RATIO_TOLERANCE_SECONDS, _count, _optimise, achievable_frontier,
+    arm_ratio_bounds, burden_bounds, count_bounds, definedness,
+    dinkelbach_slope_bound, generalized_inverse, hull_of, identified,
+    lower_hull, moves, patterns, ratio_bounds, to_bins)
 from coarsening.paired import Stream, apply_operator, opportunities, order, rmtr
 from coarsening.prereg import coarsen
 
@@ -932,3 +932,80 @@ class DomainInvariantTests(unittest.TestCase):
                 continue
             self.assertGreaterEqual(got.low, -1e-9, bins)
             self.assertLessEqual(got.high, horizon + 1e-6, bins)
+
+
+class AchievableFrontierTests(unittest.TestCase):
+    """Оболочка достижимых (N, B) — несущая машинерия инверсии теста:
+    ψ(λ) = экстремум (B − λN) обязан совпасть с прямым DP при любом λ."""
+
+    def _check(self, bins, *, maximise, time_layer):
+        kw = dict(horizon=300.0, window_end=10 * DELTA, delta=DELTA,
+                  time_layer=time_layer)
+        hull = hull_of(achievable_frontier(bins, maximise=maximise, **kw),
+                       upper=maximise)
+        picked = max if maximise else min
+        for lam in (0.0, 13.7, 60.0, 150.0, 299.0):
+            direct = _optimise(bins, lam=lam, maximise=maximise,
+                               require_any=False, **kw)
+            self.assertAlmostEqual(picked(b - lam * n for n, b in hull), direct,
+                                   places=9, msg=(bins, lam, maximise, time_layer))
+
+    def test_the_hull_reproduces_the_dp_in_both_directions(self):
+        rng = random.Random(6)
+        for _ in range(150):
+            bins = random_bins(rng, rng.randint(1, 4))
+            for maximise in (False, True):
+                for layer in (False, True):
+                    self._check(bins, maximise=maximise, time_layer=layer)
+
+    def test_the_hull_is_a_subset_of_the_frontier(self):
+        rng = random.Random(7)
+        for _ in range(100):
+            bins = random_bins(rng, rng.randint(1, 3))
+            front = achievable_frontier(bins, horizon=300.0,
+                                        window_end=10 * DELTA, delta=DELTA)
+            hull = hull_of(front)
+            for n, b in hull:
+                self.assertIn(n, front)
+                self.assertAlmostEqual(front[n], b, places=9)
+
+    def test_the_frontier_agrees_with_the_count_bounds(self):
+        """Ключи фронта — это в точности достижимые N."""
+        rng = random.Random(8)
+        for _ in range(100):
+            bins = random_bins(rng, rng.randint(1, 3))
+            kw = dict(horizon=300.0, window_end=10 * DELTA)
+            front = achievable_frontier(bins, delta=DELTA, **kw)
+            counts = count_bounds(bins, **kw)
+            self.assertEqual(min(front), counts.low)
+            self.assertEqual(max(front), counts.high)
+
+    def test_every_hull_vertex_is_optimal_for_some_lambda(self):
+        """Иначе тест не отличал бы оболочку от произвольного подмножества.
+
+        Проба идёт ШИРОКИМ диапазоном, включая отрицательные λ и λ за
+        горизонтом: вершина оптимальна на СВОЁМ интервале, и он вполне может
+        лежать вне [0, H]. Первая редакция пробовала пять точек внутри
+        домена и падала именно на этом.
+        """
+        rng = random.Random(9)
+        examined = 0
+        probes = [-200.0 + 5.0 * k for k in range(200)]
+        for _ in range(200):
+            bins = random_bins(rng, rng.randint(2, 4))
+            kw = dict(horizon=300.0, window_end=10 * DELTA, delta=DELTA,
+                      time_layer=False)
+            hull = hull_of(achievable_frontier(bins, **kw))
+            if len(hull) < 2:
+                continue
+            examined += 1
+            for drop in range(len(hull)):
+                trimmed = hull[:drop] + hull[drop + 1:]
+                differs = any(
+                    abs(min(b - lam * n for n, b in trimmed)
+                        - min(b - lam * n for n, b in hull)) > 1e-9
+                    for lam in probes)
+                self.assertTrue(differs, (bins, hull, drop))
+            if examined >= 5:
+                break
+        self.assertGreaterEqual(examined, 5, "не нашлось оболочек с двумя вершинами")

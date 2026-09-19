@@ -842,3 +842,99 @@ def count_near_breakpoints(periods: list[list[Bin]], lam: float, radius: float, 
             hits += 1
             nearest = distance if nearest is None else min(nearest, distance)
     return hits, nearest
+
+
+def achievable_frontier(bins: list[Bin], *, horizon: float, window_end: float,
+                        delta: float = OBSERVED_RESOLUTION_SECONDS,
+                        time_layer: bool = True,
+                        initiation_end: float | None = None,
+                        maximise: bool = False) -> dict[int, float]:
+    """N -> минимальное достижимое B. Тот же DP, но с N в состоянии.
+
+    ТРЕБУЕМАЯ МАШИНЕРИЯ ИНВЕРСИИ ТЕСТА, объявленная в prereg S5b §4. Смысл:
+
+        ψ(λ) = min по историям (B − λN) = min по N (Bmin(N) − λN)
+
+    то есть ψ — ОПОРНАЯ ФУНКЦИЯ множества достижимых пар. Посчитав фронт один
+    раз, дальше каждое λ стоит O(|фронт|), а не целый DP. Именно это делает
+    исполнимым исследование покрытия: 7.2 часа вместо 305 суток.
+
+    Считается для НАПРАВЛЕНИЯ МИНИМУМА, потому что ψ — минимум; вклады
+    берутся ровно те же, что в `_optimise(maximise=False)`.
+    """
+    def opens(at: float) -> bool:
+        return opens_here(at, horizon=horizon, window_end=window_end,
+                          initiation_end=initiation_end)
+
+    # (состояние переноса, N) -> минимальное B
+    frontier: dict[tuple[float | None, int], float] = {(None, 0): 0.0}
+    for bucket in bins:
+        start = bucket.start
+        here_eligible = opens(start)
+        nxt: dict[tuple[float | None, int], float] = {}
+        for (state, count), value in frontier.items():
+            carried = state is not None
+            if carried and opens(state):
+                gap = start - state
+                if time_layer:
+                    cross = (min(gap + delta, horizon) if maximise
+                             else min(max(0.0, gap - delta), horizon))
+                else:
+                    cross = min(gap, horizon)
+            else:
+                cross = 0.0
+            for opened, closes_carried, inside, kind in _table(
+                    bucket.partner, bucket.participant, carried):
+                added = opened if here_eligible else 0
+                gain = cross if (closes_carried and carried) else 0.0
+                if inside and here_eligible and maximise and time_layer:
+                    gain += min(delta, inside * horizon)
+                target = state if kind == _CARRY else (
+                    start if kind == _HERE else None)
+                key = (target, count + added)
+                candidate = value + gain
+                known = nxt.get(key)
+                if known is None or (candidate > known if maximise
+                                     else candidate < known):
+                    nxt[key] = candidate
+        frontier = nxt
+
+    out: dict[int, float] = {}
+    for (state, count), value in frontier.items():
+        total = value
+        if state is not None and opens(state):
+            total += horizon                # возврата не было: вносит H
+        known = out.get(count)
+        if known is None or (total > known if maximise else total < known):
+            out[count] = total
+    return out
+
+
+def hull_of(frontier: dict[int, float], *, upper: bool = False
+            ) -> tuple[tuple[int, float], ...]:
+    """Оболочка точек (N, B): нижняя для минимума, верхняя для максимума."""
+    if not upper:
+        return lower_hull(frontier)
+    flipped = lower_hull({n: -b for n, b in frontier.items()})
+    return tuple((n, -b) for n, b in flipped)
+
+
+def lower_hull(frontier: dict[int, float]) -> tuple[tuple[int, float], ...]:
+    """Нижняя выпуклая оболочка точек (N, B). Только её вершины участвуют в ψ.
+
+    Точка над оболочкой не минимизирует B − λN НИ ПРИ КАКОМ λ, поэтому хранить
+    её незачем. Оболочка строится по возрастанию N обычным обходом Эндрю.
+    """
+    points = sorted(frontier.items())
+    hull: list[tuple[int, float]] = []
+    for point in points:
+        while len(hull) >= 2:
+            (x1, y1), (x2, y2) = hull[-2], hull[-1]
+            x3, y3 = point
+            # выбрасываем среднюю точку, если она не ниже хорды
+            if (y2 - y1) * (x3 - x1) >= (y3 - y1) * (x2 - x1):
+                hull.pop()
+            else:
+                break
+        hull.append(point)
+    return tuple(hull)

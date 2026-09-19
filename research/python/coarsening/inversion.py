@@ -68,8 +68,9 @@ class Piece:
     b: float
 
 
-def psi(pieces: tuple[Piece, ...], lam: float) -> float:
-    return min(p.b - lam * p.n for p in pieces)
+def psi(pieces: tuple[Piece, ...], lam: float, *, maximise: bool = False) -> float:
+    picked = max if maximise else min
+    return picked(p.b - lam * p.n for p in pieces)
 
 
 def _breakpoints(periods, lo: float, hi: float) -> list[float]:
@@ -156,7 +157,8 @@ def _solve(coefficients: tuple[float, float, float], lo: float, hi: float):
 
 
 def acceptance_set(periods, *, z: float, lo: float = 0.0, hi: float,
-                   tolerance: float = 1e-9) -> list[tuple[float, float]]:
+                   tolerance: float = 1e-9,
+                   maximise: bool = False) -> list[tuple[float, float]]:
     """ПОЛНОЕ множество принятия двустороннего теста. Список компонент.
 
     Компонент может быть НЕСКОЛЬКО, и это не ошибка — см. докстринг модуля.
@@ -165,7 +167,8 @@ def acceptance_set(periods, *, z: float, lo: float = 0.0, hi: float,
     if count < 2:
         return [(lo, hi)]
 
-    pieces_at = lambda pieces, lam: min(pieces, key=lambda p: p.b - lam * p.n)
+    picked = max if maximise else min
+    pieces_at = lambda pieces, lam: picked(pieces, key=lambda p: p.b - lam * p.n)
     found: list[tuple[float, float]] = []
     edges = _breakpoints(periods, lo, hi)
 
