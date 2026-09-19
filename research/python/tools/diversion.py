@@ -212,6 +212,25 @@ DIVERSIONS = (
      "    first, second = q / a, (c / q if q != 0.0 else q / a)",
      "    first, second = (-b - root) / (2.0 * a), (-b + root) / (2.0 * a)",
      ["tests.test_inversion"]),
+    ("радиус берёт компоненту вокруг корня", "simulation/s5b_precision.py",
+     "    low = min(a for a, _ in components)\n"
+     "    high = max(b for _, b in components)",
+     "    around = [c for c in components if c[0] <= point <= c[1]] or components\n"
+     "    low = min(a for a, _ in around)\n"
+     "    high = max(b for _, b in around)",
+     ["tests.test_s5b_prereg"]),
+    ("поправка на три просмотра снята", "simulation/s5b_precision.py",
+     "ALPHA_PER_LOOK = ALPHA / len(LOOKS)",
+     "ALPHA_PER_LOOK = ALPHA",
+     ["tests.test_s5b_prereg"]),
+    ("лестница обрезана до одного просмотра", "simulation/s5b_precision.py",
+     "    while current <= MEASUREMENT_MC_MAX_PERIODS_PER_ARM:",
+     "    while current <= MEASUREMENT_MC_START_PERIODS_PER_ARM:",
+     ["tests.test_s5b_prereg"]),
+    ("статус точности слит с вердиктом", "simulation/s5b_precision.py",
+     'NOT_EVALUATED_MC_PRECISION = "NOT_EVALUATED_MC_PRECISION"',
+     'NOT_EVALUATED_MC_PRECISION = "MEASUREMENT_AMBIGUOUS"',
+     ["tests.test_s5b_prereg"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",

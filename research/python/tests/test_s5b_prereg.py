@@ -1248,3 +1248,99 @@ class Stage1RunnerTests(unittest.TestCase):
         text = record.read_text()
         self.assertIn("ABORTED_INVALID_IMPLEMENTATION", text)
         self.assertIn("EQUIVALENCE ORACLE", text)
+
+
+class PrecisionRadiusTests(unittest.TestCase):
+    """Правило точности — fixed-width по ПОЛНОМУ множеству, а не MCSE.
+
+    Тождество «ширина = 2z·SE» принадлежит вальдову интервалу; инверсия
+    теста выбиралась ровно за то, что вальдовой геометрии у неё нет.
+    """
+
+    def test_the_ladder_comes_from_the_frozen_constants(self):
+        from simulation import s5b_precision as PR
+        self.assertEqual(PR.LOOKS, (4_000, 16_000, 64_000))
+        self.assertEqual(PR.LOOKS[0], prereg.MEASUREMENT_MC_START_PERIODS_PER_ARM)
+        self.assertEqual(PR.LOOKS[-1], prereg.MEASUREMENT_MC_MAX_PERIODS_PER_ARM)
+
+    def test_the_radius_uses_the_whole_set_not_the_component(self):
+        """Собственный Филлер-golden: компонента вокруг корня вдвое уже."""
+        from simulation import s5b_precision as PR
+        full = [(0.0, 1273.95), (1535.81, 3600.0)]
+        self.assertEqual(PR.radius(full, 1200.0), 2400.0)
+        self.assertEqual(PR.radius([(0.0, 1273.95)], 1200.0), 1200.0)
+
+    def test_the_criterion_reduces_to_the_frozen_one_in_the_wald_case(self):
+        """A = λ̂ ± z·SE  =>  r = z·SE  =>  критерий это SE <= target."""
+        from simulation import s5b_precision as PR
+        delta = 36.0
+        target = PR.target(delta)
+        for se in (target * 0.5, target * 0.999, target * 1.001, target * 2):
+            point = 1200.0
+            wald = [(point - PR.Z_PER_LOOK * se, point + PR.Z_PER_LOOK * se)]
+            self.assertEqual(PR.is_precise(PR.radius(wald, point), delta),
+                             se <= target, se)
+
+    def test_three_looks_are_bonferroni_protected(self):
+        """Последовательная остановка не наследует покрытие одного просмотра."""
+        from simulation import s5b_precision as PR
+        self.assertAlmostEqual(PR.ALPHA_PER_LOOK, (1 - prereg.CONFIDENCE_LEVEL) / 3)
+        self.assertGreater(PR.Z_PER_LOOK, 2.3)
+        self.assertLess(PR.Z_PER_LOOK, 2.5)
+
+    def test_an_empty_set_is_infinitely_imprecise(self):
+        from simulation import s5b_precision as PR
+        self.assertEqual(PR.radius([], 100.0), float("inf"))
+        self.assertFalse(PR.is_precise(PR.radius([], 100.0), 36.0))
+
+    def test_the_nested_procedure_stops_and_escalates_as_declared(self):
+        from simulation import s5b_precision as PR
+        seen = []
+
+        def wide(size):
+            seen.append(size)
+            return [(0.0, 3600.0)], 1200.0
+
+        outcome = PR.run_nested(wide, 36.0)
+        self.assertEqual(seen, list(PR.LOOKS), "обязана пройти всю лестницу")
+        self.assertIs(outcome.status, PR.PrecisionStatus.INSUFFICIENT)
+
+        seen.clear()
+
+        def narrow(size):
+            seen.append(size)
+            return [(1199.9, 1200.1)], 1200.0
+
+        outcome = PR.run_nested(narrow, 36.0)
+        self.assertEqual(seen, [PR.LOOKS[0]], "обязана остановиться на первом")
+        self.assertIs(outcome.status, PR.PrecisionStatus.ACHIEVED)
+
+    def test_the_surface_status_is_separate_from_every_verdict(self):
+        from simulation import s5b_precision as PR
+        self.assertEqual(PR.NOT_EVALUATED_MC_PRECISION, "NOT_EVALUATED_MC_PRECISION")
+        for verdict in Verdict:
+            self.assertNotEqual(PR.NOT_EVALUATED_MC_PRECISION, verdict.value)
+        for state in Admissibility:
+            self.assertNotEqual(PR.NOT_EVALUATED_MC_PRECISION, state.value)
+
+    def test_prediction_is_not_a_verdict(self):
+        from simulation import s5b_precision as PR
+        self.assertNotEqual(PR.PrecisionStatus.PREDICTED_INSUFFICIENT,
+                            PR.PrecisionStatus.INSUFFICIENT)
+        self.assertIn("PREDICTED", PR.PrecisionStatus.PREDICTED_INSUFFICIENT.value)
+
+    def test_the_retracted_claims_are_marked_not_erased(self):
+        """Проект ошибки не стирает, а помечает — значит проверяется
+        КОНТЕКСТ, а не отсутствие фразы. Первая редакция этого теста
+        требовала отсутствия и падала на собственном опровержении."""
+        root = pathlib.Path(__file__).resolve().parents[3]
+        raw = (root / "docs/research/s5b-mcse-specification-gap.md").read_text()
+        #: перенос строки не должен прятать фразу от проверки
+        flat = " ".join(raw.replace(">", " ").split())
+        self.assertIn("Это неверно", flat)
+        self.assertIn("MC precision radius", flat)
+        for claim, marker in (("ближе к перцентилю", "удалено"),
+                              ("(sup A − inf A) / (2z)", "Это неверно")):
+            self.assertIn(claim, flat, claim)
+            paragraph = next(part for part in raw.split("\n\n") if claim in part)
+            self.assertIn(marker, paragraph, (claim, marker))
