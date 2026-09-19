@@ -95,10 +95,54 @@ class IncidenceHuntTests(unittest.TestCase):
     def test_a_downstream_cc_by_collection_does_not_relicense_the_source(self):
         c = next(c for c in spec.CANDIDATES if "CollegeMsg" in c.name)
         self.assertIs(c.fit, spec.Fit.LICENSE_PROVENANCE_OPEN)
-        self.assertIn("не даёт автоматического права", c.note)
+        self.assertIn("не выдают прав, которых нет у источника", c.note)
 
     def test_no_candidate_is_yet_a_clean_candidate(self):
         self.assertEqual(spec.by_fit(spec.Fit.CANDIDATE), ())
+
+    def test_a_licence_on_a_derived_collection_is_not_a_licence_on_the_source(self):
+        """Figshare-коллекция под CC BY 4.0, а сырые CDR под NDA. Лицензию
+        проверять у того артефакта, который будешь читать."""
+        c = next(c for c in spec.CANDIDATES if "Multiplexity" in c.name)
+        self.assertIs(c.fit, spec.Fit.ARTIFACT_MISMATCH)
+        self.assertIn("non-disclosure agreement", c.evidence)
+        self.assertTrue(spec.LICENCE_APPLIES_TO_THE_ARTIFACT_YOU_READ)
+
+    def test_an_unverified_licence_is_recorded_as_unverified(self):
+        """Republic of Letters: вторичные упоминания CC BY 4.0 есть, первичного
+        подтверждения я не получил. Значит так и записано."""
+        c = next(c for c in spec.CANDIDATES if "Republic" in c.name)
+        self.assertIn("НЕ ПОДТВЕРЖДЕНА", c.evidence)
+
+    def test_the_historical_corpus_is_an_anchor_and_not_a_target(self):
+        c = next(c for c in spec.CANDIDATES if "Republic" in c.name)
+        self.assertIs(c.fit, spec.Fit.STRESS_ANCHOR_ONLY)
+        self.assertIn("43 секунды", c.note)
+
+    def test_q1_is_split_so_one_corpus_need_not_answer_everything(self):
+        self.assertEqual(set(spec.SUBQUESTIONS), {
+            "Q1a_absolute_incidence_scale",
+            "Q1b_incidence_shape_heterogeneity",
+            "Q1c_density_and_run_merging"})
+
+    def test_only_the_absolute_scale_demands_complete_coverage(self):
+        self.assertIn("coverage-полный",
+                      spec.SUBQUESTIONS["Q1a_absolute_incidence_scale"][1])
+        self.assertIn("терпит",
+                      spec.SUBQUESTIONS["Q1b_incidence_shape_heterogeneity"][1])
+
+    def test_a_stop_rule_exists_and_is_a_number(self):
+        """Поиск датасета не превращается в новый исследовательский проект."""
+        self.assertIsInstance(spec.STOP_AFTER_SERIOUS_CANDIDATES, int)
+        self.assertGreater(spec.STOP_AFTER_SERIOUS_CANDIDATES,
+                           spec.serious_candidates_checked() - 1)
+
+    def test_the_wall_is_recorded_as_structural_not_as_bad_luck(self):
+        self.assertTrue(spec.WALL_IS_STRUCTURAL)
+
+    def test_the_search_classes_replace_the_general_zoo(self):
+        self.assertEqual(len(spec.SEARCH_CLASSES), 3)
+        self.assertTrue(any("Dataverse" in c for c in spec.SEARCH_CLASSES))
 
 
 if __name__ == "__main__":
