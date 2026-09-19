@@ -349,6 +349,19 @@ class NetHealthAdmissionTests(unittest.TestCase):
         self.assertIs(entry.verdict, CheckVerdict.PASSED)
         self.assertIn("really ordinal", entry.finding)
 
+    def test_the_sample_based_claim_about_egoconf_was_corrected(self):
+        """Осмотр 2 819 строк сказал «egoconf константа .95». Кодбук говорит:
+        четыре значения, из них .95 — у 99.4%. Выборка целиком попала в них."""
+        finding = self.admission.check("identity.resolution_quality").finding
+        self.assertIn("НЕ константа", finding)
+        self.assertIn("99.4", finding)
+
+    def test_insession_is_the_academic_calendar_not_observability(self):
+        """Метка поля в кодбуке — буквально «Classes in Session». Соблазнительное
+        чтение «insession = участник наблюдался» неверно."""
+        note = self.module.PENDING["coverage.capture_window"]
+        self.assertIn("Classes in Session", note)
+
     def test_the_measured_scale_replaces_the_quoted_one(self):
         self.assertEqual(self.module.ROWS_TOTAL, 60_486_564)
         self.assertEqual(self.module.PARTICIPANTS, 587)
