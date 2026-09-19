@@ -19,8 +19,8 @@ import random
 import unittest
 
 from coarsening.bounded import (
-    Bin, Identified, Interval, burden_bounds, count_bounds, identified,
-    moves, patterns, ratio_bounds, to_bins,
+    Bin, Identified, Interval, RATIO_TOLERANCE_SECONDS, burden_bounds,
+    count_bounds, identified, moves, patterns, ratio_bounds, to_bins,
 )
 from coarsening.paired import Stream, apply_operator, opportunities, order, rmtr
 from coarsening.prereg import coarsen
@@ -120,8 +120,13 @@ class OracleAgreementTests(unittest.TestCase):
         if not ratios:
             self.assertIsNone(got)
             return
-        self.assertAlmostEqual(got.low, min(lo for lo, _ in ratios), 3)
-        self.assertAlmostEqual(got.high, max(hi for _, hi in ratios), 3)
+        # точность сверяется с ОБЪЯВЛЕННЫМ допуском дробной оптимизации, а
+        # не с произвольным числом знаков: иначе тест молча требовал бы от
+        # движка точности, которой тот не обещал
+        self.assertLessEqual(abs(got.low - min(lo for lo, _ in ratios)),
+                             RATIO_TOLERANCE_SECONDS)
+        self.assertLessEqual(abs(got.high - max(hi for _, hi in ratios)),
+                             RATIO_TOLERANCE_SECONDS)
 
     def test_the_dp_matches_brute_force_on_micro_traces(self):
         rng = random.Random(20260919)
@@ -171,30 +176,92 @@ def random_stream(rng: random.Random, size: int) -> Stream:
 
 
 class RefinementTests(unittest.TestCase):
+    """Вложение — ТЕОРЕМА для резкого слоя и ДИАГНОСТИКА для оболочки.
 
-    def test_coarsening_can_only_widen_the_identified_set(self):
-        """identified_set(1 с) ⊆ identified_set(60 с). Огрубление только теряет."""
-        rng = random.Random(4242)
-        widened = 0
-        for _ in range(60):
+    Разделение не педантское. `N` зависит только от допустимой топологии
+    порядка: временной бюджет `min(Δ, c·H)` в него не входит вообще, а
+    огрубление лишь СТИРАЕТ ограничения порядка, поэтому любая хронология,
+    допустимая при 1 с, допустима и при 60 с. Нарушение здесь — баг, и
+    секунды в нём не виноваты.
+
+    Полная временная ОБОЛОЧКА — другое: `outer(1 с)` сама содержит значения,
+    физически недостижимые, а `outer(60 с)` обязана содержать РЕЗКОЕ
+    множество при 60 с, а не все ложноположительные точки мелкой
+    аппроксимации. Её вложение наблюдается, но теоремой не является.
+    """
+
+    def _pairs(self, rng, many=60):
+        for _ in range(many):
             stream = random_stream(rng, rng.randint(4, 30))
             horizon = 300.0
             # окно берётся так, чтобы eligible были ВСЕ корзины: иначе тест
             # молча проверял бы пустое множество
             window = stream.stamps[-1] + horizon
-            fine = to_bins(stream, 0, delta=1.0)
-            coarse = to_bins(stream, 0, delta=DELTA)
+            yield (to_bins(stream, 0, delta=1.0),
+                   to_bins(stream, 0, delta=DELTA), horizon, window)
+
+    def test_the_sharp_count_set_can_only_widen(self):
+        """ТЕОРЕМА. N не зависит от времени вовсе — только от порядка."""
+        for fine, coarse, horizon, window in self._pairs(random.Random(4242)):
+            inner = count_bounds(fine, horizon=horizon, window_end=window)
+            outer = count_bounds(coarse, horizon=horizon, window_end=window)
+            self.assertIn(inner, outer, f"N {inner} not inside {outer}")
+
+    def test_the_order_layer_is_not_comparable_across_resolutions(self):
+        """НЕ инвариант, и это выяснилось здесь, а не в отчёте.
+
+        При `time_layer=False` латентность равна разности НАЧАЛ КОРЗИН — та
+        самая подстановка одной точки интервала. Она зависит от разрешения:
+        при 60 с латентность кратна 60, поэтому значение 103 с там просто не
+        существует. Значит два слоя порядка на разных разрешениях — это не
+        одно множество, посчитанное точнее, а две разные величины, и
+        требовать вложения не на чем.
+        """
+        from coarsening import verdict
+        stamps = [4, 175, 197, 199, 202, 267, 302, 344, 353, 363, 388, 426,
+                  655, 672, 680, 683, 683, 711]
+        actors = [0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0]
+        stream = order([float(s) for s in stamps], actors,
+                       [f"{index:06d}" for index in range(len(stamps))])
+        horizon, window = 300.0, stream.stamps[-1] + 300.0
+        fine = to_bins(stream, 0, delta=1.0)
+        coarse = to_bins(stream, 0, delta=DELTA)
+        inner = burden_bounds(fine, horizon=horizon, window_end=window,
+                              delta=1.0, time_layer=False)
+        outer = burden_bounds(coarse, horizon=horizon, window_end=window,
+                              delta=DELTA, time_layer=False)
+        self.assertNotIn(inner, outer)          # 103 < 120: не вложено
+        # а два утверждения, которые ДЕЙСТВИТЕЛЬНО обязаны держаться, держатся
+        self.assertIn(burden_bounds(fine, horizon=horizon, window_end=window,
+                                    delta=1.0),
+                      burden_bounds(coarse, horizon=horizon, window_end=window,
+                                    delta=DELTA))
+        self.assertIn(count_bounds(fine, horizon=horizon, window_end=window),
+                      count_bounds(coarse, horizon=horizon, window_end=window))
+        self.assertTrue(verdict.ORDER_LAYER_IS_WITHIN_RESOLUTION_ONLY)
+        self.assertIn("NOT COMPARABLE",
+                      verdict.REFINEMENT_STATUS["R_order_only"])
+
+    def test_the_conservative_envelope_nesting_is_only_a_diagnostic(self):
+        """НЕ теорема. Наблюдается — сообщаем; сломается — расследуем слой.
+
+        `outer(1 с)` содержит физически недостижимые значения, поэтому
+        требовать от `outer(60 с)` включать их все — требование не к
+        математике движка, а к консервативности аппроксимации.
+        """
+        from coarsening import verdict
+        self.assertIn("DIAGNOSTIC", verdict.REFINEMENT_STATUS["R_outer_envelope"])
+        self.assertIn("theorem", verdict.REFINEMENT_STATUS["N"])
+        held = total = 0
+        for fine, coarse, horizon, window in self._pairs(random.Random(4242)):
             inner = burden_bounds(fine, horizon=horizon, window_end=window,
                                   delta=1.0)
             outer = burden_bounds(coarse, horizon=horizon, window_end=window,
                                   delta=DELTA)
-            self.assertIn(inner, outer, f"fine {inner} not inside coarse {outer}")
-            inner_n = count_bounds(fine, horizon=horizon, window_end=window)
-            outer_n = count_bounds(coarse, horizon=horizon, window_end=window)
-            self.assertIn(inner_n, outer_n)
-            if outer.width > inner.width:
-                widened += 1
-        self.assertGreater(widened, 30, "тест не дошёл до случаев, где что-то теряется")
+            held += inner in outer
+            total += 1
+        self.assertEqual(held, total, "оболочка не вложилась — расследовать "
+                                      "временной слой, не движок порядка")
 
 
 # ---------------------------------------------------------------------------

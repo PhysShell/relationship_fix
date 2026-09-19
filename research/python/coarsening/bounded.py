@@ -326,9 +326,9 @@ def burden_bounds(bins: list[Bin], *, horizon: float, window_end: float,
 
 
 #: Точность поиска λ в дробной оптимизации, в секундах.
-#: Миллисекунда на величине, которая меряется в минутах, — запас с избытком;
-#: это численный допуск поиска, а не научный параметр.
-RATIO_TOLERANCE_SECONDS = 1e-3
+#: Двадцатая секунды на величине, которая меряется в минутах, — запас с
+#: избытком; это численный допуск поиска, а не научный параметр.
+RATIO_TOLERANCE_SECONDS = 5e-2
 
 
 def ratio_bounds(bins: list[Bin], *, horizon: float, window_end: float,

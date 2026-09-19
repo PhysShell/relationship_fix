@@ -40,11 +40,21 @@ def subset(census_path: str) -> list[str]:
             if int(r["measured_users"]) == 2 and r["resolution"] == "SECONDS"]
 
 
-def measure(stream, horizon: float, delta: float = DELTA):
+def prepare(stream, delta: float = DELTA):
+    """Корзины и пережившие STRICT возможности — ОДИН раз на диаду.
+
+    Пересортировка потока и перечисление возможностей не зависят от
+    горизонта, а стоят как весь остальной проход вместе взятый.
+    """
     bins = to_bins(stream, 0, delta=delta)
-    window = stream.stamps[-1] + horizon
     coarse = apply_operator(stream, delta)
     survivors = [o for o in opportunities(coarse, 0) if not o.ambiguous]
+    return bins, survivors, stream.stamps[-1]
+
+
+def at_horizon(prepared, horizon: float, delta: float = DELTA):
+    bins, survivors, last = prepared
+    window = last + horizon
     strict_n, strict_r = rmtr(survivors, horizon / 3600.0, window)
     counts = count_bounds(bins, horizon=horizon, window_end=window)
     envelope = ratio_bounds(bins, horizon=horizon, window_end=window,
@@ -85,9 +95,10 @@ def main(argv: list[str]) -> int:
             continue
         analysed += 1
         density = local_density(stream)[verdict.DENSITY_PREDICTOR]
+        prepared = prepare(stream)
         for horizon in HORIZONS_SECONDS:
-            strict_n, strict_r, counts, envelope, order_only = measure(
-                stream, horizon)
+            strict_n, strict_r, counts, envelope, order_only = at_horizon(
+                prepared, horizon)
             rows[horizon].append((name, density, strict_n, strict_r, counts,
                                   envelope, order_only))
             if sink:
@@ -175,31 +186,44 @@ def main(argv: list[str]) -> int:
                   f"STRICT outside {100 * outside / len(chunk):5.1f}%  "
                   f"envelope x{statistics.median(mult) if mult else float('nan'):.2f}")
 
-    # 5. измельчение на живых данных
-    print(f"\n=== refinement certificate: I(1 s) ⊆ I(60 s) ===", flush=True)
+    # 5. измельчение на живых данных — ТРИ РАЗНЫХ СТАТУСА, не один
+    print("\n=== refinement certificate: I(1 s) ⊆ I(60 s) ===", flush=True)
     print(f"  reference: {verdict.REFINEMENT_REFERENCE}")
+    for key, status in verdict.REFINEMENT_STATUS.items():
+        print(f"    {key:<18} {status}")
     rng = random.Random(verdict.REFINEMENT_SEED)
     sample = rng.sample(names, min(verdict.REFINEMENT_SUBSAMPLE_DYADS, len(names)))
-    held = broken = skipped = 0
+    tally = {key: [0, 0] for key in ("N", "R_outer_envelope")}     # [held, broken]
+    skipped = 0
     for name, chat in chats(archive, sample):
         try:
             stream = adapt(chat)
         except NotADyad:
             continue
+        fine = prepare(stream, 1.0)
+        coarse = prepare(stream, DELTA)
         for horizon in HORIZONS_SECONDS:
-            fine_n, _, fine_counts, fine_r, _ = measure(stream, horizon, 1.0)
-            _, _, coarse_counts, coarse_r, _ = measure(stream, horizon, DELTA)
-            if fine_r is None or coarse_r is None:
-                skipped += 1
-                continue
-            ok = (fine_counts in coarse_counts) and (fine_r in coarse_r)
-            held += ok
-            broken += not ok
-            if not ok:
-                print(f"    BROKEN {name} H={horizon:.0f}: "
-                      f"N {fine_counts} vs {coarse_counts}, "
-                      f"R {fine_r} vs {coarse_r}")
-    print(f"  held {held}, broken {broken}, skipped {skipped}")
+            _, _, fine_n, fine_full, _ = at_horizon(fine, horizon, 1.0)
+            _, _, coarse_n, coarse_full, _ = at_horizon(coarse, horizon, DELTA)
+            # слой порядка МЕЖДУ разрешениями не сравнивается: там латентность
+            # равна разности начал корзин, то есть величина сама зависит от
+            # разрешения. См. ORDER_LAYER_IS_WITHIN_RESOLUTION_ONLY
+            checks = {"N": (fine_n, coarse_n),
+                      "R_outer_envelope": (fine_full, coarse_full)}
+            for key, (inner, outer) in checks.items():
+                if inner is None or outer is None:
+                    skipped += 1
+                    continue
+                ok = inner in outer
+                tally[key][0 if ok else 1] += 1
+                if not ok and key != "R_outer_envelope":
+                    print(f"    BUG {key} {name} H={horizon:.0f}: "
+                          f"{inner} not inside {outer}", flush=True)
+    for key, (held, broken) in tally.items():
+        mark = "  <- theorem" if key == "N" else ""
+        print(f"  {key:<18} held {held:>4}  broken {broken:>4}{mark}")
+    print(f"  skipped (estimand undefined on one side): {skipped}")
+    print(f"\n  {verdict.REFINEMENT_SENTENCE}")
     return 0
 
 
