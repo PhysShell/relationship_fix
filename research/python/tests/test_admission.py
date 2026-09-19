@@ -324,18 +324,48 @@ class NetHealthAdmissionTests(unittest.TestCase):
         self.assertIn("outgoing", finding)
         self.assertIn("владелец устройства", finding)
 
+    def test_the_duplicate_mine_was_real_and_is_recorded_with_its_numbers(self):
+        """D0 = 1 362 951 точных зеркал. Документация подтверждает дословно."""
+        entry = self.admission.check("events.duplicate_semantics")
+        self.assertIs(entry.verdict, CheckVerdict.PASSED)
+        self.assertIn("1 362 951", entry.finding)
+        self.assertIn("308", entry.finding)
+        self.assertIn("two records for the same event", entry.finding)
+
+    def test_the_duplicate_bias_is_recorded_as_differential(self):
+        """Удвоены только пары участник-участник. Равномерным это смещение не
+        является, и потому подделало бы саму зависимость плотности от типа
+        собеседника, а не только масштаб."""
+        self.assertIn("РАЗНОСТНОЕ",
+                      self.admission.check("events.duplicate_semantics").finding)
+
+    def test_the_dedup_rule_was_declared_with_the_finding(self):
+        from acquisition import nethealth_rules
+        self.assertEqual(nethealth_rules.DEDUP_KEEP, "sender_side")
+
+    def test_confidence_being_ordinal_is_documented_not_inferred(self):
+        entry = self.admission.check("identity.resolution_quality")
+        self.assertIs(entry.verdict, CheckVerdict.PASSED)
+        self.assertIn("really ordinal", entry.finding)
+
+    def test_the_measured_scale_replaces_the_quoted_one(self):
+        self.assertEqual(self.module.ROWS_TOTAL, 60_486_564)
+        self.assertEqual(self.module.PARTICIPANTS, 587)
+
     def test_the_dangerous_checks_are_documented_as_pending(self):
-        for key in ("events.duplicate_semantics", "coverage.capture_window",
-                    "identity.resolution_quality", "channel.mixing"):
+        for key in ("coverage.capture_window", "channel.mixing"):
             self.assertIn(key, self.module.PENDING)
             self.assertTrue(self.module.PENDING[key])
             self.assertIs(self.admission.check(key).verdict, CheckVerdict.UNKNOWN)
 
-    def test_the_dedup_signature_is_stated_before_it_is_looked_for(self):
-        """Иначе после просмотра легко «увидеть» ту сигнатуру, которая удобна."""
-        note = self.module.PENDING["events.duplicate_semantics"]
-        self.assertIn("epochtime", note)
-        self.assertIn("outgoing", note)
+    def test_the_signature_that_was_declared_is_the_one_that_fired(self):
+        """Сигнатура объявлена в `nethealth_rules` ДО чтения файла, и именно
+        она сработала: зеркальные ego/alter, противоположный `outgoing`,
+        близкие метки. Порог окна после находки не двигали."""
+        from acquisition import nethealth_rules
+        self.assertEqual(nethealth_rules.DEDUP_NEAR_WINDOW_SECONDS, 5.0)
+        finding = self.admission.check("events.duplicate_semantics").finding
+        self.assertIn("окне 5 с", finding)
 
     def test_channel_mixing_is_inside_the_type_not_only_between_types(self):
         """eventtype='SMS' мешает iMessage и SMS, а iMessage есть только на
