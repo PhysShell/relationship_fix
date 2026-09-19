@@ -186,11 +186,29 @@ class CopenhagenAdmissionTests(unittest.TestCase):
     def test_the_corpus_is_not_admitted(self):
         self.assertFalse(self.admission.admitted)
 
-    def test_exactly_one_blocking_check_failed_and_it_is_coverage(self):
+    def test_exactly_one_blocking_check_failed_and_it_is_the_capture_window(self):
         open_keys = [c.key for c in self.admission.blocking_open]
-        self.assertEqual(open_keys, ["coverage.semantics"])
-        self.assertIs(self.admission.check("coverage.semantics").verdict,
+        self.assertEqual(open_keys, ["coverage.capture_window"])
+        self.assertIs(self.admission.check("coverage.capture_window").verdict,
                       CheckVerdict.FAILED)
+
+    def test_removing_third_parties_is_not_missingness_for_the_retained_dyad(self):
+        """Ошибка коммита fe9eecc: усечение СЕТИ принято за дыру в окне ДИАДЫ.
+
+        Для процесса пары A-B сообщения A с кем-то третьим не входят в процесс
+        по определению — ровно как target chat в Telegram не включает переписку
+        с мамой. Отказывать за это значит отказывать корпусу за то, что он
+        корпус.
+        """
+        entry = self.admission.check("coverage.target_dyad_filtering")
+        self.assertIs(entry.verdict, CheckVerdict.PASSED)
+        self.assertIn("fe9eecc", entry.finding)
+
+    def test_bluetooth_availability_is_not_transferred_to_the_sms_logger(self):
+        """0.81 объявлена в статье как availability ИМЕННО Bluetooth."""
+        finding = self.admission.check("coverage.capture_window").finding
+        self.assertIn("Bluetooth", finding)
+        self.assertIn("0.81", finding)
 
     def test_every_check_carries_an_observation(self):
         """Вердикт без записанного наблюдения — это мнение."""
