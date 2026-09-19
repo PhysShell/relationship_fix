@@ -200,28 +200,31 @@ SD на пару втрое больше самого эффекта. Иллюс
 
 ## 4. План PHASE S и гейт в PHASE H
 
-## 4.0 FREEZE после S3a — состояние на 2026-09-18
+## 4.0 FREEZE — состояние на 2026-09-19
 
 ```
-S1  generator machinery          CLOSED
-S3  MaiChat calibration          CLOSED
-S3a structural amendment         CLOSED
+S1   CLOSED      generator machinery
+S3   CLOSED      MaiChat calibration
+S3a  CLOSED      structural amendment
+S5a  CLOSED      K0 machinery qualification
 
-Generator semantics              FREEZE until S4
-    FROZEN_DIGEST                168aef4e…
-    замок                        simulation/manifest.py + тест
+generator = FROZEN   (168aef4e…, замок в simulation/manifest.py)
+extractor = FROZEN   (sha256-пины, tests/test_freeze.py)
 
-Calibrated parameters            0 / 8
+S4   BLOCKED_EXTERNAL: dataset access
+S5b  BLOCKED_ON_S4
+S2   DEFERRED
 
-Known structural improvements
-    independent actor clocks
-    meaningful nonresponse (dormancy)
-    treatment can affect incidence emergently
-
-Open pivot                       opportunity_rate_per_day / density
-S4 target                        Messaging Matters
-S2 (TelAnalysis / ChatRel)       DEFERRED
+Calibrated parameters   0 / 8
+Open pivot              opportunity_rate_per_day / density
 ```
+
+Ждать — значит ждать, а не «раз уж ждём, давайте ещё немного улучшим
+симулятор». Именно в этот момент кроличий тоннель обычно заказывает шторы.
+
+Единственное, что делается без нарушения заморозки, — операционная подготовка:
+[гейт приёма](messaging-matters-s4-prereg.md) и
+[запрос доступа](messaging-matters-access-request.md). Это не исследование.
 
 Правки генератора **остановлены**. S3a сделал то, ради чего затевался: не
 подогнал синтетику к человечеству, а нашёл, где модель мира была структурно
