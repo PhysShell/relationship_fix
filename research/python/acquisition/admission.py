@@ -193,11 +193,17 @@ def corpus_admission(corpus: str, *, extra: tuple[AdmissionCheck, ...] = ()) -> 
             "licence.derivative_reach",
             "Ограничивает ли эта лицензия ПРОИЗВОДНОЕ от корпуса — то есть "
             "откалиброванный на нём генератор и всё, что из него следует?",
-            "Самая дорогая из возможных ошибок здесь. Калибровка на NC/SA-данных "
-            "может утащить сам генератор в non-commercial, а генератор — не "
-            "промежуточный файл, а несущий исследовательский актив проекта, у "
-            "которого есть продуктовая ветка. Узнать это после калибровки — "
-            "значит узнать поздно.",
+            "ПОПРАВКА к прежней редакции: рассуждение «калибровали на CC BY-NC-SA "
+            "→ весь генератор теперь CC BY-NC-SA» слишком примитивно. ShareAlike "
+            "относится к АДАПТИРОВАННОМУ лицензируемому материалу, а численные "
+            "параметры и статистические выводы не становятся copyright derivative "
+            "work автоматически. Настоящий риск обычно в ДРУГОМ: в отдельных "
+            "Terms of Use, ограничивающих ЦЕЛЬ использования. Даже если mu = 7.3 "
+            "сам по себе не «заражён» лицензией, протащить результат "
+            "исследовательского использования в коммерческий product pipeline "
+            "при условии «solely for academic purposes» — очень спорно. И "
+            "обходной путь «мы посмотрели на корпус, а потом руками подобрали "
+            "похожее значение» — тот же information flow, только в усах и плаще.",
             blocking=True),
         AdmissionCheck(
             "licence.redistribution",
@@ -300,12 +306,27 @@ CORPORA: dict[str, tuple[Access, LicenceTerms, Admission]] = {
             "Kaggle API: licenseNameNullable='CC BY-NC-SA 4.0'; 2 759 192 661 байт",
             extra_terms="Terms of Use датасета: «Users shall utilize the dataset "
                         "SOLELY for academic, research, or educational purposes»; "
-                        "запрет реидентификации; условия распространяются на "
-                        "«any team members, including agents»"),
+                        "запрет реидентификации. ПОПРАВКА к прежней редакции: "
+                        "условия НЕ говорят, что агенты связаны договором целиком "
+                        "— они требуют, чтобы team members, включая "
+                        "agents/subcontractors/partners С ДОСТУПОМ к данным, "
+                        "соблюдали те же privacy protections. Практический вывод "
+                        "тот же: скормить корпус агентам и внешним сервисам и "
+                        "считать, что ничего не произошло, нельзя."),
         corpus_admission("College Experience Study (S4-candidate-2)")),
     "NetHealth": (
-        Access.PUBLIC, UNKNOWN_LICENCE,
-        corpus_admission("NetHealth CommEvents (S4-candidate-3)")),
+        Access.PUBLIC,
+        LicenceTerms(
+            "CC BY 4.0", Permission.YES, Permission.YES, False, True,
+            "Zenodo API, запись 21904040 (12.08.2026): license.id='cc-by-4.0', "
+            "access_right='open'. ПРЕЖНЯЯ запись поля Rights не имела — смотреть "
+            "надо было свежий релиз, а не первый попавшийся",
+            extra_terms="Отдельного DUA в записи нет; ограничений по цели и по "
+                        "коммерческому использованию в описании нет. Страница "
+                        "проекта на nd.edu недоступна для проверки (403), там "
+                        "упоминается форма-уведомление о скачивании — вежливость, "
+                        "а не условие, но заполнить её стоит"),
+        corpus_admission("NetHealth CommEvents (S4-primary-candidate)")),
     "SMS-A": (
         Access.PUBLIC, UNKNOWN_LICENCE,
         corpus_admission("SMS-A, Wu et al. supplementary")),

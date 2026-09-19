@@ -117,11 +117,33 @@ class CorpusAdmissionTests(unittest.TestCase):
     def test_access_and_licence_are_separate_fields(self):
         """«Скачивается» не значит «разрешено» — самая дорогая из привычных
         ошибок. Четыре корпуса публичны и лицензии не имеют вовсе."""
-        for name in ("CollegeMsg", "SMS-A", "NetHealth", "StudentLife"):
+        for name in ("CollegeMsg", "SMS-A", "StudentLife"):
             access, licence, _ = CORPORA[name]
             self.assertIs(access, Access.PUBLIC, name)
             self.assertIs(licence.research_use, Permission.UNKNOWN, name)
             self.assertFalse(licence.known, name)
+
+    def test_the_newest_release_is_what_carries_the_licence(self):
+        """NetHealth считался LICENSE_UNKNOWN по записи, у которой поле Rights
+        пустое. У релиза от 12.08.2026 лицензия есть и она CC BY 4.0.
+
+        Урок дешевле правила: смотреть надо СВЕЖИЙ релиз, а не первый
+        попавшийся. «Лицензии нет» слишком часто означает «я открыл не ту
+        версию».
+        """
+        _, licence, _ = CORPORA["NetHealth"]
+        self.assertEqual(licence.name, "CC BY 4.0")
+        self.assertIs(licence.research_use, Permission.YES)
+        self.assertIs(licence.commercial_reuse, Permission.YES)
+        self.assertFalse(licence.share_alike)
+        self.assertIn("21904040", licence.evidence)
+
+    def test_the_only_clean_licences_permit_commercial_reuse(self):
+        """Ровно то, что отличает их от CES и делает параллельную
+        некоммерческую родословную генератора ненужной."""
+        clean = {n for n, (_, l, _) in CORPORA.items()
+                 if l.commercial_reuse is Permission.YES}
+        self.assertEqual(clean, {"CNS", "NetHealth"})
 
     def test_a_licence_is_several_answers_and_not_one_word(self):
         """CC BY-NC-SA даёт research YES и commercial NO ОДНОВРЕМЕННО. Плоское
