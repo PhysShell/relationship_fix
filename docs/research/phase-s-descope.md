@@ -211,7 +211,7 @@ S5a  CLOSED      K0 machinery qualification
 generator = FROZEN   (168aef4e…, замок в simulation/manifest.py)
 extractor = FROZEN   (sha256-пины, tests/test_freeze.py)
 
-S4   BLOCKED_EXTERNAL: dataset access
+S4   UNBLOCKED (2026-09-19): CNS скачивается сразу, MIT
 S5b  BLOCKED_ON_S4
 S2   DEFERRED
 
@@ -222,9 +222,21 @@ Open pivot              opportunity_rate_per_day / density
 Ждать — значит ждать, а не «раз уж ждём, давайте ещё немного улучшим
 симулятор». Именно в этот момент кроличий тоннель обычно заказывает шторы.
 
-Единственное, что делается без нарушения заморозки, — операционная подготовка:
-[гейт приёма](messaging-matters-s4-prereg.md) и
-[запрос доступа](messaging-matters-access-request.md). Это не исследование.
+**S4 разблокирован.** Целевой корпус сменён с Messaging Matters (файлы
+restricted) на **Copenhagen Networks Study**: >700 человек, 4 недели, реальный
+асинхронный SMS, sender/receiver/time, текста нет, лицензия MIT, скачивается
+без единого письма живому человеку. Вопросы Q1–Q4 не менялись.
+
+Порядок — **одна** калибровка, потом заморозка:
+
+```
+CNS → Q1–Q4 → (amendment + новый digest, если нужно) → FREEZE
+    → SMS-A + CollegeMsg как external stress checks
+```
+
+Подробности и границы: [S4 prereg](external-async-calibration-s4-prereg.md)
+§0a, §1a, §1b. Гейт приёма — `acquisition/admission.py`, по 13 проверок на
+корпус, все UNKNOWN до осмотра файла.
 
 Правки генератора **остановлены**. S3a сделал то, ради чего затевался: не
 подогнал синтетику к человечеству, а нашёл, где модель мира была структурно
@@ -269,7 +281,7 @@ S6  δ, дисперсия, чувствительность мощности
 | S1 | генератор процесса с известной ground truth | **выполнен** |
 | S3 | MaiChat как калибровочный/стресс-корпус | **выполнен**, `maichat-calibration-s3.md` |
 | S3a | правка формы модели + заморозка | **выполнен** |
-| S4 | Messaging Matters | **prereg записан**, `messaging-matters-s4-prereg.md` |
+| S4 | Messaging Matters | **prereg записан**, `external-async-calibration-s4-prereg.md` |
 | S2 | TelAnalysis / ChatRel | **DEFERRED** — после сегодняшнего ещё одна синтетика почти ничего не скажет |
 | S5a | K0 machinery qualification | **CLOSED**, `k0-simulation-s5-prereg.md` |
 | S5b | `δ`, variance envelope, pilot N, мощность | **BLOCKED_ON_S4** |

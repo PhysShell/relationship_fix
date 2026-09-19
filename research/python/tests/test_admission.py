@@ -8,8 +8,8 @@
 import unittest
 
 from acquisition.admission import (
-    MESSAGING_MATTERS, Admission, AdmissionCheck, AdmissionError, CheckVerdict,
-    require_admission,
+    CORPORA, MESSAGING_MATTERS, Access, Admission, AdmissionCheck, AdmissionError,
+    CheckVerdict, corpus_admission, require_admission,
 )
 
 
@@ -105,45 +105,64 @@ class GuardTests(unittest.TestCase):
         self.assertIsNone(require_admission(admission))
 
 
-class MessagingMattersTests(unittest.TestCase):
-    """Тот самый корпус, ради которого гейт и написан."""
+class CorpusAdmissionTests(unittest.TestCase):
+    """Гейты корпусов, ради которых всё и написано."""
 
-    def test_nothing_is_admitted_before_the_file_exists(self):
-        self.assertFalse(MESSAGING_MATTERS.admitted)
-        for entry in MESSAGING_MATTERS.checks:
-            self.assertIs(entry.verdict, CheckVerdict.UNKNOWN, entry.key)
+    def test_no_corpus_is_admitted_before_its_file_is_inspected(self):
+        for name, (_, _, admission) in CORPORA.items():
+            self.assertFalse(admission.admitted, name)
+            for entry in admission.checks:
+                self.assertIs(entry.verdict, CheckVerdict.UNKNOWN, f"{name}.{entry.key}")
 
-    def test_the_questions_the_reconnaissance_got_wrong_are_all_here(self):
-        """S4 prereg §0.3: «133 чата» против N = 142 в самой статье. Эти
-        величины входят как ИЗМЕРЯЕМЫЕ, а не как основание."""
-        keys = {entry.key for entry in MESSAGING_MATTERS.checks}
-        for required in ("scale.counts", "schema.fields", "time.resolution",
-                         "time.semantics", "coverage.semantics"):
-            self.assertIn(required, keys)
+    def test_access_and_licence_are_separate_fields(self):
+        """«Скачивается» не значит «разрешено» — самая дорогая из наших привычных
+        ошибок. CollegeMsg публичен и лицензии не имеет вовсе."""
+        access, licence, _ = CORPORA["CollegeMsg"]
+        self.assertIs(access, Access.PUBLIC)
+        self.assertIn("NEEDS_VERIFICATION", licence)
+        access, licence, _ = CORPORA["SMS-A"]
+        self.assertIs(access, Access.PUBLIC)
+        self.assertIn("NEEDS_VERIFICATION", licence)
 
-    def test_the_text_promise_from_the_letter_is_a_blocking_check(self):
-        """В письме обещано отрезать текст на входе. Обещание исполняется
-        здесь или не исполняется вовсе."""
+    def test_only_the_verified_licence_is_stated_as_known(self):
+        _, licence, _ = CORPORA["CNS"]
+        self.assertIn("MIT", licence)
+        self.assertNotIn("NEEDS_VERIFICATION", licence)
+
+    def test_the_deferred_corpus_is_kept_rather_than_deleted(self):
+        access, _, admission = CORPORA["MessagingMatters"]
+        self.assertIs(access, Access.RESTRICTED)
+        self.assertIs(admission, MESSAGING_MATTERS)
+
+    def test_every_corpus_gets_the_same_questions(self):
+        """Вопрос «что на самом деле в файле» не зависит от того, насколько
+        симпатична аннотация."""
+        key_sets = {name: tuple(c.key for c in admission.checks)
+                    for name, (_, _, admission) in CORPORA.items()}
+        self.assertEqual(len(set(key_sets.values())), 1, key_sets)
+
+    def test_direction_is_a_blocking_check(self):
+        """Перепутанные sender/receiver не роняют ничего — они молча меняют
+        каждую возможность местами."""
+        self.assertTrue(corpus_admission("x").check("direction.sender_receiver").blocking)
+
+    def test_the_text_promise_blocks(self):
+        admission = corpus_admission("x")
         for key in ("schema.text_present", "schema.text_discarded"):
-            self.assertTrue(MESSAGING_MATTERS.check(key).blocking, key)
-
-    def test_licence_and_redistribution_both_gate(self):
-        """MaiChat уже не вендорится из-за share-alike."""
-        self.assertTrue(MESSAGING_MATTERS.check("licence.terms").blocking)
-        self.assertTrue(MESSAGING_MATTERS.check("licence.redistribution").blocking)
+            self.assertTrue(admission.check(key).blocking, key)
 
     def test_every_check_names_what_is_at_stake(self):
-        for entry in MESSAGING_MATTERS.checks:
+        for entry in corpus_admission("x").checks:
             self.assertTrue(entry.at_stake, entry.key)
 
-    def test_the_gate_refuses_the_corpus_today(self):
-        with self.assertRaises(AdmissionError):
-            require_admission(MESSAGING_MATTERS)
+    def test_the_gate_refuses_every_corpus_today(self):
+        for name, (_, _, admission) in CORPORA.items():
+            with self.assertRaises(AdmissionError, msg=name):
+                require_admission(admission)
 
-    def test_resolving_everything_blocking_would_admit_it(self):
-        """Гейт должен уметь открыться — иначе это не гейт, а стена."""
-        admission = MESSAGING_MATTERS
-        for entry in MESSAGING_MATTERS.checks:
+    def test_a_gate_can_be_opened_or_it_is_a_wall(self):
+        admission = corpus_admission("x")
+        for entry in tuple(admission.checks):
             if entry.blocking:
                 admission = admission.resolve(entry.key, CheckVerdict.PASSED,
                                               "verified on the delivered file")

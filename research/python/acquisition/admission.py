@@ -126,73 +126,111 @@ def require_admission(admission: Admission) -> None:
         )
 
 
-#: Все проверки начинаются с UNKNOWN. Ни одна не будет «пройдена по умолчанию»
+class Access(Enum):
+    """Как файл достаётся. НЕ говорит ничего о том, что с ним разрешено делать."""
+
+    PUBLIC = "PUBLIC"
+    ON_REQUEST = "ON_REQUEST"
+    RESTRICTED = "RESTRICTED"
+
+
+def corpus_admission(corpus: str, *, extra: tuple[AdmissionCheck, ...] = ()) -> Admission:
+    """Стандартный набор вопросов к любому внешнему корпусу.
+
+    Один набор на все корпуса намеренно: вопрос «а что на самом деле в файле»
+    не зависит от того, насколько симпатичной выглядит аннотация.
+    """
+    return Admission(corpus, (
+        AdmissionCheck(
+            "licence.terms",
+            "Какая лицензия/DUA у файлов и разрешает ли она это использование?",
+            "«Скачивается» не значит «разрешено». CollegeMsg скачивается и "
+            "лицензии не имеет вовсе.",
+            blocking=True),
+        AdmissionCheck(
+            "licence.redistribution",
+            "Можно ли вендорить файлы, или корпус остаётся вне репозитория по пути?",
+            "MaiChat уже не вендорится из-за share-alike; повторить легко.",
+            blocking=True),
+        AdmissionCheck(
+            "schema.fields",
+            "Какие поля ФАКТИЧЕСКИ присутствуют в файлах?",
+            "Разведка по аннотациям уже расходилась с первичным источником.",
+            blocking=True),
+        AdmissionCheck(
+            "schema.text_present",
+            "Содержат ли файлы текст сообщений?",
+            "«Текст не собирался» слишком удобно для нашей privacy story, "
+            "чтобы принимать это без доказательства.",
+            blocking=True),
+        AdmissionCheck(
+            "schema.text_discarded",
+            "Если текст есть — отрезан ли он на входе адаптера, не доходя ни "
+            "до одного типа?",
+            "Обещание отрезать текст исполняется здесь или не исполняется вовсе.",
+            blocking=True),
+        AdmissionCheck(
+            "time.resolution",
+            "Каково фактическое разрешение меток времени?",
+            "От него напрямую зависит вся Q3: доля cross-actor ties и цена STRICT.",
+            blocking=True),
+        AdmissionCheck(
+            "time.semantics",
+            "Что метка ОЗНАЧАЕТ: отправку устройством, приём сервером, биллинг?",
+            "Server-receive и часы отправителя — разные величины под одним именем.",
+            blocking=True),
+        AdmissionCheck(
+            "scale.counts",
+            "Сколько на самом деле диад, сообщений и какие календарные промежутки?",
+            "Заменяет числа из аннотаций измеренными.",
+            blocking=True),
+        AdmissionCheck(
+            "coverage.semantics",
+            "Что означает пустой промежуток: не было сообщений или не было данных?",
+            "Q1 считает incidence по окну. Пропуск данных, принятый за тишину, "
+            "занижает её молча — отсутствие стало бы свидетельством.",
+            blocking=True),
+        AdmissionCheck(
+            "identity.dyad",
+            "Устойчивы ли анонимизированные идентификаторы внутри и между файлами?",
+            "Без устойчивого идентификатора person-period не собирается.",
+            blocking=True),
+        AdmissionCheck(
+            "events.non_message",
+            "Как отличить обычные сообщения от системных/служебных событий?",
+            "Системное событие, принятое за сообщение, изобретает возможности "
+            "и портит N — ту самую величину, ради которой S4 и затевается.",
+            blocking=True),
+        AdmissionCheck(
+            "direction.sender_receiver",
+            "Есть ли направление, и который из двух столбцов — отправитель?",
+            "Вся топология строится на смене актёра. Перепутанное направление "
+            "не падает — оно молча меняет каждую возможность местами.",
+            blocking=True),
+        AdmissionCheck(
+            "ethics.scope",
+            "Нет ли в условиях запрета на тот анализ, который объявлен в prereg?",
+            "Узнать об этом после публикации результата — поздно.",
+            blocking=False),
+    ) + extra)
+
+
+#: Все проверки начинаются с UNKNOWN. Ни одна не «проходит по умолчанию»
 #: потому, что файл наконец приехал и его хочется посмотреть.
-MESSAGING_MATTERS = Admission("Messaging Matters (S4)", (
-    AdmissionCheck(
-        "licence.terms",
-        "Какая лицензия/DUA у присланных файлов и разрешает ли она это использование?",
-        "Без этого весь S4 — правовой риск, а не результат.",
-        blocking=True),
-    AdmissionCheck(
-        "licence.redistribution",
-        "Можно ли вендорить файлы, или корпус остаётся вне репозитория по пути?",
-        "MaiChat уже не вендорится из-за share-alike; повторить ошибку легко.",
-        blocking=True),
-    AdmissionCheck(
-        "schema.fields",
-        "Какие поля ФАКТИЧЕСКИ присутствуют в файлах?",
-        "Разведка по аннотациям уже разошлась с первичным источником (S4 §0.3).",
-        blocking=True),
-    AdmissionCheck(
-        "schema.text_present",
-        "Содержат ли файлы текст сообщений?",
-        "«Текст не собирался» слишком удобно для нашей privacy story, чтобы "
-        "принимать это без доказательства.",
-        blocking=True),
-    AdmissionCheck(
-        "schema.text_discarded",
-        "Если текст есть — отрезан ли он на входе адаптера, не доходя ни до "
-        "одного типа?",
-        "Обещание из письма исполняется здесь или не исполняется вовсе.",
-        blocking=True),
-    AdmissionCheck(
-        "time.resolution",
-        "Каково фактическое разрешение меток времени?",
-        "От него напрямую зависит вся Q3: доля cross-actor ties и цена STRICT.",
-        blocking=True),
-    AdmissionCheck(
-        "time.semantics",
-        "Что метка ОЗНАЧАЕТ: отправку устройством, приём сервером, что-то ещё?",
-        "MaiChat — server-receive, Telegram — часы отправителя. Смешать их "
-        "значит сравнивать разные величины под одним именем.",
-        blocking=True),
-    AdmissionCheck(
-        "scale.counts",
-        "Сколько на самом деле диад, сообщений и какие календарные промежутки?",
-        "Заменяет непроверенные 133 / 129 / 2.18M / «3 месяца» измеренными.",
-        blocking=True),
-    AdmissionCheck(
-        "coverage.semantics",
-        "Что означает пустой промежуток: не было сообщений или не было данных?",
-        "Q1 считает incidence по окну. Пропуск данных, принятый за тишину, "
-        "занижает её молча — отсутствие стало бы свидетельством.",
-        blocking=True),
-    AdmissionCheck(
-        "identity.dyad",
-        "Устойчивы ли анонимизированные идентификаторы диады и участника внутри "
-        "и между файлами?",
-        "Без устойчивого идентификатора person-period не собирается.",
-        blocking=True),
-    AdmissionCheck(
-        "events.non_message",
-        "Как отличить обычные сообщения от системных/служебных событий?",
-        "Системное событие, принятое за сообщение, изобретает возможности и "
-        "портит N — ту самую величину, ради которой S4 и затевается.",
-        blocking=True),
-    AdmissionCheck(
-        "ethics.scope",
-        "Нет ли в условиях запрета на тот анализ, который мы объявили в prereg?",
-        "Узнать об этом после публикации результата — поздно.",
-        blocking=False),
-))
+#:
+#: `access` и `data_license` — РАЗНЫЕ поля, и это не педантизм: CollegeMsg
+#: публичен и лицензии не имеет, SMS-A лежит в supplementary и лицензии тоже
+#: пока не имеет.
+CORPORA: dict[str, tuple[Access, str, Admission]] = {
+    "CNS": (Access.PUBLIC, "MIT (проверено через Figshare API, запись 7267433)",
+            corpus_admission("Copenhagen Networks Study — sms.csv (S4-primary)")),
+    "SMS-A": (Access.PUBLIC, "NEEDS_VERIFICATION",
+              corpus_admission("SMS-A, Wu et al. supplementary (S4-secondary)")),
+    "CollegeMsg": (Access.PUBLIC, "NEEDS_VERIFICATION (SNAP лицензии не указывает)",
+                   corpus_admission("CollegeMsg, SNAP (S4-sensitivity)")),
+    "MessagingMatters": (Access.RESTRICTED, "Apache-2.0 у supplement, файлы restricted",
+                         corpus_admission("Messaging Matters (DEFERRED)")),
+}
+
+#: Оставлено ради существующих ссылок; корпус отложен, не удалён.
+MESSAGING_MATTERS = CORPORA["MessagingMatters"][2]

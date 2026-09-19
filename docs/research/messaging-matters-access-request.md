@@ -1,12 +1,16 @@
 # S4 — запрос доступа к Messaging Matters (готов к отправке человеком)
 
-Статус: **подготовлен, не отправлен** (2026-09-19). Отправляет человек;
-агент почту не шлёт.
+Статус: **НЕ ТРЕБУЕТСЯ** (2026-09-19). Письмо сохранено, но отправлять его
+сейчас незачем: S4 перенацелен на Copenhagen Networks Study, который
+скачивается сразу и под MIT. Messaging Matters отложен, не отвергнут — если
+понадобится relationship-specific корпус, письмо готово.
+
+Отправляет человек; агент почту не шлёт.
 
 Адресат: corresponding author статьи «Messaging matters: Investigating
 differences in WhatsApp communication patterns across different relationship
 constellations» (ScienceDirect `S2451958826000709`). Файлы связанной
-Zenodo-записи restricted, см. [S4 prereg §0](messaging-matters-s4-prereg.md).
+Zenodo-записи restricted, см. [S4 prereg §0](external-async-calibration-s4-prereg.md).
 
 ## Почему в письме нет чисел
 
