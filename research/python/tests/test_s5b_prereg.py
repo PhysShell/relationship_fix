@@ -907,61 +907,89 @@ class DiversionProtocolTests(unittest.TestCase):
 class RegularityGateTests(unittest.TestCase):
     """После отказа от бутстрапа производная стала несущей балкой."""
 
+    KW = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
+    #: излом при λ = 60: наклон −1 -> −2
+    KINKED = [Bin(0.0, 2, 1), Bin(60.0, 0, 1)]
+    #: гладкая, корень 120
+    SMOOTH = [Bin(0.0, 1, 0), Bin(120.0, 0, 1)]
+
+    def _psi(self, bins):
+        from coarsening.bounded import _optimise
+        return lambda lam: _optimise(bins, lam=lam, maximise=False,
+                                     require_any=False, **self.KW)
+
     def test_the_envelope_claim_is_narrowed_to_where_it_holds(self):
         self.assertTrue(prereg.ENVELOPE_GIVES_THE_DERIVATIVE_ONLY_WHERE_THE_ARGMIN_IS_UNIQUE)
         self.assertTrue(prereg.SLOPE_NEVER_ZERO_IS_NOT_SLOPE_CONTINUOUS)
         self.assertIn("E[ψ] stays smooth", prereg.REGULARITY_IS_ABOUT_g_NOT_ABOUT_EVERY_psi)
 
-    def test_the_gate_is_blocking_and_names_a_reachable_counterexample(self):
-        self.assertTrue(prereg.REGULARITY_GATE_IS_BLOCKING_IN_S5A_RATIO)
-        self.assertIn("partner=2, participant=2", prereg.NONREGULAR_CASE_IS_REACHABLE)
-        self.assertTrue(prereg.NONREGULAR_CELLS_GET_NO_SANDWICH_INTERVAL)
-        self.assertTrue(prereg.PLUGGING_IN_THE_CHOSEN_N_STAR_WOULD_BE_TOO_OPTIMISTIC)
+    def test_the_sample_level_check_is_recorded_as_blind(self):
+        """Оно не «не там реализовано», оно слепнет С РОСТОМ n."""
+        self.assertTrue(prereg.SAMPLE_LEVEL_REGULARITY_CHECK_IS_ASYMPTOTICALLY_BLIND)
+        self.assertIn("59/60 at n = 1600", prereg.BLINDNESS_MEASURED)
+        self.assertTrue(prereg.REGULARITY_GATE_CHECKS_THE_POPULATION_NOT_THE_SAMPLE)
 
-    def test_the_probe_is_recorded_with_its_structural_reason(self):
-        """Наблюдение объясняет, почему гейт молчит, но не заменяет его."""
-        self.assertEqual(prereg.REGULARITY_PROBE_KINKS_FOUND, 0)
-        self.assertGreaterEqual(prereg.REGULARITY_PROBE_RUNS, 200)
-        self.assertIn("denominator of order ΣN", prereg.WHY_THE_ROOT_IS_USUALLY_REGULAR)
-        self.assertTrue(prereg.OBSERVATION_DOES_NOT_REPLACE_THE_GATE)
+    def test_the_blindness_reproduces(self):
+        """Не верим записи — воспроизводим: популяционный разрыв 0.5, а
+        выборочная проверка в выборочном корне его не видит."""
+        from coarsening.bounded import generalized_inverse, one_sided_slopes
+        rng = random.Random(1)
+        periods = [self.KINKED if rng.random() < 0.5 else self.SMOOTH
+                   for _ in range(400)]
+        G = lambda lam: sum(self._psi(b)(lam) for b in periods)
+        root = generalized_inverse(G, 0.0, 300.0 + 1e-9, tolerance=1e-9)
+        lam = (root.low + root.high) / 2
+        left, right = one_sided_slopes(G, lam)
+        self.assertEqual(left, right, "выборочная проверка обязана СКАЗАТЬ regular")
+        h = 1e-5
+        below = sum((self._psi(b)(60.0) - self._psi(b)(60.0 - h)) / h for b in periods)
+        above = sum((self._psi(b)(60.0 + h) - self._psi(b)(60.0)) / h for b in periods)
+        self.assertGreater(abs(below - above) / len(periods), 0.1,
+                           "а популяционный разрыв при этом есть")
 
-    def test_the_detector_fires_on_the_named_counterexample(self):
-        """Гейт, который никогда не падал, не проверен."""
-        from coarsening.bounded import (Bin, _optimise, generalized_inverse,
-                                        is_regular_at, one_sided_slopes)
-        kw = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
-        kinked = [Bin(0.0, 2, 2)]
-        g = lambda lam: _optimise(kinked, lam=lam, maximise=False,
-                                  require_any=False, **kw)
-        root = generalized_inverse(g, 0.0, 300.0 + 1e-9, tolerance=1e-9)
-        lam0 = (root.low + root.high) / 2
-        self.assertEqual(one_sided_slopes(g, lam0), (-1, -2))
-        self.assertFalse(is_regular_at(g, lam0))
+    def test_the_population_certificate_fires_on_the_counterexample(self):
+        from coarsening.bounded import count_near_breakpoints
+        periods = [self.KINKED] * 100 + [self.SMOOTH] * 100
+        hits, nearest = count_near_breakpoints(periods, 60.0, 10.0, **self.KW)
+        self.assertEqual(hits, 100)
+        self.assertEqual(nearest, 0.0, "излом РОВНО в корне обязан ловиться")
+        self.assertFalse(prereg.regularity_is_accepted(hits, len(periods), 1.0, 1.0))
 
-    def test_the_detector_stays_quiet_on_a_smooth_root(self):
-        from coarsening.bounded import (Bin, _optimise, generalized_inverse,
-                                        is_regular_at)
-        kw = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
-        smooth = [Bin(0.0, 1, 0), Bin(120.0, 0, 1)]
-        g = lambda lam: _optimise(smooth, lam=lam, maximise=False,
-                                  require_any=False, **kw)
-        root = generalized_inverse(g, 0.0, 300.0 + 1e-9, tolerance=1e-9)
-        self.assertTrue(is_regular_at(g, (root.low + root.high) / 2))
+    def test_the_population_certificate_stays_quiet_on_smooth_periods(self):
+        from coarsening.bounded import count_near_breakpoints
+        periods = [self.SMOOTH] * 50
+        hits, nearest = count_near_breakpoints(periods, 60.0, 10.0, **self.KW)
+        self.assertEqual((hits, nearest), (0, None))
 
-    def test_the_verdict_does_not_depend_on_the_probe_step(self):
-        """Шаг зажат изломами сверху и округлением снизу — проверяем оба края."""
-        from coarsening.bounded import (Bin, _optimise, generalized_inverse,
-                                        one_sided_slopes)
-        kw = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
-        for bins, want in (([Bin(0.0, 2, 2)], (-1, -2)),
-                           ([Bin(0.0, 1, 0), Bin(120.0, 0, 1)], (-1, -1))):
-            g = lambda lam: _optimise(bins, lam=lam, maximise=False,
-                                      require_any=False, **kw)
-            root = generalized_inverse(g, 0.0, 300.0 + 1e-9, tolerance=1e-9)
-            lam0 = (root.low + root.high) / 2
-            for step in (1e-3, 1e-4, 1e-5, 1e-6):
-                self.assertEqual(one_sided_slopes(g, lam0, step=step), want,
-                                 (bins, step))
+    def test_zero_observations_become_a_bound_not_a_zero(self):
+        """«Изломов не найдено» не равно «изломов нет»."""
+        self.assertGreater(prereg.wilson_upper(0, 4_000), 0.0)
+        self.assertLess(prereg.wilson_upper(0, 4_000), 0.01)
+        self.assertTrue(prereg.regularity_is_accepted(0, 4_000, 3.0, 1.5))
+        self.assertIn("Wilson", prereg.REGULARITY_RESIDUAL_BOUND)
+
+    def test_the_radius_is_tied_to_the_uncertainty_of_the_root(self):
+        self.assertGreaterEqual(prereg.REGULARITY_RADIUS_SE_MULTIPLE, 2.0)
+        self.assertIn("standard errors", prereg.REGULARITY_GATE)
+
+    def test_the_denominator_heuristic_is_withdrawn(self):
+        """Как интуиция сгодится, как заверение — опасна."""
+        self.assertTrue(prereg.DENOMINATOR_HEURISTIC_IS_WITHDRAWN_AS_ASSURANCE)
+        self.assertFalse(hasattr(prereg, "WHY_THE_ROOT_IS_USUALLY_REGULAR"))
+
+    def test_interiority_is_a_second_independent_gate(self):
+        self.assertEqual(len(prereg.REGULARITY_GATES_ARE_TWO), 2)
+        self.assertTrue(prereg.interiority_is_accepted(1200.0, 2.3, 3600.0))
+        self.assertFalse(prereg.interiority_is_accepted(0.0, 2.3, 3600.0))
+        self.assertFalse(prereg.interiority_is_accepted(3599.0, 2.3, 3600.0))
+        self.assertTrue(prereg.BOUNDARY_CELLS_GET_NO_SYMMETRIC_INTERVAL)
+
+    def test_the_boundary_is_shown_to_be_genuine(self):
+        """Если бы её можно было перешагнуть, это была бы граница поиска."""
+        self.assertIn("no crossing exists there",
+                      prereg.BOUNDARY_IS_GENUINE_NOT_A_SEARCH_ARTEFACT)
+        for lam in (-1.0, -60.0, -1000.0):
+            self.assertGreaterEqual(self._psi(self.KINKED)(lam), 0.0, lam)
 
 
 class DiversionSelfTestTests(unittest.TestCase):

@@ -431,33 +431,89 @@ REGULARITY_IS_ABOUT_g_NOT_ABOUT_EVERY_psi = ("individual ψ may kink while "
 #: одновременно — Wald там не просто неточен.
 NONREGULAR_CASE_IS_REACHABLE = "Bin(partner=2, participant=2): slopes −1 and −2 at λ0 = 0"
 
-#: ПОЭТОМУ ГЕЙТ, А НЕ ДОПУЩЕНИЕ. В каждой ячейке считаются ОБЕ односторонние
-#: производные g в корне (наклоны целые: −ΣN), и они обязаны совпасть.
-REGULARITY_GATE = ("both one-sided derivatives of g at the root must agree; "
-                   "otherwise the cell is NONREGULAR")
+#: ПОЭТОМУ ГЕЙТ — И ПРОВЕРЯТЬ ОН ОБЯЗАН ПОПУЛЯЦИОННЫЙ ОБЪЕКТ. Поправка
+#: шестого чтения, и прежний гейт был не просто не там — он был АСИМПТОТИЧЕСКИ
+#: СЛЕП.
+#:
+#: Он сравнивал односторонние наклоны ВЫБОРОЧНОГО критерия G_n в ВЫБОРОЧНОМ
+#: корне. У G_n наклоны целые (−ΣN), и это выглядело убедительно. Но если
+#: излом у ПОПУЛЯЦИОННОГО g в λ0, то λ̂ отстоит от него на O(n^{-1/2}) и почти
+#: наверное лежит ВНУТРИ линейного куска. Гейт рапортует REGULAR.
+#:
+#: И с ростом n не чинится, а УХУДШАЕТСЯ: λ̂ → λ0, но «λ̂ = λ0 точно» имеет
+#: вероятность около нуля. Замерено на построенной смеси 50/50 с популяционным
+#: разрывом 0.5 (A− = −1.0, A+ = −1.5):
+#:
+#:     n = 25    REGULAR в 60 случаях из 60
+#:     n = 1600  REGULAR в 59 случаях из 60
+#:
+#: Тест подходит к проблемной точке всё ближе и почти никогда на неё не
+#: наступает. Хуже гейта, который не работает, только гейт, который не
+#: работает тем надёжнее, чем больше данных.
+SAMPLE_LEVEL_REGULARITY_CHECK_IS_ASYMPTOTICALLY_BLIND = True
+BLINDNESS_MEASURED = "50/50 mixture with a 0.5 population jump: REGULAR in 59/60 at n = 1600"
+
+#: ПРАВИЛЬНЫЙ ОБЪЕКТ — РАССТОЯНИЕ ДО ИЗЛОМА, а не производная в точке. Если
+#: НИ ОДИН период популяции не имеет излома в окрестности корня, то g там
+#: ЛИНЕЙНА, а значит дифференцируема; это сильнее равенства односторонних
+#: наклонов и не слепнет от промаха оценки мимо излома.
+REGULARITY_GATE = ("no period of the MC population may have a breakpoint within "
+                   "REGULARITY_RADIUS_SE_MULTIPLE standard errors of λ̂0; then g "
+                   "is linear in a neighbourhood of the root")
 REGULARITY_GATE_IS_BLOCKING_IN_S5A_RATIO = True
+REGULARITY_GATE_CHECKS_THE_POPULATION_NOT_THE_SAMPLE = True
 NONREGULAR = "NONREGULAR"
-#: Несовпадение — НЕ повод подставить выбранный N* в «хлеб» сэндвича: у корня
-#: кусочно-линейного монотонного уравнения в точке излома предельное
-#: поведение нестандартно, и обычная нормальная аппроксимация требует уже
-#: другого доказательства, которого у нас нет.
 NONREGULAR_CELLS_GET_NO_SANDWICH_INTERVAL = True
 PLUGGING_IN_THE_CHOSEN_N_STAR_WOULD_BE_TOO_OPTIMISTIC = True
 
-#: ЧТО ПОКАЗАЛ ЗАМЕР НА ЗАМОРОЖЕННОМ DGP — до прогона, как хронометраж.
-#: 200 прогонов, пять конфигураций (n = 1, 5, 25, 100; Δ = 1 и 60 с):
-#: изломов в корне НОЛЬ, односторонние наклоны совпадают точно.
-#:
-#: И у этого есть структурная причина, а не везение: в корне
-#: λ0 = ΣB/ΣN по оптимальным историям, то есть знаменатель ПОРЯДКА ΣN
-#: (тысячи), тогда как изломы периода лежат в ΔB/ΔN со знаменателем
-#: порядка единиц. Совпадение требует точного сокращения дроби.
-#: Наблюдение НЕ заменяет гейт: оно объясняет, почему гейт обычно молчит.
+#: РАДИУС ПРИВЯЗАН К НЕОПРЕДЕЛЁННОСТИ САМОГО λ̂0, иначе сертификат утверждает
+#: про точку, которую знает лишь приблизительно. Замерено: разброс λ̂0 на 150
+#: периодах — 11.9 с, то есть 2.3 с при M = 4000.
+REGULARITY_RADIUS_SE_MULTIPLE = 3.0
+
+#: И ОСТАТОЧНЫЙ РИСК ОЦЕНИВАЕТСЯ, А НЕ ОБЪЯВЛЯЕТСЯ НУЛЁМ. Конфигурации с
+#: массой много меньше 1/M в выборку не попадают, поэтому «изломов не
+#: найдено» даёт не ноль, а границу: разрыв производной не больше
+#: (верхняя граница частоты) x (максимальный скачок ΔN). При нулевом
+#: наблюдении на M = 4000 правило трёх даёт частоту <= 0.075%.
+REGULARITY_JUMP_TOLERANCE = 0.05          # доля от |A|
+REGULARITY_RESIDUAL_BOUND = ("upper Wilson limit on the near-breakpoint frequency "
+                             "times the largest observed ΔN")
+
+#: ПРЕЖНЯЯ ЭВРИСТИКА ОТОЗВАНА, и это важнее, чем кажется. Было записано:
+#: «λ0 = ΣB/ΣN имеет знаменатель порядка тысяч, а изломы периода — порядка
+#: единиц, поэтому совпадение требует точного сокращения». Как интуиция
+#: сгодится; как ЗАВЕРЕНИЕ — опасна, потому что асимптотическая задача
+#: определяется популяционной арифметикой, а не редкостью совпадения
+#: выборочных дробей. Оставлять её в роли аргумента значило бы держать в
+#: prereg успокоительное.
+DENOMINATOR_HEURISTIC_IS_WITHDRAWN_AS_ASSURANCE = True
+
+#: ЗАМЕР НА ЗАМОРОЖЕННОМ DGP, до прогона. Четыре конфигурации, 150 периодов:
+#: в радиусе 1 с от корня изломов НЕТ ни в одной; ближайший найденный лежит в
+#: 6.7-8.4 с при λ0 ≈ 1200 с. Сертификат на построенном контрпримере
+#: срабатывает: 100 из 200 периодов имеют излом РОВНО в λ0.
 REGULARITY_PROBE_RUNS = 200
 REGULARITY_PROBE_KINKS_FOUND = 0
-WHY_THE_ROOT_IS_USUALLY_REGULAR = ("λ0 = ΣB/ΣN has a denominator of order ΣN; "
-                                   "period kinks have denominators of order ΔN")
+REGULARITY_PROBE_NEAREST_BREAKPOINT_SECONDS = 6.7
 OBSERVATION_DOES_NOT_REPLACE_THE_GATE = True
+
+#: ВТОРОЙ ГЕЙТ, НЕЗАВИСИМЫЙ ОТ ПЕРВОГО: ВНУТРЕННОСТЬ КОРНЯ. Даже без излома,
+#: если λ0 = 0, обычный симметричный Wald — не тот объект: вместо
+#: √n(λ̂ − λ0) ⇒ N(0, σ²) получается что-то вида max(0, Z), то есть масса в
+#: нуле плюс половина нормального.
+#:
+#: И граница здесь НАСТОЯЩАЯ, а не артефакт поиска. Для λ < 0 имеем
+#: B − λN >= B >= 0, поэтому g(λ) >= 0 слева от нуля и пересечения там нет
+#: НИКОГДА: отношение B/N неотрицательно по построению. Продолжить
+#: оценивающее уравнение за границу нельзя, значит это граница
+#: СТАТИСТИЧЕСКОЙ задачи, а не интерпретации.
+INTERIORITY_GATE = "λ̂0 must lie strictly inside (0, H) by at least the same margin"
+BOUNDARY_IS_GENUINE_NOT_A_SEARCH_ARTEFACT = "g(λ) >= 0 for λ < 0, so no crossing exists there"
+NONREGULAR_BOUNDARY = "NONREGULAR_BOUNDARY"
+BOUNDARY_CELLS_GET_NO_SYMMETRIC_INTERVAL = True
+#: Обе проверки независимы: ячейка может провалить любую по отдельности.
+REGULARITY_GATES_ARE_TWO = ("population differentiability", "interiority")
 ANALYTIC_INFERENCE = (
     "λ̂ solves the sample estimating equation; bracket from generalized_inverse",
     "Jacobian by the envelope theorem: mean of N* over units — no differencing",
@@ -667,6 +723,42 @@ def wilson_lower(successes: int, trials: int, z: float = COVERAGE_Z) -> float:
     centre = phat + z * z / (2 * trials)
     spread = z * math.sqrt(phat * (1 - phat) / trials + z * z / (4 * trials * trials))
     return max(0.0, (centre - spread) / denominator)
+
+
+def wilson_upper(successes: int, trials: int, z: float = COVERAGE_Z) -> float:
+    """Верхний предел Уилсона. Нужен там, где НАБЛЮДЕНО НОЛЬ.
+
+    «Изломов не найдено» не равно «изломов нет»: конфигурации с массой много
+    меньше 1/M в выборку не попадают. Верхняя граница частоты превращает
+    отсутствие наблюдений в ЧИСЛО, а не в успокоительное.
+    """
+    if trials <= 0:
+        return 1.0
+    phat = successes / trials
+    denominator = 1.0 + z * z / trials
+    centre = phat + z * z / (2 * trials)
+    spread = z * math.sqrt(phat * (1 - phat) / trials + z * z / (4 * trials * trials))
+    return min(1.0, (centre + spread) / denominator)
+
+
+def regularity_is_accepted(near_breakpoints: int, periods: int,
+                           largest_jump: float, slope_magnitude: float) -> bool:
+    """Проходит ли ячейка гейт дифференцируемости. Чистая функция.
+
+    Разрыв производной ограничен сверху частотой периодов с изломом рядом с
+    корнем, умноженной на наибольший возможный скачок. Сравнивается с |A|,
+    потому что важна ОТНОСИТЕЛЬНАЯ деформация сэндвича.
+    """
+    if slope_magnitude <= 0.0:
+        return False
+    bound = wilson_upper(near_breakpoints, periods) * largest_jump
+    return bound / slope_magnitude <= REGULARITY_JUMP_TOLERANCE
+
+
+def interiority_is_accepted(root: float, standard_error: float, horizon: float) -> bool:
+    """Лежит ли корень строго внутри области с запасом в те же ст.ошибки."""
+    margin = REGULARITY_RADIUS_SE_MULTIPLE * standard_error
+    return margin < root < horizon - margin
 
 
 def coverage_is_accepted(successes: int, trials: int) -> bool:

@@ -732,3 +732,95 @@ def is_regular_at(g, lam: float, *,
     """
     left, right = one_sided_slopes(g, lam, step=step)
     return left == right
+
+
+#: Допуск проверки аффинности: относительный, потому что ψ имеет порядок H·N.
+AFFINE_TOLERANCE = 1e-9
+
+
+def _is_affine_on(g, a: float, b: float) -> bool:
+    """Аффинна ли `g` на [a, b]. Точно для кусочно-линейной вогнутой `g`.
+
+    ψ(λ) = min по историям (B − λN) — минимум аффинных функций, значит
+    ВОГНУТА. Для вогнутой функции ψ(середина) >= полусумма концов, причём
+    равенство РАВНОСИЛЬНО аффинности на отрезке. Одно вычисление вместо
+    сканирования сеткой, и без риска перешагнуть излом.
+    """
+    mid = (a + b) / 2.0
+    left, right, centre = g(a), g(b), g(mid)
+    chord = (left + right) / 2.0
+    scale = max(1.0, abs(left) + abs(right))
+    return abs(centre - chord) <= AFFINE_TOLERANCE * scale
+
+
+def nearest_breakpoint(g, lam: float, radius: float, *,
+                       iterations: int = 60) -> float | None:
+    """Расстояние до ближайшего излома `g` в пределах `radius`, или None.
+
+    ЗАЧЕМ ИМЕННО ЭТО, а не односторонние производные в точке. Найдено шестым
+    враждебным чтением, и ошибка была структурной.
+
+    Прежний гейт сравнивал односторонние наклоны ВЫБОРОЧНОГО критерия в
+    ВЫБОРОЧНОМ корне. Но если излом есть у ПОПУЛЯЦИОННОГО g в λ0, выборочный
+    корень отстоит от него на O(n^{-1/2}) и почти наверное лежит ВНУТРИ
+    линейного куска — гейт рапортует REGULAR. Хуже: с ростом n он слепнет
+    СИЛЬНЕЕ, потому что λ̂ → λ0, но событие «λ̂ = λ0 точно» имеет вероятность
+    около нуля.
+
+    Замерено на построенной смеси 50/50 с популяционным разрывом 0.5:
+    гейт сказал REGULAR в 60/60 при n = 25 и в 59/60 при n = 1600.
+
+    Правильный объект — РАССТОЯНИЕ ДО ИЗЛОМА, а не производная в точке. Если
+    ближайший излом дальше, чем неопределённость самого λ0, то g линейна в
+    окрестности корня, и это сильнее, чем равенство односторонних наклонов.
+    """
+    if _is_affine_on(g, lam - radius, lam + radius):
+        return None
+    # ВАЖНЫЙ КРАЙ: излом РОВНО в `lam`. Каждая половина тогда аффинна по
+    # отдельности, и проверка только половин его пропускает — первая
+    # редакция этой функции так и делала.
+    below = _is_affine_on(g, lam - radius, lam)
+    above = _is_affine_on(g, lam, lam + radius)
+    if below and above:
+        return 0.0
+
+    a, b = (lam - radius, lam) if not below else (lam, lam + radius)
+    for _ in range(iterations):
+        mid = (a + b) / 2.0
+        if _is_affine_on(g, a, mid):
+            a = mid
+        else:
+            b = mid
+        if b - a < AFFINE_TOLERANCE * max(1.0, abs(lam)):
+            break
+    return min(abs(lam - a), abs(lam - b))
+
+
+def count_near_breakpoints(periods: list[list[Bin]], lam: float, radius: float, *,
+                           delta: float = OBSERVED_RESOLUTION_SECONDS,
+                           horizon: float, window_end: float,
+                           time_layer: bool = True,
+                           initiation_end: float | None = None,
+                           maximise: bool = False) -> tuple[int, float | None]:
+    """(сколько периодов имеют излом ближе `radius` к `lam`, минимум расстояния).
+
+    СЕРТИФИКАТ РЕГУЛЯРНОСТИ ПОПУЛЯЦИОННОГО КРИТЕРИЯ. Если НИ ОДИН период не
+    имеет излома в окрестности корня, то g = E[ψ] ЛИНЕЙНА в этой окрестности,
+    а значит дифференцируема — утверждение сильнее, чем равенство
+    односторонних наклонов в точке, и, в отличие от него, не слепнет от того,
+    что оценка корня не попадает в излом ровно.
+    """
+    nearest: float | None = None
+    hits = 0
+    for bins in periods:
+        def psi(at: float, bins=bins) -> float:
+            return _optimise(bins, delta=delta, horizon=horizon,
+                             window_end=window_end, time_layer=time_layer,
+                             lam=at, maximise=maximise, require_any=False,
+                             initiation_end=initiation_end) or 0.0
+
+        distance = nearest_breakpoint(psi, lam, radius)
+        if distance is not None:
+            hits += 1
+            nearest = distance if nearest is None else min(nearest, distance)
+    return hits, nearest
