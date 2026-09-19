@@ -477,8 +477,44 @@ class SamplingInferenceTests(unittest.TestCase):
         self.assertIn("root of a whole-arm", prereg.WELCH_NO_LONGER_APPLIES_BECAUSE)
         self.assertIn("outer union", prereg.SAMPLING_INTERVAL)
 
-    def test_the_analytic_method_is_frozen_end_to_end(self):
-        self.assertEqual(len(prereg.ANALYTIC_INFERENCE), 5)
+    def test_the_primary_is_test_inversion(self):
+        """Последний P0 снят не починкой сертификата, а отказом от допущения."""
+        self.assertIn("test inversion", prereg.PRIMARY_INFERENCE)
+        self.assertTrue(prereg.TEST_INVERSION_NEEDS_NO_DIFFERENTIABILITY)
+        self.assertTrue(prereg.TEST_INVERSION_NEEDS_NO_INTERIORITY)
+        self.assertIn("sqrt(n)", prereg.TEST_INVERSION_SET)
+        self.assertEqual(prereg.SANDWICH_ROLE, "diagnostic cross-check")
+
+    def test_the_uniqueness_theorem_is_what_makes_C_an_interval(self):
+        """Теперь она платит честно: не CLT, а единственность параметра."""
+        self.assertTrue(prereg.UNIQUENESS_THEOREM_IS_WHAT_MAKES_C_AN_INTERVAL_FOR_lambda0)
+        self.assertTrue(prereg.N_ZERO_IS_ORDER_INVARIANT)
+
+    def test_the_switch_does_not_claim_a_failure_it_did_not_observe(self):
+        """Сэндвич на контрпримере НЕ сломался, и это записано."""
+        self.assertTrue(prereg.SANDWICH_DID_NOT_VISIBLY_FAIL_ON_THE_COUNTEREXAMPLE)
+        self.assertTrue(prereg.SWITCH_IS_JUSTIFIED_BY_A_MISSING_ASSUMPTION_NOT_BY_A_DEMONSTRATED_FAILURE)
+
+    def test_the_withdrawn_radius_claim_is_named(self):
+        """Две соседние цифры в отчёте спорили друг с другом: 1 с против 2.3 с."""
+        self.assertIn("smaller than the", prereg.REGULARITY_RADIUS_CLAIM_IS_WITHDRAWN)
+        self.assertFalse(prereg.REGULARITY_GATE_IS_BLOCKING_IN_S5A_RATIO)
+        self.assertTrue(prereg.REGULARITY_GATES_ARE_DIAGNOSTIC_NOW)
+        self.assertIn("радиус сертификата можно взять меньше ошибки самой оценки",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_zero_observations_are_not_zero_mass(self):
+        """Для дифференцируемости различие БИНАРНО, и граница его не закрывает."""
+        self.assertIn("изломов не найдено, значит их нет",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_the_hull_machinery_is_named_as_required(self):
+        self.assertIn("convex hull", prereg.INFERENCE_REQUIRES_MACHINERY)
+        self.assertLess(prereg.TEST_INVERSION_COVERAGE_STUDY_HOURS,
+                        prereg.COVERAGE_GATE_COMPUTE_BUDGET_HOURS)
+
+    def test_the_sandwich_spec_survives_as_diagnostic(self):
+        self.assertEqual(len(prereg.SANDWICH_INFERENCE), 5)
         self.assertIn("envelope theorem", prereg.ANALYTIC_INFERENCE[1])
         self.assertIn("no differencing", prereg.ANALYTIC_INFERENCE[1])
         self.assertIn("smaller N", prereg.ARGEXTREMUM_TIE_BREAK)
@@ -850,7 +886,7 @@ class ComputeBudgetTests(unittest.TestCase):
     def test_the_ladder_is_ordered_by_a_measured_budget(self):
         self.assertTrue(prereg.BUDGET_DECIDES_THE_LADDER_ORDER)
         self.assertGreater(prereg.MEASURED_MS_PER_PERIOD_RECOMPUTE, 0.0)
-        self.assertIn("analytic", prereg.SAMPLING_METHOD_LADDER[0])
+        self.assertIn("test inversion", prereg.SAMPLING_METHOD_LADDER[0])
         self.assertIn("OVER BUDGET", prereg.SAMPLING_METHOD_LADDER[1])
 
     def test_the_n_out_of_n_bootstrap_is_dropped_for_two_reasons(self):
@@ -1005,3 +1041,83 @@ class DiversionSelfTestTests(unittest.TestCase):
     def test_minus_B_alone_is_named_as_insufficient(self):
         from tools import diversion
         self.assertIn("НЕ КОНТРАКТ", diversion.run_tests.__doc__)
+
+
+class BlindGateGoldenTests(unittest.TestCase):
+    """ПОСТОЯННЫЙ СВИДЕТЕЛЬ, а не тест текущей реализации.
+
+    Он фиксирует, почему ЦЕЛЫЙ КЛАСС процедур запрещён:
+
+        никогда не определять популяционную регулярность вопросом
+        «попал ли выборочный корень ровно в выборочный излом»
+
+    Если когда-нибудь кто-то снова предложит такую проверку, этот тест
+    показывает, что она становится тем зеленее, чем больше данных.
+    """
+
+    KW = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
+    KINKED = [Bin(0.0, 2, 1), Bin(60.0, 0, 1)]
+    SMOOTH = [Bin(0.0, 1, 0), Bin(120.0, 0, 1)]
+    TRUE_ROOT = 60.0
+
+    def _psi(self, bins, lam):
+        from coarsening.bounded import _optimise
+        return _optimise(bins, lam=lam, maximise=False, require_any=False, **self.KW)
+
+    def test_the_population_really_has_a_kink_at_the_root(self):
+        h = 1e-5
+        mix = [self.KINKED] * 100 + [self.SMOOTH] * 100
+        below = sum((self._psi(b, self.TRUE_ROOT) - self._psi(b, self.TRUE_ROOT - h)) / h
+                    for b in mix) / len(mix)
+        above = sum((self._psi(b, self.TRUE_ROOT + h) - self._psi(b, self.TRUE_ROOT)) / h
+                    for b in mix) / len(mix)
+        self.assertAlmostEqual(below, -1.0, places=3)
+        self.assertAlmostEqual(above, -1.5, places=3)
+        self.assertAlmostEqual(sum(self._psi(b, self.TRUE_ROOT) for b in mix), 0.0,
+                               places=6, msg="корень обязан быть РОВНО в изломе")
+
+    def test_a_sample_root_check_calls_it_regular_and_gets_worse_with_n(self):
+        from coarsening.bounded import generalized_inverse, one_sided_slopes
+        rng = random.Random(17)
+        verdicts = {}
+        for n in (50, 800):
+            regular = 0
+            for _ in range(20):
+                periods = [self.KINKED if rng.random() < 0.5 else self.SMOOTH
+                           for _ in range(n)]
+                G = lambda lam: sum(self._psi(b, lam) for b in periods)
+                root = generalized_inverse(G, 0.0, 300.0 + 1e-9, tolerance=1e-9)
+                left, right = one_sided_slopes(G, (root.low + root.high) / 2)
+                regular += left == right
+            verdicts[n] = regular / 20
+        self.assertGreaterEqual(verdicts[50], 0.8, verdicts)
+        self.assertGreaterEqual(verdicts[800], 0.8, verdicts)
+
+    def test_the_population_certificate_sees_what_the_sample_check_cannot(self):
+        from coarsening.bounded import count_near_breakpoints
+        mix = [self.KINKED] * 100 + [self.SMOOTH] * 100
+        hits, nearest = count_near_breakpoints(mix, self.TRUE_ROOT, 5.0, **self.KW)
+        self.assertEqual(hits, 100)
+        self.assertEqual(nearest, 0.0)
+
+
+class BreakpointLocalisationTests(unittest.TestCase):
+    """Дихотомия внутри nearest_breakpoint набором не исполнялась —
+    NameError нашёлся вручную, а не тестом. Больше нет."""
+
+    KW = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
+
+    def test_the_distance_is_located_not_just_detected(self):
+        from coarsening.bounded import Bin as B, _optimise, nearest_breakpoint
+        kinked = [B(0.0, 2, 1), B(60.0, 0, 1)]
+        psi = lambda lam: _optimise(kinked, lam=lam, maximise=False,
+                                    require_any=False, **self.KW)
+        for probe, want in ((63.0, 3.0), (60.25, 0.25), (57.5, 2.5), (60.0, 0.0)):
+            got = nearest_breakpoint(psi, probe, 10.0)
+            self.assertIsNotNone(got, probe)
+            self.assertAlmostEqual(got, want, places=5, msg=probe)
+
+    def test_the_affine_threshold_is_tied_to_the_minimum_possible_sag(self):
+        from coarsening import bounded
+        self.assertLess(bounded.AFFINE_SAG_FRACTION, 1e-4)
+        self.assertFalse(hasattr(bounded, "AFFINE_TOLERANCE"))

@@ -394,7 +394,83 @@ BUDGET_DECIDES_THE_LADDER_ORDER = True
 DIVERSION_PROTOCOL_REQUIRES_BYTECODE_ISOLATION = True
 DIVERSION_PROTOCOL_IS_EXECUTABLE = "research/python/tools/diversion.py"
 
-#: МЕТОД A — АНАЛИТИЧЕСКИЙ САНДВИЧ. λ̂ решает (1/n)Σ ψ_i(λ) = 0, где
+#: МЕТОД A — ИНВЕРСИЯ ТЕСТА. Поправка СЕДЬМОГО чтения, и она снимает
+#: последний P0 не починкой сертификата, а отказом от допущения, которое
+#: сертификат должен был подпирать.
+#:
+#: Прежний метод A (аналитический сэндвич) требовал дифференцируемости
+#: g = E[ψ] в корне. Сертификат «в окрестности корня изломов нет» упирался в
+#: две стены сразу:
+#:
+#:   1. радиус сертификата (1 с) оказался МЕНЬШЕ неопределённости самого λ̂0
+#:      (2.3 с при M = 4000, то есть ~4.5 с на 95%). Утверждение про
+#:      окрестность оценки ничего не говорит про окрестность истинного λ0 —
+#:      две соседние цифры в отчёте буквально спорили друг с другом;
+#:
+#:   2. «изломов не найдено» даёт верхнюю границу на массу, а не ноль. Для
+#:      дифференцируемости различие БИНАРНО: сколь угодно малая масса с
+#:      ΔN != 0 оставляет g'₋ != g'₊. Малый скачок — это малый скачок, а не
+#:      отсутствие скачка.
+#:
+#: ИНВЕРСИЯ ТЕСТА обходит обе стены, потому что смотрит на ФИКСИРОВАННОЕ λ:
+#:
+#:     C = { λ : |√n · mean ψ_i(λ) / sd ψ_i(λ)| <= z }
+#:
+#: При фиксированном λ величины ψ_i(λ) — просто независимые ограниченные
+#: случайные величины (|ψ| <= H·N_max), и ЦПТ для их среднего требует лишь
+#: конечной положительной дисперсии. Ни дифференцируемости, ни внутренности.
+#:
+#: А ЧТО ДЕЛАЕТ C ИНТЕРВАЛОМ ДЛЯ λ0 — это уже наша теорема: g строго убывает
+#: с наклоном <= −1 (каждый непустой период даёт N >= 1), значит ноль
+#: единственный и корректно определён. Вот теперь одно предусловие платит
+#: третий раз ЧЕСТНО: оно даёт не CLT, а единственность параметра, к
+#: которому строится интервал.
+PRIMARY_INFERENCE = "test inversion on the estimating function"
+TEST_INVERSION_SET = "C = {λ : |sqrt(n)·mean ψ(λ)/sd ψ(λ)| <= z}"
+TEST_INVERSION_NEEDS_NO_DIFFERENTIABILITY = True
+TEST_INVERSION_NEEDS_NO_INTERIORITY = True
+UNIQUENESS_THEOREM_IS_WHAT_MAKES_C_AN_INTERVAL_FOR_lambda0 = True
+#: Множество принятия берётся выпуклой оболочкой: sd зависит от λ, поэтому
+#: формально C может быть не связным. Оболочка КОНСЕРВАТИВНА — расширяет.
+TEST_INVERSION_TAKES_THE_CONVEX_HULL = True
+
+#: СТОИМОСТЬ. Наивно инверсия вдвое дороже сэндвича (два конца вместо одного
+#: корня). Но ψ(λ) = min по достижимым (N, B) от (B − λN) — ОПОРНАЯ ФУНКЦИЯ,
+#: поэтому достаточно нижней выпуклой оболочки достижимых пар, посчитанной
+#: ОДИН раз на период; дальше каждое λ стоит O(|оболочка|), а не DP.
+#: Исследование покрытия: 0.5 ч при n = 25 и 7.2 ч при n = 400 — в бюджете.
+INFERENCE_REQUIRES_MACHINERY = "per-period lower convex hull of achievable (N, B)"
+TEST_INVERSION_COVERAGE_STUDY_HOURS = 7.2
+
+#: ЧЕСТНО О ТОМ, ЧЕГО ЗАМЕР НЕ ПОКАЗАЛ. Я построил популяцию с изломом РОВНО
+#: в корне (смесь 50/50, A₋ = −1.0, A₊ = −1.5) и ожидал увидеть провал
+#: сэндвича. НЕ УВИДЕЛ: покрытие 0.975 / 0.983 / 0.942 при n = 50 / 200 / 800
+#: против 0.967 / 0.983 / 0.933 у инверсии. Оба держат номинал.
+#:
+#: Значит переход обоснован НЕ сломанным сэндвичем, а отсутствием у инверсии
+#: допущения, которое для сэндвича пришлось бы доказывать и которое доказать
+#: не удалось. Это разные основания, и выдавать второе за первое нельзя.
+SANDWICH_DID_NOT_VISIBLY_FAIL_ON_THE_COUNTEREXAMPLE = True
+SWITCH_IS_JUSTIFIED_BY_A_MISSING_ASSUMPTION_NOT_BY_A_DEMONSTRATED_FAILURE = True
+
+#: Сэндвич остаётся ДИАГНОСТИКОЙ: расхождение с инверсией — сигнал, согласие
+#: — слабое подтверждение. Первичным он больше не является.
+SANDWICH_ROLE = "diagnostic cross-check"
+
+#: И ОБА ГЕЙТА РЕГУЛЯРНОСТИ ПЕРЕВЕДЕНЫ В ДИАГНОСТИКУ. Они по-прежнему
+#: считаются и записываются — они показывают, где сэндвич был бы подозрителен,
+#: — но блокировать прогон им больше нечего: первичный метод в них не нуждается.
+#: Сертификат, который нельзя достроить до доказательства, не должен стоять
+#: в несущей стене.
+REGULARITY_GATES_ARE_DIAGNOSTIC_NOW = True
+REGULARITY_RADIUS_CLAIM_IS_WITHDRAWN = ("the 1 s radius was smaller than the "
+                                        "uncertainty of λ̂0 itself — it never "
+                                        "certified anything")
+
+#: СЭНДВИЧ — ТЕПЕРЬ ДИАГНОСТИКА, а не первичный метод. Описание
+#: сохранено целиком: он остаётся кросс-проверкой, и то, чего он
+#: требует, полезно видеть рядом с тем, чего не требует инверсия.
+#: БЫВШИЙ МЕТОД A — АНАЛИТИЧЕСКИЙ САНДВИЧ. λ̂ решает (1/n)Σ ψ_i(λ) = 0, где
 #: ψ_i(λ) = extremum по допустимым историям (B_i − λN_i). Это Z-оценка, и
 #: якобиан у неё берётся ТОЧНО, теоремой об огибающей:
 #:
@@ -460,7 +536,8 @@ BLINDNESS_MEASURED = "50/50 mixture with a 0.5 population jump: REGULAR in 59/60
 REGULARITY_GATE = ("no period of the MC population may have a breakpoint within "
                    "REGULARITY_RADIUS_SE_MULTIPLE standard errors of λ̂0; then g "
                    "is linear in a neighbourhood of the root")
-REGULARITY_GATE_IS_BLOCKING_IN_S5A_RATIO = True
+#: БЫЛО блокирующим; после перехода на инверсию теста — диагностика.
+REGULARITY_GATE_IS_BLOCKING_IN_S5A_RATIO = False
 REGULARITY_GATE_CHECKS_THE_POPULATION_NOT_THE_SAMPLE = True
 NONREGULAR = "NONREGULAR"
 NONREGULAR_CELLS_GET_NO_SANDWICH_INTERVAL = True
@@ -514,13 +591,14 @@ NONREGULAR_BOUNDARY = "NONREGULAR_BOUNDARY"
 BOUNDARY_CELLS_GET_NO_SYMMETRIC_INTERVAL = True
 #: Обе проверки независимы: ячейка может провалить любую по отдельности.
 REGULARITY_GATES_ARE_TWO = ("population differentiability", "interiority")
-ANALYTIC_INFERENCE = (
+SANDWICH_INFERENCE = (
     "λ̂ solves the sample estimating equation; bracket from generalized_inverse",
     "Jacobian by the envelope theorem: mean of N* over units — no differencing",
     "se = sd(ψ_i(λ̂)) / (sqrt(n) * |mean N*|)",
     "two-sided normal interval per endpoint at CONFIDENCE_LEVEL",
     "outer union of the two endpoints",
 )
+ANALYTIC_INFERENCE = SANDWICH_INFERENCE          # историческое имя
 #: Ничьи в аргэкстремуме разрешаются в сторону МЕНЬШЕГО N: меньший якобиан
 #: даёт БОЛЬШУЮ стандартную ошибку. Наружу, как и округление скобки.
 ARGEXTREMUM_TIE_BREAK = "the smaller N — a smaller Jacobian widens the interval"
@@ -579,7 +657,7 @@ IF_THE_ASSUMED_RATE_IS_WRONG = "the coverage gate fails and the ladder ends at S
 
 #: ЛЕСТНИЦА, УПОРЯДОЧЕННАЯ ПО ИЗМЕРЕННОМУ БЮДЖЕТУ, а не по вкусу.
 SAMPLING_METHOD_LADDER: tuple[str, ...] = (
-    "A: analytic sandwich (envelope-theorem Jacobian) — coverage study 7.3 h",
+    "A: test inversion — no differentiability needed, coverage study 7.2 h",
     "B: subsampling per SUBSAMPLING_SPEC — coverage study 32 days, OVER BUDGET",
     "STOP: SAMPLING_METHOD_INVALID",
 )
@@ -1337,6 +1415,10 @@ STOP_RULES: dict[str, str] = {
         "если потолок MEASUREMENT_MC_MAX_PERIODS_PER_ARM исчерпан, а точность "
         "не достигнута, ячейка получает MC_PRECISION_INSUFFICIENT и НЕ "
         "получает научного вердикта: предел вычислений не есть вывод",
+    "regularity_is_no_longer_a_blocker":
+        "гейты регулярности и внутренности переведены в диагностику: "
+        "первичный метод (инверсия теста) в них не нуждается. Расхождение "
+        "инверсии с сэндвичем — сигнал к разбору, а не к остановке",
     "definedness_tripwire":
         "если Definedness.AMBIGUOUS сработает хоть на одной person-period, "
         "прогон ОСТАНАВЛИВАЕТСЯ: правила для латентного знаменателя нет, и "
@@ -1402,6 +1484,8 @@ FORBIDDEN_INTERPRETATIONS: tuple[str, ...] = (
     "монотонность g даёт единственный корень",
     "покрытие проверено — в опорной ячейке",
     "бутстрап валиден, потому что это бутстрап",
+    "изломов не найдено, значит их нет",
+    "радиус сертификата можно взять меньше ошибки самой оценки",
     "метод валидирован, потому что он стандартный",
     "численная скобка сузила интервал — зато точнее",
     "покрытие 95% на семи сценариях — это 95%",

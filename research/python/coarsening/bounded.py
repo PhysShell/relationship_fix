@@ -734,8 +734,13 @@ def is_regular_at(g, lam: float, *,
     return left == right
 
 
-#: Допуск проверки аффинности: относительный, потому что ψ имеет порядок H·N.
-AFFINE_TOLERANCE = 1e-9
+#: Допуск проверки аффинности. НЕ произвольная малая константа: настоящий
+#: излом меняет наклон не меньше чем на 1 (наклоны целые, −N), поэтому провис
+#: относительно хорды на отрезке ширины w не меньше w/4, когда излом в
+#: середине. Порог ставится на шесть порядков ниже этой величины — то есть
+#: далеко и от нуля, и от шума плавающей точки, а не «подобран, чтобы
+#: проходило».
+AFFINE_SAG_FRACTION = 1e-6
 
 
 def _is_affine_on(g, a: float, b: float) -> bool:
@@ -749,8 +754,9 @@ def _is_affine_on(g, a: float, b: float) -> bool:
     mid = (a + b) / 2.0
     left, right, centre = g(a), g(b), g(mid)
     chord = (left + right) / 2.0
-    scale = max(1.0, abs(left) + abs(right))
-    return abs(centre - chord) <= AFFINE_TOLERANCE * scale
+    # минимальный провис настоящего излома: (b − a)/4 при скачке наклона 1
+    floor_sag = (b - a) / 4.0
+    return abs(centre - chord) <= AFFINE_SAG_FRACTION * max(floor_sag, 1e-12)
 
 
 def nearest_breakpoint(g, lam: float, radius: float, *,
@@ -784,16 +790,28 @@ def nearest_breakpoint(g, lam: float, radius: float, *,
     if below and above:
         return 0.0
 
-    a, b = (lam - radius, lam) if not below else (lam, lam + radius)
+    # Ищем ПЕРВЫЙ излом, двигаясь от `lam` наружу. Предикат берётся от
+    # ФИКСИРОВАННОГО начала: иначе подвижный конец, попав ровно на излом,
+    # уходит дальше (следующий отрезок уже аффинен) и уводит ответ на
+    # границу радиуса. Этот путь набором не исполнялся, и баг нашёлся
+    # вручную; теперь на него есть тест.
+    if below:                      # излом справа от lam
+        lo, hi = lam, lam + radius
+        affine = lambda x: _is_affine_on(g, lam, x)
+    else:                          # излом слева
+        lo, hi = lam - radius, lam
+        affine = lambda x: _is_affine_on(g, x, lam)
+
     for _ in range(iterations):
-        mid = (a + b) / 2.0
-        if _is_affine_on(g, a, mid):
-            a = mid
+        mid = (lo + hi) / 2.0
+        near_is_affine = affine(mid)
+        if below:
+            lo, hi = (mid, hi) if near_is_affine else (lo, mid)
         else:
-            b = mid
-        if b - a < AFFINE_TOLERANCE * max(1.0, abs(lam)):
+            lo, hi = (lo, mid) if near_is_affine else (mid, hi)
+        if hi - lo < 1e-9 * max(1.0, abs(lam)):
             break
-    return min(abs(lam - a), abs(lam - b))
+    return abs(lam - (lo if below else hi))
 
 
 def count_near_breakpoints(periods: list[list[Bin]], lam: float, radius: float, *,
