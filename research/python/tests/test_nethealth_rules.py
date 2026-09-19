@@ -169,3 +169,46 @@ class ResolutionStratificationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoverageConceptTests(unittest.TestCase):
+    """Три понятия покрытия разведены, чтобы не притворялись друг другом."""
+
+    def test_all_three_concepts_are_named(self):
+        self.assertEqual(rules.COVERAGE_CONCEPTS,
+                         ("participation_window", "device_activity",
+                          "acquisition_coverage"))
+
+    def test_incidence_needs_the_third_and_not_the_other_two(self):
+        """Первый и второй не доказывают третий ни по отдельности, ни вместе.
+        Складывать два PARTIAL и получать PASS запрещено."""
+        self.assertEqual(rules.COVERAGE_REQUIRED_FOR_INCIDENCE,
+                         "acquisition_coverage")
+        self.assertNotIn(rules.COVERAGE_REQUIRED_FOR_INCIDENCE,
+                         ("participation_window", "device_activity"))
+
+    def test_post_window_activity_may_not_select_the_cohort(self):
+        """Оставив только тех, у кого есть событие после окна, мы определим
+        популяцию через активность и «починим» missingness, выбрав более
+        активных. Очень изящный способ получить красивую плотность."""
+        self.assertEqual(rules.POST_WINDOW_EVENT_AS_COHORT_FILTER, "FORBIDDEN")
+
+    def test_the_cns_style_proxy_error_is_named_in_the_source(self):
+        import inspect
+        self.assertIn("Bluetooth", inspect.getsource(rules))
+
+
+class MatchFieldTests(unittest.TestCase):
+
+    def test_messagetype_is_dropped_because_the_authors_say_to_ignore_it(self):
+        self.assertNotIn("messagetype", rules.DEDUP_MATCH_FIELDS_CANDIDATE)
+
+    def test_length_is_kept_because_the_project_itself_keyed_on_it(self):
+        """Серверный первичный ключ iOS-SMS: (phone_number, time_stamp,
+        destination, text_length, is_from_me)."""
+        self.assertIn("length", rules.DEDUP_MATCH_FIELDS_CANDIDATE)
+
+    def test_the_server_key_is_recorded_as_per_device(self):
+        """Оно и объясняет, почему межустройственные зеркала пережили чужую
+        дедупликацию: номер аппарата входит в ключ."""
+        self.assertTrue(rules.SERVER_DEDUP_KEY_IS_PER_DEVICE)
