@@ -1174,3 +1174,77 @@ class AcceptanceSetGeometryTests(unittest.TestCase):
     def test_no_multiplicity_correction_over_lambda(self):
         """Покрытие определяется поведением теста в истинном λ0."""
         self.assertTrue(prereg.NO_MULTIPLICITY_CORRECTION_OVER_lambda)
+
+
+class Stage1RunnerTests(unittest.TestCase):
+    """Entrypoint этапа 1 восстановлен из /tmp в tracked source.
+
+    Модуль НАМЕРЕННО не реализует лестницу M и статусы точности: prereg
+    замораживает правило, но не оценщик MCSE. См.
+    docs/research/s5b-mcse-specification-gap.md.
+    """
+
+    def test_the_entrypoint_is_tracked_now(self):
+        from simulation import s5b_stage1
+        path = pathlib.Path(s5b_stage1.__file__)
+        self.assertTrue(path.exists())
+        self.assertIn("simulation", str(path))
+
+    def test_the_arm_tag_is_scientific_identity_only(self):
+        """Сид не должен зависеть от worker, shard, порядка и их количества."""
+        from simulation import s5b_stage1 as S
+        tag = S.arm_tag(6.0, 1.1, "R2", 2.0)
+        self.assertEqual(tag, "r6.0:c1.1:R2:m2.0")
+        for forbidden in ("shard", "worker", "index", "rank", "job"):
+            self.assertNotIn(forbidden, tag)
+
+    def test_the_arm_grid_matches_the_prereg_count(self):
+        from simulation import s5b_stage1 as S
+        self.assertEqual(len(S.REGIMES), 13)
+        arms = len(S.REGIMES) * len(prereg.C_REACTIVITY_POINTS) * \
+            len(prereg.OPPORTUNITY_RATE_GRID)
+        self.assertEqual(arms, prereg.LATENT_SIMULATIONS)
+
+    def test_the_effect_scale_is_logarithmic_as_declared(self):
+        """m·shift и ratio**m, и R0 не масштабируется."""
+        from simulation import s5b_stage1 as S
+        self.assertEqual(S.effect("R0", 2.0), (0.0, 1.0))
+        shift_one, ratio_one = S.effect("R2", 1.0)
+        shift_two, ratio_two = S.effect("R2", 2.0)
+        self.assertAlmostEqual(ratio_two, ratio_one ** 2)
+        shift_a, _ = S.effect("R1", 0.5)
+        shift_b, _ = S.effect("R1", 1.0)
+        self.assertAlmostEqual(shift_a, shift_b * 0.5)
+
+    def test_the_runner_does_not_pretend_to_implement_the_ladder(self):
+        """Реализовать произвольную формулу SE и назвать это исполнением
+        замороженного правила — дописать prereg задним числом."""
+        from simulation import s5b_stage1 as S
+        source = pathlib.Path(S.__file__).read_text()
+        for absent in ("MEASUREMENT_MC_ESCALATION_FACTOR",
+                       "MEASUREMENT_MC_MAX_PERIODS_PER_ARM",
+                       "MC_PRECISION_INSUFFICIENT"):
+            self.assertNotIn(f"P.{absent}", source, absent)
+        self.assertIn("НЕ реализованы", source)
+
+    def test_the_specification_gap_is_documented_not_silently_filled(self):
+        root = pathlib.Path(__file__).resolve().parents[3]
+        note = root / "docs/research/s5b-mcse-specification-gap.md"
+        self.assertTrue(note.exists())
+        text = note.read_text()
+        self.assertIn("ПРЕДЛАГАЕМЫЙ АМЕНДМЕНТ", text)
+        self.assertIn("NOT_EVALUATED_MC_PRECISION", text)
+        self.assertIn("MC_PRECISION_PREDICTED_INSUFFICIENT", text)
+
+    def test_the_baseline_has_no_futility_rule_to_appeal_to(self):
+        """Ранний пропуск ячеек не может ссылаться на prereg, которого нет."""
+        for absent in ("FUTILITY", "EARLY_STOP", "PREDICTED_INSUFFICIENT"):
+            self.assertFalse(hasattr(prereg, absent), absent)
+
+    def test_the_aborted_run_is_recorded_as_invalid(self):
+        root = pathlib.Path(__file__).resolve().parents[3]
+        record = root / "docs/research/s5b-stage1-aborted-serial-run.md"
+        self.assertTrue(record.exists())
+        text = record.read_text()
+        self.assertIn("ABORTED_INVALID_IMPLEMENTATION", text)
+        self.assertIn("EQUIVALENCE ORACLE", text)
