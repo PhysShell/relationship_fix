@@ -25,4 +25,13 @@ theorem identified_nonempty : Spec.IdentifiedNonempty :=
 theorem n_identified_set_collapses : Spec.NIdentifiedSetCollapses :=
   RelationshipFix.n_identified_set_collapses
 
+theorem bucket_effect_complete : Spec.BucketEffectComplete :=
+  RelationshipFix.bucket_effect_complete
+
+theorem history_to_reachable : Spec.HistoryToReachable :=
+  RelationshipFix.history_to_reachable
+
+theorem dp_bounds_sound : Spec.DPBoundsSound :=
+  RelationshipFix.dp_bounds_sound
+
 end RelationshipFix.Solution

@@ -48,10 +48,6 @@ import RelationshipFix.Verification.StatementIntegrity
   теорему надо переносить из Challenge в Solution, а не тихо радоваться
   зелёной сборке.
 -/
-/-- info: 'RelationshipFix.Challenge.dp_bounds_sound' depends on axioms: [sorryAx] -/
-#guard_msgs in
-#print axioms RelationshipFix.Challenge.dp_bounds_sound
-
 /-- info: 'RelationshipFix.Challenge.dp_bounds_sharp' depends on axioms: [sorryAx] -/
 #guard_msgs in
 #print axioms RelationshipFix.Challenge.dp_bounds_sharp
@@ -64,17 +60,9 @@ import RelationshipFix.Verification.StatementIntegrity
 #guard_msgs in
 #print axioms RelationshipFix.Challenge.bucket_effect_exact
 
-/-- info: 'RelationshipFix.Challenge.bucket_effect_complete' depends on axioms: [sorryAx] -/
-#guard_msgs in
-#print axioms RelationshipFix.Challenge.bucket_effect_complete
-
 /-- info: 'RelationshipFix.Challenge.bucket_effect_realizable' depends on axioms: [sorryAx] -/
 #guard_msgs in
 #print axioms RelationshipFix.Challenge.bucket_effect_realizable
-
-/-- info: 'RelationshipFix.Challenge.history_to_reachable' depends on axioms: [sorryAx] -/
-#guard_msgs in
-#print axioms RelationshipFix.Challenge.history_to_reachable
 
 /-- info: 'RelationshipFix.Challenge.reachable_to_history' depends on axioms: [sorryAx] -/
 #guard_msgs in
@@ -83,3 +71,23 @@ import RelationshipFix.Verification.StatementIntegrity
 /-- info: 'RelationshipFix.Challenge.identified_set_is_contiguous' depends on axioms: [sorryAx] -/
 #guard_msgs in
 #print axioms RelationshipFix.Challenge.identified_set_is_contiguous
+
+/-
+  РОСТ ДОВЕРЕННОЙ БАЗЫ, ЗАФИКСИРОВАННЫЙ ПОСТРОЧНО.
+
+  Пять теорем выше обходятся ОДНИМ `propext`. Три ниже втянули стандартную
+  классическую тройку — она приходит из обычных библиотечных лемм про `List`
+  и из `omega`, а не из экзотики. Пины разные намеренно: рост базы обязан
+  быть виден по строкам, а не усреднён по проекту.
+-/
+/-- info: 'RelationshipFix.Solution.bucket_effect_complete' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms RelationshipFix.Solution.bucket_effect_complete
+
+/-- info: 'RelationshipFix.Solution.history_to_reachable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms RelationshipFix.Solution.history_to_reachable
+
+/-- info: 'RelationshipFix.Solution.dp_bounds_sound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms RelationshipFix.Solution.dp_bounds_sound

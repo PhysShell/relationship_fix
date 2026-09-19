@@ -30,9 +30,22 @@ open Lean Elab Command
 
 namespace RelationshipFix.Verification
 
-/-- Разрешённые аксиомы. Ровно одна: `propext`. Ни `Classical.choice`, ни
-    `Quot.sound` ядру не понадобились, и расширять список молча нельзя. -/
-def permittedAxioms : List Name := [``propext]
+/-- Разрешённые аксиомы.
+    ДОВЕРЕННАЯ БАЗА ВЫРОСЛА, и это записано, а не замолчано.
+
+    Первые пять теорем (огрубление, монотонность, схлопывание) обходились
+    ОДНИМ `propext`. Доказательство корректности границ DP втянуло ещё две —
+    `Classical.choice` и `Quot.sound`, — и не из-за экзотики: они приходят из
+    обычных библиотечных лемм про `List` и из `omega`.
+
+    Это стандартная классическая тройка, та же, на которой стоит
+    формализация Ферма. Охотиться за `Classical.choice` внутри ядра Lean было
+    бы днями работы при нулевом эпистемическом выигрыше.
+
+    Но прежнее хвастовство «у нас база меньше, чем у FLT» больше не верно для
+    новых теорем, и `FinalCheck` пинит РАЗНЫЕ наборы для старых и новых: рост
+    базы должен быть виден построчно, а не усреднён по проекту. -/
+def permittedAxioms : List Name := [``propext, ``Classical.choice, ``Quot.sound]
 
 /-- (challenge, solution, замороженная формулировка). -/
 def claimed : List (Name × Name × Name) :=
@@ -50,25 +63,28 @@ def claimed : List (Name × Name × Name) :=
     `RelationshipFix.Spec.IdentifiedNonempty),
    (`RelationshipFix.Challenge.n_identified_set_collapses,
     `RelationshipFix.Solution.n_identified_set_collapses,
-    `RelationshipFix.Spec.NIdentifiedSetCollapses)]
+    `RelationshipFix.Spec.NIdentifiedSetCollapses),
+   (`RelationshipFix.Challenge.bucket_effect_complete,
+    `RelationshipFix.Solution.bucket_effect_complete,
+    `RelationshipFix.Spec.BucketEffectComplete),
+   (`RelationshipFix.Challenge.history_to_reachable,
+    `RelationshipFix.Solution.history_to_reachable,
+    `RelationshipFix.Spec.HistoryToReachable),
+   (`RelationshipFix.Challenge.dp_bounds_sound,
+    `RelationshipFix.Solution.dp_bounds_sound,
+    `RelationshipFix.Spec.DPBoundsSound)]
 
 /-- Вопросы, заданные и пока не закрытые. Их отсутствие в solution — не
     недосмотр, а состояние работ, видимое машине. -/
 def openQuestions : List (Name × Name) :=
-  [(`RelationshipFix.Challenge.dp_bounds_sound,
-    `RelationshipFix.Spec.DPBoundsSound),
-   (`RelationshipFix.Challenge.dp_bounds_sharp,
+  [(`RelationshipFix.Challenge.dp_bounds_sharp,
     `RelationshipFix.Spec.DPBoundsSharp),
    (`RelationshipFix.Challenge.sharp_bounds_exist_abstract,
     `RelationshipFix.Spec.SharpBoundsExistAbstract),
    (`RelationshipFix.Challenge.bucket_effect_exact,
     `RelationshipFix.Spec.BucketEffectExact),
-   (`RelationshipFix.Challenge.bucket_effect_complete,
-    `RelationshipFix.Spec.BucketEffectComplete),
    (`RelationshipFix.Challenge.bucket_effect_realizable,
     `RelationshipFix.Spec.BucketEffectRealizable),
-   (`RelationshipFix.Challenge.history_to_reachable,
-    `RelationshipFix.Spec.HistoryToReachable),
    (`RelationshipFix.Challenge.reachable_to_history,
     `RelationshipFix.Spec.ReachableToHistory),
    (`RelationshipFix.Challenge.identified_set_is_contiguous,

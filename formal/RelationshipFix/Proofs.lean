@@ -6,3 +6,4 @@ import RelationshipFix.Proofs.Reachable
 import RelationshipFix.Proofs.Coarsening
 import RelationshipFix.Proofs.Collapse
 import RelationshipFix.Proofs.Identified
+import RelationshipFix.Proofs.Sound
