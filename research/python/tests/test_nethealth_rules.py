@@ -40,23 +40,34 @@ class DuplicateLadderTests(unittest.TestCase):
     """D0 доказывает наличие. Его отсутствие не доказывает ничего."""
 
     def evidence(self, **over):
-        base = dict(pairs_examined=5000, d0_exact=0, d1_near=10,
-                    d2_expected_by_chance=8.0)
+        #: нулевая полоса и ненулевые полосы фона, те же потоки
+        base = dict(pairs_examined=5000, d0_exact=0,
+                    band_counts=(100, 95, 92, 90, 88))
         return DuplicateEvidence(**{**base, **over})
 
     def test_any_exact_mirror_settles_it_immediately(self):
         self.assertIs(classify_duplicates(self.evidence(d0_exact=1)),
                       DuplicateVerdict.PRESENT)
 
-    def test_a_large_near_mirror_excess_also_settles_it(self):
+    def test_a_zero_lag_band_far_above_its_neighbours_settles_it(self):
         self.assertIs(
-            classify_duplicates(self.evidence(d1_near=100, d2_expected_by_chance=5.0)),
+            classify_duplicates(self.evidence(band_counts=(900, 100, 95, 90))),
             DuplicateVerdict.PRESENT)
 
-    def test_a_near_mirror_count_close_to_chance_is_not_evidence(self):
-        self.assertIs(
-            classify_duplicates(self.evidence(d1_near=10, d2_expected_by_chance=8.0)),
-            DuplicateVerdict.NO_SIGNATURE_OBSERVED)
+    def test_a_zero_lag_band_level_with_its_neighbours_is_not_evidence(self):
+        """Плотный трафик сам по себе набивает нулевую полосу. D1 в одиночку
+        вердикта не даёт никогда."""
+        self.assertIs(classify_duplicates(self.evidence()),
+                      DuplicateVerdict.NO_SIGNATURE_OBSERVED)
+
+    def test_the_background_preserves_burstiness_by_construction(self):
+        """Фон взят из ТЕХ ЖЕ потоков на ненулевых задержках, а не из
+        постоянной интенсивности. Пуассоновский нуль занижал случайные
+        совпадения и раздувал превышение примерно в сорок раз."""
+        e = self.evidence(band_counts=(1_913_647, 400_794, 296_217, 242_020,
+                                       212_472, 199_697, 190_656, 178_792))
+        self.assertAlmostEqual(e.background, 245_806.9, places=1)
+        self.assertAlmostEqual(e.d2_ratio, 7.79, places=2)
 
     def test_too_few_pairs_means_the_question_was_not_asked(self):
         self.assertIs(classify_duplicates(self.evidence(pairs_examined=10)),
@@ -68,14 +79,32 @@ class DuplicateLadderTests(unittest.TestCase):
         self.assertEqual(DuplicateVerdict.NO_SIGNATURE_OBSERVED.value,
                          "no_signature_observed")
 
-    def test_the_excess_is_reported_as_a_number_not_only_a_verdict(self):
-        self.assertAlmostEqual(self.evidence(d1_near=30).d2_excess, 22.0)
+    def test_the_ratio_is_reported_as_a_number_not_only_a_verdict(self):
+        e = self.evidence(band_counts=(200, 100, 100, 100))
+        self.assertEqual(e.d1_near, 200)
+        self.assertAlmostEqual(e.d2_ratio, 2.0)
 
-    def test_the_window_is_fixed_in_advance_and_justified(self):
-        """Пять секунд выбраны из разрешения, а не из будущего пика."""
+    def test_no_background_gives_no_ratio_rather_than_infinity(self):
+        self.assertIsNone(self.evidence(band_counts=(5,)).d2_ratio)
+
+    def test_the_window_is_fixed_in_advance_and_justified_correctly(self):
+        """Пять секунд объявлены заранее. Обоснование ПОПРАВЛЕНО: секундное
+        квантование само даёт максимум около секунды, остальное — расхождение
+        часов и момента журналирования двух аппаратов."""
         import inspect
+        source = inspect.getsource(rules)
         self.assertEqual(rules.DEDUP_NEAR_WINDOW_SECONDS, 5.0)
-        self.assertIn("94.3", inspect.getsource(rules))
+        self.assertIn("расхождение часов", source)
+
+    def test_detection_and_repair_are_separated(self):
+        """Если алгоритм ремонта влияет на доказательство существования
+        проблемы, доказательства больше нет."""
+        self.assertFalse(rules.DEDUP_POLICY_IN_FORCE)
+        self.assertEqual(rules.DEDUP_MATCHING, "one_to_one_minimum_distance")
+
+    def test_the_greedy_repair_hazard_is_written_down(self):
+        import inspect
+        self.assertIn("msg2", inspect.getsource(rules))
 
 
 class IdentityRegimeTests(unittest.TestCase):
@@ -95,6 +124,16 @@ class IdentityRegimeTests(unittest.TestCase):
 
     def test_the_survival_threshold_is_declared_before_sample_sizes_are_seen(self):
         self.assertEqual(rules.IDENTITY_MINIMUM_DYADS, 200)
+
+    def test_the_threshold_applies_after_every_other_narrowing(self):
+        """Иначе «I0 выжил на 230 диадах», а после coverage-гейта их 87."""
+        self.assertEqual(rules.IDENTITY_THRESHOLD_APPLIED_AFTER,
+                         ("channel_filter", "dedup_policy", "coverage_restriction"))
+
+    def test_the_population_consequence_is_written_into_the_estimand_phrase(self):
+        """Правило отбора — определение популяции, пусть и объявленное заранее."""
+        self.assertIn("preregistered identity-confidence admission rule",
+                      rules.IDENTITY_POPULATION_PHRASE)
 
 
 class ChannelPolicyTests(unittest.TestCase):

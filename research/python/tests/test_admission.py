@@ -329,7 +329,8 @@ class NetHealthAdmissionTests(unittest.TestCase):
         entry = self.admission.check("events.duplicate_semantics")
         self.assertIs(entry.verdict, CheckVerdict.PASSED)
         self.assertIn("1 362 951", entry.finding)
-        self.assertIn("308", entry.finding)
+        self.assertIn("7.8x", entry.finding)
+        self.assertIn("ПОПРАВКА", entry.finding)
         self.assertIn("two records for the same event", entry.finding)
 
     def test_the_duplicate_bias_is_recorded_as_differential(self):
@@ -365,7 +366,7 @@ class NetHealthAdmissionTests(unittest.TestCase):
         from acquisition import nethealth_rules
         self.assertEqual(nethealth_rules.DEDUP_NEAR_WINDOW_SECONDS, 5.0)
         finding = self.admission.check("events.duplicate_semantics").finding
-        self.assertIn("окне 5 с", finding)
+        self.assertIn("[0,5)", finding)
 
     def test_channel_mixing_is_inside_the_type_not_only_between_types(self):
         """eventtype='SMS' мешает iMessage и SMS, а iMessage есть только на
