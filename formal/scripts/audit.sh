@@ -1,31 +1,40 @@
-#!/bin/sh
-# Ядро считается доказанным, только если:
-#   1. собирается;
-#   2. в исходниках нет sorry / axiom / unsafe / native_decide;
-#   3. #print axioms не показывает sorryAx ни у одной теоремы.
+#!/usr/bin/env bash
+# Ядро считается доказанным, только когда проходят ВСЕ слои. Они разные и
+# ловят разное:
 #
-# Третий пункт — единственный надёжный: `sorry` умеет приезжать через
-# импорт, а grep по своим файлам этого не видит.
-set -eu
+#   source policy      запрещённые конструкции в коде (не в комментариях)
+#   import hygiene     дерево доказательств не импортирует Challenge
+#   build              Lean-ядро проверило доказательства
+#   statement integrity solution доказывает ЗАМОРОЖЕННЫЙ вопрос
+#   final check        доверенная база прибита к исходнику (#guard_msgs)
+#
+# LEAN_PATH сбрасывается намеренно: иначе теорему можно «доказать» случайным
+# .olean из соседней помойки и потом три часа искать привидений.
+set -euo pipefail
+unset LEAN_PATH
 cd "$(dirname "$0")/.."
 
-echo "== 1. build =="
+echo "== 1. source policy =="
+python3 scripts/policy_scan.py
+
+echo "== 2. import hygiene =="
+if grep -rn "import RelationshipFix.Verification.Challenge" \
+      RelationshipFix/TrustedSpec* RelationshipFix/Proofs* RelationshipFix.lean 2>/dev/null; then
+  echo "FAIL: дерево доказательств импортирует Challenge — вопрос и ответ склеились"
+  exit 1
+fi
+if grep -rn "import RelationshipFix.Proofs" RelationshipFix/Verification/Challenge.lean 2>/dev/null; then
+  echo "FAIL: Challenge зависит от слоя доказательств"
+  exit 1
+fi
+echo "  none"
+
+echo "== 3. build =="
 lake build
 
-echo "== 2. forbidden constructs in sources =="
-if grep -rnE '\b(sorry|axiom|unsafe|native_decide|partial)\b' RelationshipFix/*.lean \
-     | grep -v 'Audit.lean' | grep -v '^\s*--' | grep -v 'sorryAx'; then
-  echo "FAIL: forbidden construct in the kernel"
-  exit 1
-fi
-echo "none"
+echo "== 4. statement integrity + final check =="
+lake env lean RelationshipFix/Verification/FinalCheck.lean
+echo "  ok"
 
-echo "== 3. trusted base of every theorem =="
-out=$(lake env lean RelationshipFix/Audit.lean)
-echo "$out"
-if echo "$out" | grep -q 'sorryAx'; then
-  echo "FAIL: a theorem depends on sorryAx — it is declared, not proved"
-  exit 1
-fi
 echo
-echo "KERNEL AUDIT PASSED"
+scripts/certificate.sh
