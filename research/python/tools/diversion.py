@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import shutil
 import subprocess
@@ -35,11 +36,63 @@ def _clear_caches() -> None:
 
 
 def run_tests(modules: list[str]) -> bool:
-    """True, если набор зелёный. Байт-код не читается и не пишется."""
+    """True, если набор зелёный, и исполнен ИМЕННО текущий исходник.
+
+    `-B` сам по себе НЕ КОНТРАКТ: он запрещает ЗАПИСЬ байт-кода, а чтение
+    уже существующего `.pyc` не запрещает. Поэтому три меры разом:
+
+        снос всех __pycache__ перед запуском
+        -B, чтобы прогон не оставил новых
+        PYTHONPYCACHEPREFIX в пустой временный каталог, так что даже
+        уцелевший где-то кэш не лежит на пути
+
+    Третья и есть контракт: путь кэша ФИЗИЧЕСКИ пуст, а не «вероятно
+    неактуален».
+    """
     _clear_caches()
-    done = subprocess.run([sys.executable, "-B", "-m", "unittest", *modules],
-                          cwd=ROOT, capture_output=True, text=True)
+    with tempfile.TemporaryDirectory() as fresh:
+        env = dict(os.environ, PYTHONPYCACHEPREFIX=fresh,
+                   PYTHONDONTWRITEBYTECODE="1")
+        done = subprocess.run([sys.executable, "-B", "-m", "unittest", *modules],
+                              cwd=ROOT, capture_output=True, text=True, env=env)
     return done.returncode == 0
+
+
+#: САМОПРОВЕРКА ПЕРЕД ДИВЕРСИЯМИ. Прежде чем ловить гейты, harness обязан
+#: доказать, что исполняет тот файл, который только что испортил. Иначе
+#: «диверсия поймана» может означать «прочитан вчерашний байт-код», а
+#: «не поймана» — ровно то же самое.
+SENTINEL = "__diversion_self_test__"
+
+
+def self_test() -> None:
+    """Вносит метку в исходник и требует, чтобы её увидел ОТДЕЛЬНЫЙ процесс."""
+    target = ROOT / "simulation" / "s5b_prereg.py"
+    source = target.read_text()
+    probe = [sys.executable, "-B", "-c",
+             f"from simulation import s5b_prereg as m; "
+             f"raise SystemExit(0 if hasattr(m, {SENTINEL!r}) else 1)"]
+
+    def sees_sentinel() -> bool:
+        _clear_caches()
+        with tempfile.TemporaryDirectory() as fresh:
+            env = dict(os.environ, PYTHONPYCACHEPREFIX=fresh,
+                       PYTHONDONTWRITEBYTECODE="1")
+            return subprocess.run(probe, cwd=ROOT, capture_output=True,
+                                  env=env).returncode == 0
+
+    try:
+        if sees_sentinel():
+            raise SystemExit("метка видна ДО внесения — самопроверка сломана")
+        target.write_text(source + f"\n{SENTINEL} = True\n")
+        if not sees_sentinel():
+            raise SystemExit("ВНЕСЁННАЯ ПРАВКА НЕ ВИДНА: harness исполняет не тот "
+                             "исходник — все результаты диверсий ничего не значат")
+    finally:
+        target.write_text(source)
+        _clear_caches()
+    if sees_sentinel():
+        raise SystemExit("метка видна ПОСЛЕ отката — откат не работает")
 
 
 def diversion(path: str, old: str, new: str, modules: list[str]) -> bool:
@@ -99,6 +152,11 @@ DIVERSIONS = (
     ("реплик снова 1000", "simulation/s5b_prereg.py",
      "COVERAGE_REPLICATES = 4_000", "COVERAGE_REPLICATES = 1_000",
      ["tests.test_s5b_prereg"]),
+    ("детектор изломов ослеплён", "coarsening/bounded.py",
+     "    left = round((g(lam) - g(lam - step)) / step)\n"
+     "    right = round((g(lam + step) - g(lam)) / step)\n    return left, right",
+     "    left = round((g(lam) - g(lam - step)) / step)\n    return left, left",
+     ["tests.test_s5b_prereg"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
@@ -108,6 +166,8 @@ DIVERSIONS = (
 
 
 def main() -> int:
+    self_test()
+    print("  самопроверка: внесённая правка видна, откат виден")
     for name, path, old, new, modules in DIVERSIONS:
         diversion(path, old, new, modules)
         print(f"  поймана: {name}")

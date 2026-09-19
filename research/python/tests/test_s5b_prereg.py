@@ -822,7 +822,10 @@ class SimultaneousCoverageTests(unittest.TestCase):
 
     def test_the_replicate_count_follows_from_a_power_rule(self):
         """R=1000 отвергал бы валидный метод в 69 случаях из 70."""
-        self.assertIn("probability >= 0.95", prereg.GATE_POWER_RULE)
+        self.assertIn("union bound", prereg.GATE_POWER_RULE)
+        self.assertTrue(prereg.GATE_POWER_USES_UNION_BOUND_NOT_INDEPENDENCE)
+        self.assertAlmostEqual(prereg.GATE_POWER_PER_CELL_REQUIRED,
+                               1 - prereg.GATE_POWER_FAMILY_BUDGET / 7)
         self.assertEqual(prereg.COVERAGE_REPLICATES, 4_000)
         self.assertIn("not by taste", prereg.COVERAGE_REPLICATES_CHOSEN_BY)
 
@@ -899,3 +902,78 @@ class DiversionProtocolTests(unittest.TestCase):
         names = " ".join(d[0] for d in diversion.DIVERSIONS)
         for gate in ("наружу", "плато", "отказ", "поправка", "реплик", "отсечка"):
             self.assertIn(gate, names)
+
+
+class RegularityGateTests(unittest.TestCase):
+    """После отказа от бутстрапа производная стала несущей балкой."""
+
+    def test_the_envelope_claim_is_narrowed_to_where_it_holds(self):
+        self.assertTrue(prereg.ENVELOPE_GIVES_THE_DERIVATIVE_ONLY_WHERE_THE_ARGMIN_IS_UNIQUE)
+        self.assertTrue(prereg.SLOPE_NEVER_ZERO_IS_NOT_SLOPE_CONTINUOUS)
+        self.assertIn("E[ψ] stays smooth", prereg.REGULARITY_IS_ABOUT_g_NOT_ABOUT_EVERY_psi)
+
+    def test_the_gate_is_blocking_and_names_a_reachable_counterexample(self):
+        self.assertTrue(prereg.REGULARITY_GATE_IS_BLOCKING_IN_S5A_RATIO)
+        self.assertIn("partner=2, participant=2", prereg.NONREGULAR_CASE_IS_REACHABLE)
+        self.assertTrue(prereg.NONREGULAR_CELLS_GET_NO_SANDWICH_INTERVAL)
+        self.assertTrue(prereg.PLUGGING_IN_THE_CHOSEN_N_STAR_WOULD_BE_TOO_OPTIMISTIC)
+
+    def test_the_probe_is_recorded_with_its_structural_reason(self):
+        """Наблюдение объясняет, почему гейт молчит, но не заменяет его."""
+        self.assertEqual(prereg.REGULARITY_PROBE_KINKS_FOUND, 0)
+        self.assertGreaterEqual(prereg.REGULARITY_PROBE_RUNS, 200)
+        self.assertIn("denominator of order ΣN", prereg.WHY_THE_ROOT_IS_USUALLY_REGULAR)
+        self.assertTrue(prereg.OBSERVATION_DOES_NOT_REPLACE_THE_GATE)
+
+    def test_the_detector_fires_on_the_named_counterexample(self):
+        """Гейт, который никогда не падал, не проверен."""
+        from coarsening.bounded import (Bin, _optimise, generalized_inverse,
+                                        is_regular_at, one_sided_slopes)
+        kw = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
+        kinked = [Bin(0.0, 2, 2)]
+        g = lambda lam: _optimise(kinked, lam=lam, maximise=False,
+                                  require_any=False, **kw)
+        root = generalized_inverse(g, 0.0, 300.0 + 1e-9, tolerance=1e-9)
+        lam0 = (root.low + root.high) / 2
+        self.assertEqual(one_sided_slopes(g, lam0), (-1, -2))
+        self.assertFalse(is_regular_at(g, lam0))
+
+    def test_the_detector_stays_quiet_on_a_smooth_root(self):
+        from coarsening.bounded import (Bin, _optimise, generalized_inverse,
+                                        is_regular_at)
+        kw = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
+        smooth = [Bin(0.0, 1, 0), Bin(120.0, 0, 1)]
+        g = lambda lam: _optimise(smooth, lam=lam, maximise=False,
+                                  require_any=False, **kw)
+        root = generalized_inverse(g, 0.0, 300.0 + 1e-9, tolerance=1e-9)
+        self.assertTrue(is_regular_at(g, (root.low + root.high) / 2))
+
+    def test_the_verdict_does_not_depend_on_the_probe_step(self):
+        """Шаг зажат изломами сверху и округлением снизу — проверяем оба края."""
+        from coarsening.bounded import (Bin, _optimise, generalized_inverse,
+                                        one_sided_slopes)
+        kw = dict(delta=60.0, horizon=300.0, window_end=900.0, time_layer=False)
+        for bins, want in (([Bin(0.0, 2, 2)], (-1, -2)),
+                           ([Bin(0.0, 1, 0), Bin(120.0, 0, 1)], (-1, -1))):
+            g = lambda lam: _optimise(bins, lam=lam, maximise=False,
+                                      require_any=False, **kw)
+            root = generalized_inverse(g, 0.0, 300.0 + 1e-9, tolerance=1e-9)
+            lam0 = (root.low + root.high) / 2
+            for step in (1e-3, 1e-4, 1e-5, 1e-6):
+                self.assertEqual(one_sided_slopes(g, lam0, step=step), want,
+                                 (bins, step))
+
+
+class DiversionSelfTestTests(unittest.TestCase):
+    """Harness обязан доказать, что исполняет испорченный им файл."""
+
+    def test_the_harness_has_a_self_test_and_a_cache_contract(self):
+        from tools import diversion
+        source = pathlib.Path(diversion.__file__).read_text()
+        self.assertIn("PYTHONPYCACHEPREFIX", source)
+        self.assertTrue(hasattr(diversion, "self_test"))
+        self.assertIn("self_test()", source)
+
+    def test_minus_B_alone_is_named_as_insufficient(self):
+        from tools import diversion
+        self.assertIn("НЕ КОНТРАКТ", diversion.run_tests.__doc__)

@@ -403,11 +403,61 @@ DIVERSION_PROTOCOL_IS_EXECUTABLE = "research/python/tools/diversion.py"
 #: а не численным дифференцированием, которое на кусочно-линейной функции с
 #: изломами дало бы шум вместо производной.
 #:
-#: И ЗДЕСЬ ТА ЖЕ ТЕОРЕМА ПЛАТИТ ТРЕТИЙ РАЗ. Невырожденность якобиана —
-#: условие, без которого Z-оценка не имеет нормального предела. У нас
-#: |d/dλ E ψ| >= 1 ровно потому, что непустой период имеет N >= 1 при каждой
-#: истории. Одно предусловие дало уникальность корня, фиксированный
-#: знаменатель и теперь CLT.
+#: И ЗДЕСЬ ТА ЖЕ ТЕОРЕМА ПЛАТИТ ТРЕТИЙ РАЗ — НО НЕ ЦЕЛИКОМ, и это поправка
+#: пятого чтения. «N >= 1» даёт |наклон| >= 1, то есть НАКЛОН НИКОГДА НЕ
+#: НОЛЬ. Этого мало. Теорема об огибающей даёт ψ'(λ) = −N_h* только когда
+#: активная история ЕДИНСТВЕННА; при ничьей между историями с разными N у ψ
+#: излом
+#:
+#:     ∂ψ(λ) = [−N_max, −N_min]
+#:
+#: и равенство d/dλ E[ψ] = −E[N*] из огибающей УЖЕ НЕ СЛЕДУЕТ. Нужен мост
+#: через матожидание: дифференцируемость САМОЙ g(λ) = E[ψ(λ)] в корне.
+#:
+#: «Наклон не ноль» и «слева равно справа» — разные утверждения, и второе
+#: несущее: после отказа от бутстрапа производная стала балкой инференса.
+#: Одна теорема платит примерно два с половиной раза, налоговая обнаружила
+#: недоплату.
+ENVELOPE_GIVES_THE_DERIVATIVE_ONLY_WHERE_THE_ARGMIN_IS_UNIQUE = True
+SLOPE_NEVER_ZERO_IS_NOT_SLOPE_CONTINUOUS = True
+REGULARITY_IS_ABOUT_g_NOT_ABOUT_EVERY_psi = ("individual ψ may kink while "
+                                             "E[ψ] stays smooth — the quantile "
+                                             "case; the object to check is g")
+
+#: И СЛУЧАЙ ДОСТИЖИМ, а не гипотетичен. Перебор нашёл 84 конфигурации, где
+#: минимальное отношение достигается несколькими историями с разными N; у
+#: корзины (partner=2, participant=2) наклоны в λ0 = 0 равны −1 и −2. То
+#: есть λ⁻ упирается в границу области значений И сидит в изломе
+#: одновременно — Wald там не просто неточен.
+NONREGULAR_CASE_IS_REACHABLE = "Bin(partner=2, participant=2): slopes −1 and −2 at λ0 = 0"
+
+#: ПОЭТОМУ ГЕЙТ, А НЕ ДОПУЩЕНИЕ. В каждой ячейке считаются ОБЕ односторонние
+#: производные g в корне (наклоны целые: −ΣN), и они обязаны совпасть.
+REGULARITY_GATE = ("both one-sided derivatives of g at the root must agree; "
+                   "otherwise the cell is NONREGULAR")
+REGULARITY_GATE_IS_BLOCKING_IN_S5A_RATIO = True
+NONREGULAR = "NONREGULAR"
+#: Несовпадение — НЕ повод подставить выбранный N* в «хлеб» сэндвича: у корня
+#: кусочно-линейного монотонного уравнения в точке излома предельное
+#: поведение нестандартно, и обычная нормальная аппроксимация требует уже
+#: другого доказательства, которого у нас нет.
+NONREGULAR_CELLS_GET_NO_SANDWICH_INTERVAL = True
+PLUGGING_IN_THE_CHOSEN_N_STAR_WOULD_BE_TOO_OPTIMISTIC = True
+
+#: ЧТО ПОКАЗАЛ ЗАМЕР НА ЗАМОРОЖЕННОМ DGP — до прогона, как хронометраж.
+#: 200 прогонов, пять конфигураций (n = 1, 5, 25, 100; Δ = 1 и 60 с):
+#: изломов в корне НОЛЬ, односторонние наклоны совпадают точно.
+#:
+#: И у этого есть структурная причина, а не везение: в корне
+#: λ0 = ΣB/ΣN по оптимальным историям, то есть знаменатель ПОРЯДКА ΣN
+#: (тысячи), тогда как изломы периода лежат в ΔB/ΔN со знаменателем
+#: порядка единиц. Совпадение требует точного сокращения дроби.
+#: Наблюдение НЕ заменяет гейт: оно объясняет, почему гейт обычно молчит.
+REGULARITY_PROBE_RUNS = 200
+REGULARITY_PROBE_KINKS_FOUND = 0
+WHY_THE_ROOT_IS_USUALLY_REGULAR = ("λ0 = ΣB/ΣN has a denominator of order ΣN; "
+                                   "period kinks have denominators of order ΔN")
+OBSERVATION_DOES_NOT_REPLACE_THE_GATE = True
 ANALYTIC_INFERENCE = (
     "λ̂ solves the sample estimating equation; bracket from generalized_inverse",
     "Jacobian by the envelope theorem: mean of N* over units — no differencing",
@@ -567,9 +617,25 @@ COVERAGE_ACCEPTANCE = ("the Wilson LOWER limit at COVERAGE_ALPHA_EACH must be "
                        ">= COVERAGE_ACCEPTANCE_FLOOR in EVERY scenario")
 COVERAGE_ACCEPTANCE_ACCOUNTS_FOR_MC_ERROR = True
 
+#: МОЩНОСТЬ ГЕЙТА — БЕЗ СКРЫТОГО ПРЕДПОЛОЖЕНИЯ НЕЗАВИСИМОСТИ. Поправка
+#: пятого чтения. «Все семь с вероятностью 0.986» — это произведение
+#: вероятностей, то есть верно лишь при независимых монте-карловских потоках
+#: сценариев. Если seeds связаны или используются общие случайные числа,
+#: писать p^7 уже нельзя.
+#:
+#: Правило переформулировано через UNION BOUND, которому корреляция
+#: безразлична: при семейном бюджете ложного отклонения β мощность НА ЯЧЕЙКУ
+#: обязана быть не ниже 1 − β/7.
+GATE_POWER_FAMILY_BUDGET = 0.05
+GATE_POWER_PER_CELL_REQUIRED = 1.0 - GATE_POWER_FAMILY_BUDGET / 7
+GATE_POWER_USES_UNION_BOUND_NOT_INDEPENDENCE = True
+
 #: ЧИСЛО РЕПЛИК ВЫБРАНО ПРАВИЛОМ, А НЕ ВКУСОМ, и это прямое следствие
 #: одновременности. После ужесточения z с 1.96 до 2.45 прежние 1000 реплик
-#: стали отвергать ВАЛИДНЫЙ метод:
+#: стали отвергать ВАЛИДНЫЙ метод, и по более сильному критерию тоже
+#: (мощность на ячейку при p = 0.95: R=1000 -> 0.538, R=2000 -> 0.899,
+#: R=4000 -> 0.9979 при требуемых 0.9929). Выбранное число устояло при
+#: ужесточении, а не подгонялось под него:
 #:
 #:     R      одна ячейка при p=0.95     все семь
 #:     1000        0.538                   0.013
@@ -580,7 +646,9 @@ COVERAGE_ACCEPTANCE_ACCOUNTS_FOR_MC_ERROR = True
 #: бы суиту в одном случае из семидесяти. Гейт, отвергающий правильный
 #: ответ, не строг — он сломан, просто в другую сторону.
 GATE_POWER_RULE = ("a method whose true coverage is exactly nominal must pass "
-                   "ALL scenarios with probability >= 0.95")
+                   "EACH scenario with probability >= GATE_POWER_PER_CELL_REQUIRED; "
+                   "the union bound then covers the family whatever the "
+                   "correlation between scenario streams")
 COVERAGE_REPLICATES = 4_000
 COVERAGE_REPLICATES_CHOSEN_BY = "GATE_POWER_RULE, not by taste"
 COVERAGE_SEEDS = "derived from one declared root seed per scenario, recorded"
