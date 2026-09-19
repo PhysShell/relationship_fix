@@ -485,9 +485,14 @@ class SamplingInferenceTests(unittest.TestCase):
         self.assertIn("sqrt(n)", prereg.TEST_INVERSION_SET)
         self.assertEqual(prereg.SANDWICH_ROLE, "diagnostic cross-check")
 
-    def test_the_uniqueness_theorem_is_what_makes_C_an_interval(self):
-        """Теперь она платит честно: не CLT, а единственность параметра."""
-        self.assertTrue(prereg.UNIQUENESS_THEOREM_IS_WHAT_MAKES_C_AN_INTERVAL_FOR_lambda0)
+    def test_the_uniqueness_theorem_defines_the_parameter_and_nothing_more(self):
+        """Она делает λ0 корректно определённым — и только. Связности
+        множества принятия она НЕ даёт: тестируется стьюдентизованная
+        статистика, у которой знаменатель тоже зависит от λ."""
+        self.assertTrue(prereg.UNIQUENESS_THEOREM_MAKES_lambda0_WELL_DEFINED)
+        self.assertTrue(prereg.UNIQUENESS_DOES_NOT_MAKE_THE_ACCEPTANCE_SET_CONNECTED)
+        self.assertFalse(hasattr(prereg,
+            "UNIQUENESS_THEOREM_IS_WHAT_MAKES_C_AN_INTERVAL_FOR_lambda0"))
         self.assertTrue(prereg.N_ZERO_IS_ORDER_INVARIANT)
 
     def test_the_switch_does_not_claim_a_failure_it_did_not_observe(self):
@@ -1121,3 +1126,40 @@ class BreakpointLocalisationTests(unittest.TestCase):
         from coarsening import bounded
         self.assertLess(bounded.AFFINE_SAG_FRACTION, 1e-4)
         self.assertFalse(hasattr(bounded, "AFFINE_TOLERANCE"))
+
+
+class AcceptanceSetGeometryTests(unittest.TestCase):
+    """Связность множества принятия не следует из единственности корня."""
+
+    def test_the_full_set_is_required_and_the_shortcut_forbidden(self):
+        self.assertTrue(prereg.FULL_ACCEPTANCE_SET_IS_REQUIRED)
+        self.assertTrue(prereg.TWO_BISECTIONS_AROUND_THE_ROOT_ARE_FORBIDDEN)
+        self.assertTrue(prereg.ACCEPTANCE_SET_NEED_NOT_BE_CONNECTED)
+        self.assertIn("корень единственный, значит доверительное множество — интервал",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_the_golden_counterexample_is_named_and_reproduces(self):
+        from coarsening.inversion import Piece, acceptance_set
+        self.assertIn("N=100", prereg.FIELLER_GOLDEN)
+        periods = [(Piece(100.0, 131520.0),)] + [(Piece(1.0, 720.0),)] * 24
+        got = acceptance_set(periods, z=1.959963984540054, lo=0.0, hi=3600.0)
+        self.assertEqual(len(got), 2, got)
+
+    def test_only_the_convex_hull_may_become_an_interval(self):
+        self.assertIn("convex hull", prereg.INTERVAL_CONVERSION)
+        self.assertTrue(prereg.UGLY_SETS_ARE_REPORTED_AS_IS)
+        self.assertIn("вторая компонента выглядит странно, уберём её",
+                      prereg.FORBIDDEN_INTERPRETATIONS)
+
+    def test_the_exact_computation_is_named(self):
+        self.assertIn("quadratic", prereg.ACCEPTANCE_SET_IS_COMPUTED_EXACTLY)
+
+    def test_zero_variance_has_a_declared_semantics(self):
+        from coarsening import inversion
+        self.assertIn("accept", prereg.ZERO_VARIANCE_RULE)
+        self.assertTrue(prereg.ZERO_VARIANCE_FREQUENCY_IS_REPORTED)
+        self.assertTrue(inversion.ZERO_VARIANCE_IS_ACCEPTED)
+
+    def test_no_multiplicity_correction_over_lambda(self):
+        """Покрытие определяется поведением теста в истинном λ0."""
+        self.assertTrue(prereg.NO_MULTIPLICITY_CORRECTION_OVER_lambda)

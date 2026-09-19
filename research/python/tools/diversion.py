@@ -178,6 +178,25 @@ DIVERSIONS = (
      'SANDWICH_ROLE = "diagnostic cross-check"',
      'SANDWICH_ROLE = "primary"',
      ["tests.test_s5b_prereg"]),
+    ("полное множество -> компонента вокруг корня", "coarsening/inversion.py",
+     "    found.sort()",
+     "    found.sort()\n"
+     "    if len(found) > 1:\n"
+     "        root = sum(p.b for q in periods for p in q) / max(1e-9, sum(\n"
+     "            p.n for q in periods for p in q))\n"
+     "        inside = [c for c in found if c[0] <= root <= c[1]]\n"
+     "        found = inside or found[:1]",
+     ["tests.test_inversion"]),
+    ("вырожденная дисперсия отвергается", "coarsening/inversion.py",
+     "        if s_nn == 0.0 and s_bb == 0.0 and ZERO_VARIANCE_IS_ACCEPTED:\n"
+     "            found.append((left, right))          # разброса нет: принимаем\n"
+     "            continue",
+     "        if s_nn == 0.0 and s_bb == 0.0:\n            continue",
+     ["tests.test_inversion"]),
+    ("оболочка заменена первой компонентой", "coarsening/inversion.py",
+     "    return components[0][0], components[-1][1]",
+     "    return components[0][0], components[0][1]",
+     ["tests.test_inversion"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
