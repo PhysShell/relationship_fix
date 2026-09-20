@@ -1757,6 +1757,20 @@ class RevisionFourResultTests(unittest.TestCase):
                       flat)
         self.assertIn("проверен ОДНИМ сценарием", flat)
 
+    def test_the_pass_is_not_claimed_to_rest_on_the_controls(self):
+        """Контроли — свидетельство чувствительности, не часть критерия.
+
+        Объявленный по §8.9 acceptance criterion стоит на ОСНОВНОЙ
+        конфигурации. Формулировка, из которой можно вычитать «контроли
+        обязаны были отклонить всё», приписывала бы гейту условие,
+        которого в нём не было.
+        """
+        flat = self._flat()
+        self.assertIn("Primary revision-4 gate passed 33/33", flat)
+        self.assertIn("sensitivity evidence on 21/25 non-vacuous rows", flat)
+        self.assertIn("Не входило", flat)
+        self.assertIn("а не post-hoc исключение из объявленного гейта", flat)
+
     def test_the_amendment_is_now_active_and_says_it_is_reversible(self):
         flat = self._flat()
         self.assertIn("ACTIVE post-freeze amendment", flat)
