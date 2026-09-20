@@ -1390,11 +1390,20 @@ class PrecisionQualificationDeclarationTests(unittest.TestCase):
         self.assertIn("до того, как получены числа", note)
 
     def test_the_ladder_declared_is_the_production_one(self):
-        """Масштабированная лестница квалифицирует не ту процедуру."""
+        """Масштабированная лестница квалифицирует не ту процедуру.
+
+        Требуется отсутствие не СТРОКИ, а УПОТРЕБЛЕНИЯ: проект ошибки не
+        стирает, а помечает, поэтому прежнюю лестницу называть можно —
+        но только в абзаце, который её отзывает. Первая редакция этого
+        теста запрещала строку и падала на собственном отзыве.
+        """
         note = self._note()
         self.assertIn("ПРОИЗВОДСТВЕННАЯ", note)
         self.assertIn("`4000 → 16000 → 64000`", note)
-        self.assertNotIn("400 → 1600 → 6400", note)
+        for paragraph in note.split("\n\n"):
+            if "400 → 1600 → 6400" in paragraph:
+                self.assertIn("отозвана", paragraph,
+                              "прежняя лестница названа вне отзыва")
 
     def test_the_declared_suite_matches_the_executable_one(self):
         """Таблица в документе и код обязаны называть ОДНИ И ТЕ ЖЕ сценарии."""
@@ -1450,3 +1459,86 @@ class PrecisionQualificationDeclarationTests(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[3]
         self.assertTrue((root / "research/python/tools/s5b_qualify.py").exists())
         self.assertIn("ADR-0003 §6", self._note())
+
+
+class PrecisionQualificationResultTests(unittest.TestCase):
+    """Результат квалификации. Суита НЕ пройдена, и это записано так."""
+
+    def _note(self):
+        root = pathlib.Path(__file__).resolve().parents[3]
+        return (root / "docs/research/s5b-mcse-specification-gap.md").read_text()
+
+    def _flat(self):
+        return " ".join(self._note().split())
+
+    def test_the_verdict_is_a_failure_and_says_so_in_the_heading(self):
+        note = self._note()
+        self.assertIn("## 7. Квалификация: РЕЗУЛЬТАТ — СУИТА НЕ ПРОЙДЕНА", note)
+        self.assertIn("`fieller` отклонён", self._flat())
+        self.assertIn("0.9036", note)          # нижняя граница провала
+        self.assertIn("0.9150", note)          # точечная оценка провала
+
+    def test_the_amendment_did_not_become_active(self):
+        flat = self._flat()
+        self.assertIn("Амендмент остаётся ПРЕДЛОЖЕНИЕМ", flat)
+        self.assertIn("Шардинг не начинается", flat)
+        self.assertIn("Реализация Stage 1 escalation не начинается", flat)
+        self.assertIn("ПРЕДЛАГАЕМЫЙ амендмент", flat)
+
+    def test_the_multiplicity_claim_is_about_the_suite_not_about_necessity(self):
+        """Не «Бонферрони необходим», а «без поправки суиту не прошли».
+
+        Первая формулировка утверждает свойство метода, которого замер не
+        устанавливает: измерено, что НЕОТКОРРЕКТИРОВАННАЯ процедура не
+        прошла ОБЪЯВЛЕННУЮ суиту, а не что никакая другая поправка не
+        справилась бы.
+        """
+        flat = self._flat()
+        self.assertIn("не прошла объявленную квалификационную суиту", flat)
+        self.assertIn("прошла в восьми сценариях из девяти", flat)
+        for retired in ("поправка на три просмотра **необходима**",
+                        "ПОПРАВКА НА ТРИ ПРОСМОТРА НЕОБХОДИМА",
+                        "Бонферрони его возвращает"):
+            self.assertNotIn(retired, flat, retired)
+
+    def test_passing_is_stated_as_clearing_the_floor_not_as_proof(self):
+        flat = self._flat()
+        self.assertIn("превысила объявленный пол `0.93`", flat)
+        self.assertNotIn("Номинал `0.95` доказан", flat)
+        self.assertIn("Номинал `0.9875` не установлен нигде", flat)
+
+    def test_the_failure_mechanism_is_localised_not_hand_waved(self):
+        flat = self._flat()
+        self.assertIn("CV(N)² > M/z²", flat)
+        self.assertIn("промахов 307", flat)
+        self.assertIn("промахов   0 = 0.0000", self._note())
+        self.assertIn("ни одна из 4000 реплик не могла остановиться", flat)
+
+    def test_the_diagnostic_is_marked_as_following_the_verdict(self):
+        """Диагностика объясняет вердикт, а не пересматривает его."""
+        self.assertIn("посчитана **после** вердикта и вердикта не меняет",
+                      self._flat())
+
+    def test_the_obvious_repair_is_proposed_and_explicitly_not_applied(self):
+        """Уточнённый критерий прошёл бы — и ровно поэтому не берётся."""
+        flat = self._flat()
+        self.assertIn("ПРЕДЛОЖЕНИЕ, которое здесь НЕ вводится", flat)
+        self.assertIn("выбор критерия по результату", flat)
+        self.assertIn("редакцией 4 со СВОИМ объявлением и СВОИМ прогоном", flat)
+
+    def test_the_secondary_number_is_reported_because_it_was_declared(self):
+        flat = self._flat()
+        self.assertIn("0.9942", flat)
+        self.assertIn("названа вторичной заранее и вторичной остаётся", flat)
+
+    def test_both_ladder_branches_and_the_geometry_were_actually_reached(self):
+        flat = self._flat()
+        self.assertIn("3723 несвязных множества из 12000 построений", flat)
+        self.assertIn("задевает ВСЕ четыре исхода сразу", flat)
+
+    def test_the_negative_controls_behaved_as_declared(self):
+        flat = self._flat()
+        self.assertIn("отклонено ровно в тех семи сценариях, для которых это "
+                      "было объявлено до прогона", flat)
+        self.assertIn("Объявленное ожидание исполнено без правок", flat)
+

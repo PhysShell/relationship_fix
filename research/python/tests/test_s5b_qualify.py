@@ -108,7 +108,9 @@ class ScenarioTruthIsAnalyticTests(unittest.TestCase):
 
     def test_catalogue_scenarios_have_an_exact_population_root(self):
         """Точная арифметика: E[ψ(λ)] по каталогу, корень в рациональных."""
-        cases = ((Q.KINK_CATALOGUE, (Fraction(1, 2), Fraction(1, 4), Fraction(1, 4)),
+        cases = ((Q.FIELLER_CATALOGUE, (Fraction(1, 1000), Fraction(999, 1000)),
+                  Fraction(1200)),
+                 (Q.KINK_CATALOGUE, (Fraction(1, 2), Fraction(1, 4), Fraction(1, 4)),
                   Fraction(1200)),
                  (Q.BOUNDARY_SIGNED_CATALOGUE, (Fraction(1, 2), Fraction(1, 2)),
                   Fraction(0)),
@@ -124,6 +126,23 @@ class ScenarioTruthIsAnalyticTests(unittest.TestCase):
                              f"{catalogue}: E[psi({root})] != 0")
             self.assertGreater(expectation(root - Fraction(1, 1000)), 0)
             self.assertLess(expectation(root + Fraction(1, 1000)), 0)
+
+    def test_the_failing_scenario_has_the_most_exact_truth_of_all(self):
+        """`fieller` провалил гейт, значит его `λ0` обязан быть вне сомнений.
+
+        Целыми числами, без плавающей точки: 10999 · 1200 = 13198800.
+        """
+        heavy, light = Q.FIELLER_CATALOGUE
+        self.assertEqual((heavy[0].n, heavy[0].b), (10_000.0, 12_479_520.0))
+        self.assertEqual((light[0].n, light[0].b), (1.0, 720.0))
+        total_n = 10_000 + 999 * 1
+        total_b = 12_479_520 + 999 * 720
+        self.assertEqual(total_n, 10_999)
+        self.assertEqual(total_b, 13_198_800)
+        self.assertEqual(total_b, 1200 * total_n)
+        #: физическая допустимость: B <= N·H при H = 3600
+        self.assertLessEqual(heavy[0].b, heavy[0].n * Q.HI)
+        self.assertLessEqual(light[0].b, light[0].n * Q.HI)
 
     def test_moment_scenarios_are_exactly_b_equals_truth_times_n_plus_noise(self):
         """Шум аддитивен и центрирован, значит E[B] = λ0·E[N] ТОЧНО."""
