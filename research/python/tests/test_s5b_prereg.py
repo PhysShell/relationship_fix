@@ -1409,9 +1409,14 @@ class PrecisionQualificationDeclarationTests(unittest.TestCase):
         """Таблица в документе и код обязаны называть ОДНИ И ТЕ ЖЕ сценарии."""
         from tools import s5b_qualify as Q
         note = self._note()
-        for scenario in Q.SCENARIOS:
-            self.assertIn(f"`{scenario.name}`", note, scenario.name)
-        self.assertEqual(len(Q.SCENARIOS), 9)
+        listed = [n for n in (
+            "regular", "heavy_tail", "zero_heavy", "heavy_zero_90", "fieller",
+            "kink_at_root", "boundary_zero", "boundary_signed",
+            "degenerate_variance")]
+        for name in listed:
+            self.assertIn(f"`{name}`", note, name)
+            self.assertTrue(any(s.name == name for s in Q.SCENARIOS),
+                            f"{name} исчез из исполняемой суиты")
         flat = " ".join(note.replace(">", " ").split())
         for required in ("Филлер-golden с несвязным множеством",
                          "излом в корне", "граничный корень `λ0 = 0`",
@@ -1420,11 +1425,15 @@ class PrecisionQualificationDeclarationTests(unittest.TestCase):
             self.assertIn(required, flat, required)
 
     def test_the_acceptance_rule_is_the_existing_one_not_a_new_one(self):
-        from tools import s5b_qualify as Q
+        """§6 — ИСТОРИЧЕСКАЯ запись объявления редакции 3.
+
+        Констант harness'а она больше не описывает: редакция 4 сменила
+        гейтящую величину и вместе с ней пол и `R` (§8). Проверяется, что
+        запись стоит на месте и что пол проекта не двигали.
+        """
         self.assertIn("уже существующий", self._note())
         self.assertEqual(prereg.COVERAGE_ACCEPTANCE_FLOOR, 0.93)
-        self.assertEqual(Q.REPLICATES, prereg.COVERAGE_REPLICATES)
-        self.assertEqual(Q.DELTA, min(prereg.DELTA_FRACTIONS_OF_HORIZON) * 3600.0)
+        self.assertEqual(prereg.COVERAGE_REPLICATES, 4_000)
 
     def test_the_family_correction_is_not_borrowed_from_a_smaller_family(self):
         from tools import s5b_qualify as Q
@@ -1541,4 +1550,90 @@ class PrecisionQualificationResultTests(unittest.TestCase):
         self.assertIn("отклонено ровно в тех семи сценариях, для которых это "
                       "было объявлено до прогона", flat)
         self.assertIn("Объявленное ожидание исполнено без правок", flat)
+
+
+class RevisionFourDeclarationTests(unittest.TestCase):
+    """Редакция 4 объявлена ДО чисел и меняет ОБЪЕКТ, а не `fieller`."""
+
+    def _flat(self):
+        root = pathlib.Path(__file__).resolve().parents[3]
+        note = (root / "docs/research/s5b-mcse-specification-gap.md").read_text()
+        #: `>` — префикс цитаты амендмента, для поиска по тексту он мусор
+        return " ".join(note.replace(">", " ").split())
+
+    def test_the_declaration_precedes_the_numbers_again(self):
+        flat = self._flat()
+        self.assertIn("## 8. РЕДАКЦИЯ 4: объявление ДО чисел", flat)
+        self.assertIn("закоммичено раньше, чем существуют результаты", flat)
+
+    def test_the_qualified_object_is_the_stopping_procedure(self):
+        flat = self._flat()
+        self.assertIn("FALSE_CERTIFICATION = (tau < inf) И (λ0 не в A_tau)", flat)
+        self.assertIn("B-12", flat)
+        self.assertIn("B-13", flat)
+
+    def test_the_rejected_foundation_is_named_and_rejected(self):
+        """«На M = 4000 остановиться невозможно» выброшено из основания."""
+        flat = self._flat()
+        self.assertIn("выброшен", flat)
+        self.assertIn("наблюдение, а не доказательство", flat)
+        self.assertIn("«возможные» и «невозможные» в гейте нет нигде", flat)
+
+    def test_the_stronger_construction_is_kept_as_sufficient(self):
+        self.assertIn("достаточной, но более сильной** конструкцией",
+                      self._flat())
+
+    def test_the_critical_value_is_explicitly_unchanged(self):
+        from tools import s5b_qualify as Q
+        from simulation import s5b_precision as PR
+        flat = self._flat()
+        self.assertIn("Множественность НЕ трогается", flat)
+        self.assertIn("DEFERRED", flat)
+        self.assertAlmostEqual(Q.Z_DECLARED, PR.Z_PER_COMPARISON)
+
+    def test_the_floor_and_R_are_derived_and_the_derivation_is_shown(self):
+        from tools import s5b_qualify as Q
+        flat = self._flat()
+        self.assertIn("Пол выведен, а не выбран", flat)
+        self.assertIn("Пол не понижался. Поднято `R` до 24000", flat)
+        self.assertAlmostEqual(Q.FALSE_CERT_FLOOR, 0.9825)
+        self.assertEqual(Q.REPLICATES, 24_000)
+
+    def test_the_literal_floor_would_have_disarmed_the_control_is_stated(self):
+        self.assertIn("отрицательный контроль потерял бы зубы", self._flat())
+
+    def test_the_suite_keeps_fieller_and_adds_the_two_declared_scenarios(self):
+        from tools import s5b_qualify as Q
+        flat = self._flat()
+        self.assertIn("не удалён и не ослаблен", flat)
+        names = [s.name for s in Q.SCENARIOS]
+        self.assertIn("fieller", names)
+        self.assertIn("fieller_certifying", names)
+        for required in ("`fieller_certifying`", "`cell_four_endpoints`"):
+            self.assertIn(required, flat, required)
+        self.assertEqual(Q.STATEMENTS, (len(Q.SCENARIOS) + 1) * len(Q.DELTAS))
+
+    def test_vacuous_passing_is_declared_as_not_passing(self):
+        flat = self._flat()
+        self.assertIn("Вакуумное прохождение — не прохождение", flat)
+        self.assertIn("всегда отвечает «не знаю»", flat)
+
+    def test_the_fixed_look_diagnostic_is_required_to_stay_visible(self):
+        """Прежние 307 промахов не должны раствориться в смене определения."""
+        self.assertIn("должны быть ВИДНЫ рядом с новым результатом",
+                      self._flat())
+
+    def test_every_disclosure_is_written_down(self):
+        flat = self._flat()
+        self.assertIn("Я уже видел вторичные числа редакции 3", flat)
+        self.assertIn("Допуск эквивалентности быстрого пути поднят", flat)
+        self.assertIn("Пространство seed'ов прогона — `r4`", flat)
+
+    def test_the_forbidden_result_wordings_are_named_in_advance(self):
+        flat = self._flat()
+        self.assertIn("revision-4 stopped procedure passed / failed the "
+                      "predeclared qualification gate", flat)
+        for forbidden in ("proved\noptional-stopping validity",
+                          "confidence sequence", "always-valid"):
+            self.assertIn(forbidden.replace("\n", " "), flat, forbidden)
 
