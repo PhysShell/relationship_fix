@@ -456,9 +456,22 @@ SCENARIOS = (
 # Возможное снятие временного Бонферрони по просмоторам после прямой
 # квалификации stopping rule — DEFERRED, отдельным решением.
 
-#: Пространство seed'ов редакции 4. Ни одно число прогона редакции 3 не
-#: переиспользуется как свидетельство приёмки.
-SEED_NAMESPACE = "r4"
+# ПРОСТРАНСТВА SEED'ОВ РАЗДЕЛЕНЫ, и это не украшение. Первая редакция 4
+# держала одно имя `r4` на всё, а тесты вызывают `replicate` на индексах
+# 0..39; гейтящий прогон идёт по `range(REPLICATES)`, то есть НАЧИНАЕТ с тех
+# же самых реплик. Несколько десятков из 24000 — доля ничтожная, но
+# утверждение «числа появились только после freeze» от этого становится
+# формально неверным, а `fieller_certifying` и четвёрка концов прямо
+# ПРОЕКТИРОВАЛИСЬ против этих реплик.
+#
+# Разделение сделано так, чтобы загрязнение было НЕВОЗМОЖНО ПО
+# ЗАБЫВЧИВОСТИ, а не «не рекомендовалось»: `namespace` — обязательный
+# именованный параметр без значения по умолчанию. Смещение на 40 индексов
+# отвергнуто: тесты трогали разные сценарии на разных индексах, и через
+# полгода никто не должен заниматься археологией диапазонов.
+TEST_NAMESPACE = "r4-test"
+CALIBRATION_NAMESPACE = "r4-calibration"
+QUALIFICATION_NAMESPACE = "r4-qualification"
 
 #: δ — ОСЬ сетки, а не параметр. Суита проходится по ВСЕЙ объявленной оси:
 #: при самой тесной δ половина сценариев не доходит до сертификата вообще,
@@ -482,14 +495,24 @@ CONFIGS = (("объявленный alpha/12", Z_DECLARED),
 #: 1 − α/12, поэтому P(tau < inf, промах) <= 3·α/12 = α/4.
 NOMINAL_FALSE_CERT = len(PR.LOOKS) * PR.ALPHA_PER_COMPARISON
 
-#: ПОЛ ВЫВЕДЕН ИЗ УЖЕ СУЩЕСТВУЮЩЕГО ПРАВИЛА, а не выбран. Объявленная пара
-#: проекта — пол 0.93 при номинале 0.95, то есть допуск по промаху ровно
-#: в 1.4 раза. Тот же множитель применён к НОВОМУ номиналу.
+#: ПОЛ — ПРИНЯТАЯ КОНВЕНЦИЯ ПЕРЕНОСА, А НЕ СЛЕДСТВИЕ. Из prereg он не
+#: выводится: там зафиксирована пара «пол 0.93 при номинале 0.95», то есть
+#: допустимое превышение вероятности промаха в 1.4 раза. Редакция 4
+#: принимает конвенцию СОХРАНИТЬ ЭТОТ ОТНОСИТЕЛЬНЫЙ ДОПУСК при переносе на
+#: новую величину.
 #:
-#: Оставить буквально 0.93 было бы нельзя: при номинале 0.9875 процедура
-#: БЕЗ поправки на множественность даёт около 0.95 и прошла бы пол 0.93 —
-#: отрицательный контроль потерял бы зубы. Пол обязан соответствовать
-#: номиналу той величины, на которой стоит.
+#: Возможны другие столь же разумные переносы — например сохранить
+#: АБСОЛЮТНЫЙ отступ 0.02, что дало бы пол 0.9675. Относительная шкала
+#: выбрана потому, что допустимое отклонение вероятности ошибки принято
+#: задавать множителем от неё самой; но множитель 1.4 здесь происходит из
+#: собственного прежнего гейта проекта, а не из теоремы, и назван
+#: конвенцией именно поэтому.
+#:
+#: Отдельно и ВТОРИЧНО проверено, что порог различает: при поле 0.93
+#: процедура БЕЗ поправки (около 0.95) прошла бы, и отрицательный контроль
+#: стал бы декоративным. Это проверка discriminative power ПОСЛЕ выбора
+#: конвенции, а не основание выбора: подбирать проходной балл так, чтобы
+#: завалился конкретный двоечник, — не дизайн эксперимента.
 FLOOR_RATIO = ((1.0 - COVERAGE_ACCEPTANCE_FLOOR) / (1.0 - CONFIDENCE_LEVEL))
 FALSE_CERT_FLOOR = 1.0 - FLOOR_RATIO * NOMINAL_FALSE_CERT
 
@@ -581,14 +604,15 @@ def _look_state(sample, z_values, truth, maximise=False):
     return out
 
 
-def replicate(scenario: Scenario, index: int, tallies=None,
-              ladder=PR.LOOKS, deltas=DELTAS, configs=CONFIGS):
+def replicate(scenario: Scenario, index: int, tallies=None, *,
+              namespace: str, ladder=PR.LOOKS, deltas=DELTAS,
+              configs=CONFIGS):
     """Одна реплика. Все δ и все `z` — на ОБЩЕМ потоке (common random numbers).
 
     Возвращает `{(δ, label): (сертифицирован, покрыл_в_tau, tau)}`, где
     `tau = None` означает `MC_PRECISION_INSUFFICIENT`.
     """
-    rng = random.Random(f"{SEED_NAMESPACE}:{scenario.name}:{index}")
+    rng = random.Random(f"{namespace}:{scenario.name}:{index}")
     sample = scenario.new_sample()
     live = {(d, label): True for d in deltas for label, _ in configs}
     result = {}
@@ -671,12 +695,12 @@ def cell_gets_verdict(certified) -> bool:
     return len(certified) == 4 and all(certified)
 
 
-def replicate_cell(index: int, tallies=None, ladder=PR.LOOKS, deltas=DELTAS,
-                   configs=CONFIGS):
+def replicate_cell(index: int, tallies=None, *, namespace: str,
+                   ladder=PR.LOOKS, deltas=DELTAS, configs=CONFIGS):
     """Четыре конца, каждый со СВОИМ `tau`; вердикт — только когда все точны."""
     rngs, samples, truths = {}, {}, {}
     for arm, catalogue, weights, (low, high) in CELL_ARMS:
-        rngs[arm] = random.Random(f"{SEED_NAMESPACE}:{CELL_NAME}:{index}:{arm}")
+        rngs[arm] = random.Random(f"{namespace}:{CELL_NAME}:{index}:{arm}")
         samples[arm] = CatalogueSample(catalogue)
         truths[(arm, False)] = low
         truths[(arm, True)] = high
@@ -758,7 +782,8 @@ def main() -> int:
     print(f"РЕДАКЦИЯ 4: квалифицируется stopping procedure, не покрытие "
           f"каждого просмотра")
     print(f"лестница {PR.LOOKS}, реплик {REPLICATES}, "
-          f"seed namespace {SEED_NAMESPACE!r}")
+          f"seed namespace {QUALIFICATION_NAMESPACE!r} "
+          f"(тесты идут по {TEST_NAMESPACE!r} и сюда не попадают)")
     print(f"концов {PR.ENDPOINTS_PER_CELL} x просмотров {len(PR.LOOKS)} = "
           f"{PR.COMPARISONS} сравнений, z = {Z_DECLARED:.4f} (НЕ меняется)")
     print(f"δ по всей объявленной оси {tuple(int(d) for d in DELTAS)} "
@@ -778,7 +803,8 @@ def main() -> int:
     for scenario in SCENARIOS:
         tallies = _run_one(
             scenario.name,
-            lambda i, t, s=scenario: replicate(s, i, t), DELTAS, CONFIGS)
+            lambda i, t, s=scenario: replicate(
+                s, i, t, namespace=QUALIFICATION_NAMESPACE), DELTAS, CONFIGS)
         _print_block(scenario.name, tallies, DELTAS, CONFIGS, verdicts)
         if scenario.name.startswith("fieller"):
             tally = tallies[(DELTAS[0], CONFIGS[0][0])]
@@ -790,8 +816,10 @@ def main() -> int:
             print(f"{'':<20}{'':>6}  {'несвязных множеств':<24}"
                   f"{tally.disconnected}")
 
-    tallies = _run_one(CELL_NAME, lambda i, t: replicate_cell(i, t),
-                       DELTAS, CONFIGS)
+    tallies = _run_one(
+        CELL_NAME,
+        lambda i, t: replicate_cell(i, t, namespace=QUALIFICATION_NAMESPACE),
+        DELTAS, CONFIGS)
     _print_block(CELL_NAME, tallies, DELTAS, CONFIGS, verdicts)
 
     print()

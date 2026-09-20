@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import pathlib
 import random
 import unittest
 from fractions import Fraction
@@ -281,7 +282,8 @@ class ControlFlowAtSmallSizesTests(unittest.TestCase):
 
     def test_a_tiny_ladder_exhausts_and_reports_insufficient(self):
         scenario = next(s for s in Q.SCENARIOS if s.name == "zero_heavy")
-        result = Q.replicate(scenario, 0, ladder=(2, 4, 8))
+        result = Q.replicate(scenario, 0, namespace=Q.TEST_NAMESPACE,
+                             ladder=(2, 4, 8))
         #: ТОЛЬКО объявленный `z`: контроль `z = 0.5` строит множество вчетверо
         #: уже цели и на восьми периодах способен объявить точность — это его
         #: работа, ровно поэтому он и контроль
@@ -299,12 +301,13 @@ class ControlFlowAtSmallSizesTests(unittest.TestCase):
         """
         for scenario in Q.SCENARIOS[:4]:
             for index in range(2):
-                shared = Q.replicate(scenario, index)
+                shared = Q.replicate(scenario, index,
+                                     namespace=Q.TEST_NAMESPACE)
                 for label, z in Q.CONFIGS:
                     for delta in Q.DELTAS:
                         def evaluate(size, scenario=scenario, index=index, z=z):
                             rng = random.Random(
-                                f"{Q.SEED_NAMESPACE}:{scenario.name}:{index}")
+                                f"{Q.TEST_NAMESPACE}:{scenario.name}:{index}")
                             sample = scenario.new_sample()
                             for _ in range(size):
                                 scenario.draw(rng, sample)
@@ -352,8 +355,14 @@ class QualificationGatesAreDeclaredTests(unittest.TestCase):
         self.assertAlmostEqual(Q.NOMINAL_FALSE_CERT, 0.0125)
         self.assertIn("p_false_cert", Q.main.__doc__ or Q.__doc__ or "")
 
-    def test_the_floor_is_derived_from_the_projects_own_ratio(self):
-        """Пол проекта 0.93 при номинале 0.95 — допуск ровно в 1.4 раза."""
+    def test_the_floor_is_a_declared_transport_convention(self):
+        """Пол не выводится из prereg — он ПЕРЕНОСИТ его относительный допуск.
+
+        Пара проекта «0.93 при 0.95» задаёт допустимое превышение промаха
+        в 1.4 раза. Конвенция: сохранить этот множитель. Альтернатива
+        (сохранить абсолютный отступ 0.02) дала бы 0.9675 и тоже была бы
+        разумна — поэтому это выбор, объявленный до прогона, а не теорема.
+        """
         from simulation import s5b_prereg as prereg
         self.assertAlmostEqual(Q.FLOOR_RATIO, 1.4)
         self.assertAlmostEqual(
@@ -361,11 +370,14 @@ class QualificationGatesAreDeclaredTests(unittest.TestCase):
             (1 - prereg.COVERAGE_ACCEPTANCE_FLOOR) / (1 - prereg.CONFIDENCE_LEVEL))
         self.assertAlmostEqual(Q.FALSE_CERT_FLOOR, 0.9825)
 
-    def test_the_literal_project_floor_would_have_disarmed_the_control(self):
-        """Ради чего пол вообще пересчитан: 0.93 пропустил бы α-процедуру.
+    def test_the_chosen_floor_discriminates_secondary_check(self):
+        """ВТОРИЧНАЯ проверка различающей силы, НЕ основание выбора порога.
 
-        Без поправки на множественность процедура даёт около 0.95. При поле
-        0.93 она прошла бы, и отрицательный контроль потерял бы зубы.
+        Конвенция переноса выбрана в `test_the_floor_is_a_declared_transport
+        _convention`; здесь лишь констатируется её следствие: буквальный
+        0.93 пропустил бы α-процедуру (около 0.95), выведенный из конвенции
+        пол её отвергает. Выбирать порог ПО этому следствию значило бы
+        назначать проходной балл под конкретного двоечника.
         """
         from simulation import s5b_prereg as prereg
         unadjusted = int(round(0.05 * Q.REPLICATES))
@@ -406,9 +418,62 @@ class QualificationGatesAreDeclaredTests(unittest.TestCase):
         self.assertAlmostEqual(Q.Z_DECLARED, PR.Z_PER_COMPARISON)
         self.assertAlmostEqual(Q.Z_DECLARED, 2.8653, places=4)
 
-    def test_the_seed_namespace_is_fresh(self):
-        """Ни одно число прогона редакции 3 не переиспользуется."""
-        self.assertEqual(Q.SEED_NAMESPACE, "r4")
+    def test_the_seed_namespaces_are_separated(self):
+        """Тестовый поток и гейтящий поток обязаны НЕ пересекаться."""
+        names = {Q.TEST_NAMESPACE, Q.CALIBRATION_NAMESPACE,
+                 Q.QUALIFICATION_NAMESPACE}
+        self.assertEqual(len(names), 3)
+        self.assertNotIn("r4", names, "голое `r4` было общим на всё")
+
+    def test_the_namespace_cannot_be_omitted_by_accident(self):
+        """Защита СТРУКТУРНАЯ, а не рекомендательная: параметр обязателен."""
+        import inspect
+        for function in (Q.replicate, Q.replicate_cell):
+            parameter = inspect.signature(function).parameters["namespace"]
+            self.assertIs(parameter.default, inspect.Parameter.empty,
+                          f"{function.__name__}: namespace получил умолчание")
+            self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+        scenario = Q.SCENARIOS[0]
+        with self.assertRaises(TypeError):
+            Q.replicate(scenario, 0)
+        with self.assertRaises(TypeError):
+            Q.replicate_cell(0)
+
+    def test_no_test_may_run_replicates_on_the_qualification_stream(self):
+        """Ни один тест не имеет права ЗАПУСТИТЬ реплику гейтящего потока.
+
+        Проверяется УПОТРЕБЛЕНИЕ, а не упоминание, и это третья попытка:
+        поиск подстроки падал на собственной докстроке, поиск имени — на
+        честной проверке «три пространства различны». Запрещено ровно одно:
+        передать гейтящий поток в `namespace=`. Называть константу можно.
+
+        Тот же класс, что уже ловил проект дважды (фраза про перцентиль,
+        отозванная лестница): отсутствие ИМЕНИ и отсутствие ДЕЙСТВИЯ — разные
+        требования, и проверять надо второе.
+        """
+        import ast
+        tree = ast.parse(pathlib.Path(__file__).read_text())
+        forbidden = getattr(Q, "QUALIFICATION" + "_NAMESPACE")
+        passed, seen_test_stream = [], False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg != "namespace":
+                    continue
+                value = keyword.value
+                if isinstance(value, ast.Attribute):
+                    passed.append(value.attr)
+                    seen_test_stream |= value.attr == "TEST_NAMESPACE"
+                elif isinstance(value, ast.Constant):
+                    passed.append(value.value)
+        self.assertNotIn("QUALIFICATION_NAMESPACE", passed,
+                         "тест гоняет реплики гейтящего потока")
+        self.assertNotIn(forbidden, passed,
+                         "поток гейта вписан строкой в обход имени")
+        self.assertTrue(seen_test_stream,
+                        "ни один тест не назвал тестовый поток — проверка пуста")
+
 
 
 class StoppingProcedureIsTheObjectTests(unittest.TestCase):
@@ -417,7 +482,7 @@ class StoppingProcedureIsTheObjectTests(unittest.TestCase):
     def test_an_endpoint_that_never_certifies_produces_no_false_certification(self):
         """tau = inf -> MC_PRECISION_INSUFFICIENT -> научного вердикта нет."""
         scenario = next(s for s in Q.SCENARIOS if s.name == "degenerate_variance")
-        result = Q.replicate(scenario, 0)
+        result = Q.replicate(scenario, 0, namespace=Q.TEST_NAMESPACE)
         for (delta, label), (certified, covered, look) in result.items():
             self.assertFalse(certified, (delta, label))
             self.assertIsNone(look)
@@ -435,7 +500,8 @@ class StoppingProcedureIsTheObjectTests(unittest.TestCase):
             tallies = {(d, l): Q.Tally() for d in Q.DELTAS
                        for l, _ in Q.CONFIGS}
             for index in range(20):
-                Q.replicate(scenario, index, tallies)
+                Q.replicate(scenario, index, tallies,
+                            namespace=Q.TEST_NAMESPACE)
             for key, tally in tallies.items():
                 self.assertEqual(tally.achieved, 0, (name, key))
                 self.assertEqual(tally.false_cert, 0, (name, key))
@@ -446,7 +512,7 @@ class StoppingProcedureIsTheObjectTests(unittest.TestCase):
 
     def test_a_certifying_endpoint_reports_the_set_it_actually_returned(self):
         scenario = next(s for s in Q.SCENARIOS if s.name == "regular")
-        result = Q.replicate(scenario, 0)
+        result = Q.replicate(scenario, 0, namespace=Q.TEST_NAMESPACE)
         certified = [(d, l) for (d, l), (c, _, _) in result.items() if c]
         self.assertTrue(certified, "сценарий обязан доходить до сертификата")
         for key in certified:
@@ -457,7 +523,8 @@ class StoppingProcedureIsTheObjectTests(unittest.TestCase):
         """Иначе гейт редакции 4 на филлеровской геометрии ВАКУУМЕН."""
         scenario = next(s for s in Q.SCENARIOS
                         if s.name == "fieller_certifying")
-        stops = [Q.replicate(scenario, i)[(Q.DELTA, Q.CONFIGS[0][0])]
+        stops = [Q.replicate(scenario, i, namespace=Q.TEST_NAMESPACE)
+                 [(Q.DELTA, Q.CONFIGS[0][0])]
                  for i in range(40)]
         self.assertGreater(sum(c for c, _, _ in stops), 30,
                            "сценарий не доходит до сертификата — гейт пуст")
@@ -511,7 +578,7 @@ class FourEndpointOrchestrationTests(unittest.TestCase):
                 self.assertEqual(value, 0, (truth, picker))
 
     def test_all_four_endpoints_run_the_real_nested_procedure(self):
-        result = Q.replicate_cell(0)
+        result = Q.replicate_cell(0, namespace=Q.TEST_NAMESPACE)
         key = (Q.DELTA, Q.CONFIGS[0][0])
         self.assertIn(key, result)
         verdict, ok, _ = result[key]
@@ -520,6 +587,7 @@ class FourEndpointOrchestrationTests(unittest.TestCase):
             self.assertIsInstance(ok, bool)
 
     def test_the_cell_scenario_is_not_vacuous(self):
-        got = [Q.replicate_cell(i)[(Q.DELTA, Q.CONFIGS[0][0])][0]
+        got = [Q.replicate_cell(i, namespace=Q.TEST_NAMESPACE)
+               [(Q.DELTA, Q.CONFIGS[0][0])][0]
                for i in range(30)]
         self.assertGreater(sum(got), 20, "ячейка не доходит до вердикта")

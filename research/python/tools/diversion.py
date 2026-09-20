@@ -268,6 +268,17 @@ DIVERSIONS = (
      "            tally.false_cert += certified and not covered",
      "            tally.false_cert += not covered",
      ["tests.test_s5b_qualify"]),
+    ("гейтящий поток seed'ов возвращён тестам", "tools/s5b_qualify.py",
+     'QUALIFICATION_NAMESPACE = "r4-qualification"',
+     'QUALIFICATION_NAMESPACE = "r4-test"',
+     ["tests.test_s5b_qualify"]),
+    ("namespace снова получил умолчание", "tools/s5b_qualify.py",
+     "def replicate(scenario: Scenario, index: int, tallies=None, *,\n"
+     "              namespace: str, ladder=PR.LOOKS, deltas=DELTAS,",
+     "def replicate(scenario: Scenario, index: int, tallies=None, *,\n"
+     "              namespace: str = QUALIFICATION_NAMESPACE,\n"
+     "              ladder=PR.LOOKS, deltas=DELTAS,",
+     ["tests.test_s5b_qualify"]),
     ("филлер, доходящий до сертификата, обезврежен", "tools/s5b_qualify.py",
      "FIELLER_CERTIFYING_CATALOGUE = ((Piece(10_000.0, 12_000_499.5),),\n"
      "                                (Piece(1.0, 1_199.5),))",

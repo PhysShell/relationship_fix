@@ -1591,16 +1591,32 @@ class RevisionFourDeclarationTests(unittest.TestCase):
         self.assertIn("DEFERRED", flat)
         self.assertAlmostEqual(Q.Z_DECLARED, PR.Z_PER_COMPARISON)
 
-    def test_the_floor_and_R_are_derived_and_the_derivation_is_shown(self):
+    def test_the_floor_is_called_a_convention_not_a_theorem(self):
+        """«Пол выведен» было бы неправдой: prereg его не влечёт."""
         from tools import s5b_qualify as Q
         flat = self._flat()
-        self.assertIn("Пол выведен, а не выбран", flat)
+        self.assertIn("ПРИНЯТАЯ КОНВЕНЦИЯ ПЕРЕНОСА, а не следствие", flat)
+        self.assertIn("Из prereg он не выводится", flat)
+        self.assertIn("сохранить АБСОЛЮТНЫЙ отступ `0.02`", flat)
+        self.assertNotIn("Пол выведен, а не выбран", flat)
+        self.assertAlmostEqual(Q.FLOOR_RATIO, 1.4)
+
+    def test_discriminative_power_is_secondary_not_the_basis(self):
+        """Проходной балл не назначается под конкретного двоечника."""
+        flat = self._flat()
+        self.assertIn("ВТОРИЧНО и основанием выбора НЕ является", flat)
+        self.assertIn("не дизайн эксперимента", flat)
+
+    def test_the_R_derivation_is_shown(self):
+        from tools import s5b_qualify as Q
+        flat = self._flat()
         self.assertIn("Пол не понижался. Поднято `R` до 24000", flat)
         self.assertAlmostEqual(Q.FALSE_CERT_FLOOR, 0.9825)
         self.assertEqual(Q.REPLICATES, 24_000)
 
     def test_the_literal_floor_would_have_disarmed_the_control_is_stated(self):
-        self.assertIn("отрицательный контроль потерял бы зубы", self._flat())
+        self.assertIn("отрицательный контроль стал бы декоративным",
+                      self._flat())
 
     def test_the_suite_keeps_fieller_and_adds_the_two_declared_scenarios(self):
         from tools import s5b_qualify as Q
@@ -1627,7 +1643,40 @@ class RevisionFourDeclarationTests(unittest.TestCase):
         flat = self._flat()
         self.assertIn("Я уже видел вторичные числа редакции 3", flat)
         self.assertIn("Допуск эквивалентности быстрого пути поднят", flat)
-        self.assertIn("Пространство seed'ов прогона — `r4`", flat)
+        self.assertIn("Пространства seed'ов РАЗДЕЛЕНЫ на три", flat)
+
+    def test_safety_and_utility_must_be_stated_together(self):
+        """p_false_cert = 0 у вечного INSUFFICIENT — не хороший метод."""
+        flat = self._flat()
+        #: проверяется УПОТРЕБЛЕНИЕ формулировки, а не наличие слова:
+        #: «процедура валидирована» в документе стоит внутри отрицания, и
+        #: assertNotIn на него был бы тем же капканом четвёртый раз
+        self.assertIn("safety gate passed on a suite containing predeclared "
+                      "non-vacuous scenarios", flat)
+        self.assertIn("а не «процедура валидирована»", flat)
+        self.assertIn("не означает хороший метод", flat)
+        self.assertIn("safety P(сертифицировал И промахнулся)", flat)
+        self.assertIn("utility P(сертифицировал вообще)", flat)
+
+    def test_the_contaminated_run_is_recorded_as_withdrawn(self):
+        flat = self._flat()
+        self.assertIn("## 9. ПРОГОН ОТОЗВАН: `ABORTED_SEED_CONTAMINATION`", flat)
+        self.assertIn("Вердиктов он не содержит ни одного", flat)
+        self.assertIn("Смещение на 40 индексов отвергнуто", flat)
+        self.assertIn("проектировались против этих реплик", flat)
+
+    def test_the_third_instance_of_the_same_test_defect_is_recorded(self):
+        """Отсутствие ИМЕНИ и отсутствие ДЕЙСТВИЯ — разные требования."""
+        flat = self._flat()
+        self.assertIn("отсутствие ИМЕНИ и отсутствие ДЕЙСТВИЯ — разные", flat)
+        self.assertIn("третий случай одного класса", flat)
+
+    def test_the_namespaces_are_separated_structurally(self):
+        from tools import s5b_qualify as Q
+        flat = self._flat()
+        self.assertIn("`namespace` — обязательный именованный параметр", flat)
+        self.assertEqual(Q.QUALIFICATION_NAMESPACE, "r4-qualification")
+        self.assertNotEqual(Q.TEST_NAMESPACE, Q.QUALIFICATION_NAMESPACE)
 
     def test_the_forbidden_result_wordings_are_named_in_advance(self):
         flat = self._flat()
