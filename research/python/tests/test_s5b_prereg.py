@@ -1232,7 +1232,10 @@ class Stage1RunnerTests(unittest.TestCase):
         note = root / "docs/research/s5b-mcse-specification-gap.md"
         self.assertTrue(note.exists())
         text = note.read_text()
-        self.assertIn("ПРЕДЛАГАЕМЫЙ АМЕНДМЕНТ", text)
+        #: заголовок сменился, когда редакция 4 прошла гейт;
+        #: проверяется, что амендмент по-прежнему ОТДЕЛЬНЫЙ
+        #: документ рядом с prereg, а не правка внутри него
+        self.assertIn("АМЕНДМЕНТ (post-freeze, редакция 4)", text)
         self.assertIn("NOT_EVALUATED_MC_PRECISION", text)
         self.assertIn("MC_PRECISION_PREDICTED_INSUFFICIENT", text)
 
@@ -1487,12 +1490,17 @@ class PrecisionQualificationResultTests(unittest.TestCase):
         self.assertIn("0.9036", note)          # нижняя граница провала
         self.assertIn("0.9150", note)          # точечная оценка провала
 
-    def test_the_amendment_did_not_become_active(self):
+    def test_the_revision_three_verdict_stayed_a_refusal(self):
+        """§7.5 — ИСТОРИЧЕСКИЙ вердикт редакции 3, и он не переписан.
+
+        Амендмент стал active по редакции 4 (§10.5); отказ редакции 3
+        остаётся в документе как был. Проект ошибки не стирает.
+        """
         flat = self._flat()
         self.assertIn("Амендмент остаётся ПРЕДЛОЖЕНИЕМ", flat)
         self.assertIn("Шардинг не начинается", flat)
         self.assertIn("Реализация Stage 1 escalation не начинается", flat)
-        self.assertIn("ПРЕДЛАГАЕМЫЙ амендмент", flat)
+        self.assertIn("СУИТА НЕ ПРОЙДЕНА", flat)
 
     def test_the_multiplicity_claim_is_about_the_suite_not_about_necessity(self):
         """Не «Бонферрони необходим», а «без поправки суиту не прошли».
@@ -1685,4 +1693,79 @@ class RevisionFourDeclarationTests(unittest.TestCase):
         for forbidden in ("proved\noptional-stopping validity",
                           "confidence sequence", "always-valid"):
             self.assertIn(forbidden.replace("\n", " "), flat, forbidden)
+
+
+class RevisionFourResultTests(unittest.TestCase):
+    """Результат редакции 4. Гейт пройден, и находка вынесена наверх."""
+
+    def _flat(self):
+        root = pathlib.Path(__file__).resolve().parents[3]
+        note = (root / "docs/research/s5b-mcse-specification-gap.md").read_text()
+        return " ".join(note.replace(">", " ").split())
+
+    def test_the_result_uses_only_the_predeclared_wording(self):
+        flat = self._flat()
+        self.assertIn("Revision-4 stopped procedure passed the predeclared "
+                      "qualification gate", flat)
+        self.assertIn("safety gate passed on a suite containing predeclared "
+                      "non-vacuous scenarios", flat)
+        self.assertIn("Не «процедура валидирована»", flat)
+
+    def test_the_forbidden_claims_are_absent_as_claims(self):
+        """Запрещённые формулировки могут УПОМИНАТЬСЯ в запрете, но не
+        утверждаться. Проверяется контекст, а не наличие строки — пятый
+        раз этот капкан я себе не ставлю."""
+        note = (pathlib.Path(__file__).resolve().parents[3]
+                / "docs/research/s5b-mcse-specification-gap.md").read_text()
+        for phrase in ("confidence sequence", "always-valid"):
+            for paragraph in note.split("\n\n"):
+                if phrase in paragraph:
+                    self.assertTrue("Ни «" in paragraph or "ни «" in paragraph
+                                    or "НЕ является" in paragraph,
+                                    f"{phrase} употреблено как утверждение")
+
+    def test_the_crux_number_is_recorded(self):
+        """1746 промахов на фиксированном просмотре, НЕ ставших сертификатом."""
+        flat = self._flat()
+        self.assertIn("1746/24000", flat)
+        self.assertIn("22341", flat)
+        self.assertIn("142/24000 = 0.0059", flat)
+
+    def test_the_near_vacuous_finding_is_surfaced_not_buried(self):
+        """Строка, где каждый сертификат ложный, а гейт её принял."""
+        flat = self._flat()
+        self.assertIn("Находка: околовакуумная строка, где гейт слеп", flat)
+        self.assertIn("Каждый выданный сертификат оказался ложным", flat)
+        self.assertIn("усл. покрытие 0.0000", flat)
+        self.assertIn("DEFERRED, не сейчас", flat)
+
+    def test_the_declared_immunity_was_confirmed_literally(self):
+        flat = self._flat()
+        self.assertIn("Предсказание исполнено буквально", flat)
+        self.assertIn("`0/24000` при всех девяти комбинациях", flat)
+
+    def test_vacuous_statements_are_counted_and_named(self):
+        flat = self._flat()
+        self.assertIn("Девять утверждений из 33 вакуумны", flat)
+        self.assertIn("Это не свидетельство качества", flat)
+
+    def test_what_is_not_established_is_stated_again(self):
+        flat = self._flat()
+        self.assertIn("Номинальная граница `0.0125` не проверена на "
+                      "достижимость", flat)
+        self.assertIn("Ничего не доказано про произвольный момент остановки",
+                      flat)
+        self.assertIn("проверен ОДНИМ сценарием", flat)
+
+    def test_the_amendment_is_now_active_and_says_it_is_reversible(self):
+        flat = self._flat()
+        self.assertIn("ACTIVE post-freeze amendment", flat)
+        self.assertIn("Перевод обратим одной строкой", flat)
+        self.assertNotIn("Статус: заметка + ПРЕДЛАГАЕМЫЙ амендмент", flat)
+
+    def test_the_run_artifact_is_pinned(self):
+        flat = self._flat()
+        self.assertIn("516c36ba8f0b8134", flat)
+        root = pathlib.Path(__file__).resolve().parents[3]
+        self.assertTrue((root / "research/python/tools/s5b_qualify.py").exists())
 
