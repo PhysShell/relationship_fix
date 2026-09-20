@@ -1281,12 +1281,39 @@ class PrecisionRadiusTests(unittest.TestCase):
             self.assertEqual(PR.is_precise(PR.radius(wald, point), delta),
                              se <= target, se)
 
-    def test_three_looks_are_bonferroni_protected(self):
-        """Последовательная остановка не наследует покрытие одного просмотра."""
+    def test_the_multiplicity_counts_endpoints_as_well_as_looks(self):
+        """Сертификат ЯЧЕЙКИ — 4 конца x 3 просмотра, а не 3 просмотра.
+
+        Первая редакция делила уровень только по просмотрам и молча
+        считала, что четыре конца ячейки — одно утверждение.
+        """
         from simulation import s5b_precision as PR
-        self.assertAlmostEqual(PR.ALPHA_PER_LOOK, (1 - prereg.CONFIDENCE_LEVEL) / 3)
-        self.assertGreater(PR.Z_PER_LOOK, 2.3)
-        self.assertLess(PR.Z_PER_LOOK, 2.5)
+        self.assertEqual(PR.ENDPOINTS_PER_CELL, 4)
+        self.assertEqual(len(PR.LOOKS), 3)
+        self.assertEqual(PR.COMPARISONS, 12)
+        self.assertAlmostEqual(PR.ALPHA_PER_COMPARISON,
+                               (1 - prereg.CONFIDENCE_LEVEL) / 12)
+        self.assertGreater(PR.Z_PER_COMPARISON, 2.86)
+        self.assertLess(PR.Z_PER_COMPARISON, 2.87)
+
+    def test_the_first_edition_name_cannot_carry_the_first_edition_value(self):
+        """`Z_PER_LOOK` оставлено как имя, но указывает на ТЕКУЩЕЕ значение."""
+        from simulation import s5b_precision as PR
+        self.assertEqual(PR.Z_PER_LOOK, PR.Z_PER_COMPARISON)
+        self.assertFalse(hasattr(PR, "ALPHA_PER_LOOK"),
+                         "имя с прежней арифметикой обязано исчезнуть")
+
+    def test_the_threshold_itself_does_not_move_with_z(self):
+        """r <= z·target  <=>  SE <= target в вальдовом случае при ЛЮБОМ z."""
+        from simulation import s5b_precision as PR
+        delta, point = 36.0, 1200.0
+        limit = PR.target(delta)
+        for z in (1.96, 2.394, PR.Z_PER_COMPARISON, 4.0):
+            for se in (limit * 0.5, limit * 0.999, limit * 1.001, limit * 2):
+                wald = [(point - z * se, point + z * se)]
+                self.assertEqual(
+                    PR.is_precise(PR.radius(wald, point), delta, z=z),
+                    se <= limit, (z, se))
 
     def test_an_empty_set_is_infinitely_imprecise(self):
         from simulation import s5b_precision as PR
@@ -1345,39 +1372,81 @@ class PrecisionRadiusTests(unittest.TestCase):
             paragraph = next(part for part in raw.split("\n\n") if claim in part)
             self.assertIn(marker, paragraph, (claim, marker))
 
+class PrecisionQualificationDeclarationTests(unittest.TestCase):
+    """Амендмент вступает в силу только после квалификации (B-7).
 
-class PrecisionQualificationTests(unittest.TestCase):
-    """Амендмент вступает в силу только после квалификации (B-7)."""
+    Здесь проверяется ОБЪЯВЛЕНИЕ, а не результат: набор, пороги и лестница
+    записаны раньше, чем получены числа. Порядок коммитов — часть
+    доказательства, что суита не подгонялась под исход.
+    """
 
     def _note(self):
         root = pathlib.Path(__file__).resolve().parents[3]
         return (root / "docs/research/s5b-mcse-specification-gap.md").read_text()
 
-    def test_the_qualification_is_recorded_with_its_negative_controls(self):
+    def test_the_declaration_says_it_precedes_the_numbers(self):
         note = self._note()
-        self.assertIn("Квалификация процедуры — выполнена", note)
-        self.assertIn("0.9363", note)          # худший сценарий
-        self.assertIn("0.0550", note)          # отрицательный контроль
-        self.assertIn("БЕЗ поправки", note)
+        self.assertIn("## 6. Квалификация: ЧТО ОБЪЯВЛЕНО ДО ПРОГОНА", note)
+        self.assertIn("до того, как получены числа", note)
 
-    def test_the_bonferroni_correction_is_shown_to_be_necessary(self):
-        """Без неё покрытие падает на 8-10 пунктов во всех сценариях."""
+    def test_the_ladder_declared_is_the_production_one(self):
+        """Масштабированная лестница квалифицирует не ту процедуру."""
         note = self._note()
-        for without in ("0.8675", "0.8800", "0.8550"):
-            self.assertIn(without, note, without)
+        self.assertIn("ПРОИЗВОДСТВЕННАЯ", note)
+        self.assertIn("`4000 → 16000 → 64000`", note)
+        self.assertNotIn("400 → 1600 → 6400", note)
 
-    def test_the_acceptance_rule_was_not_tuned_after_seeing_numbers(self):
+    def test_the_declared_suite_matches_the_executable_one(self):
+        """Таблица в документе и код обязаны называть ОДНИ И ТЕ ЖЕ сценарии."""
+        from tools import s5b_qualify as Q
         note = self._note()
-        self.assertIn("уже существующему", note)
-        self.assertIn("не тронутому после того, как", note)
+        for scenario in Q.SCENARIOS:
+            self.assertIn(f"`{scenario.name}`", note, scenario.name)
+        self.assertEqual(len(Q.SCENARIOS), 9)
+        flat = " ".join(note.replace(">", " ").split())
+        for required in ("Филлер-golden с несвязным множеством",
+                         "излом в корне", "граничный корень `λ0 = 0`",
+                         "вырожденная дисперсия", "тяжёлым `N = 0`",
+                         "малое `M`", "намеренно заниженное множество"):
+            self.assertIn(required, flat, required)
+
+    def test_the_acceptance_rule_is_the_existing_one_not_a_new_one(self):
+        from tools import s5b_qualify as Q
+        self.assertIn("уже существующий", self._note())
         self.assertEqual(prereg.COVERAGE_ACCEPTANCE_FLOOR, 0.93)
+        self.assertEqual(Q.REPLICATES, prereg.COVERAGE_REPLICATES)
+        self.assertEqual(Q.DELTA, min(prereg.DELTA_FRACTIONS_OF_HORIZON) * 3600.0)
 
-    def test_what_is_not_established_is_stated(self):
-        """Номинал 0.95 доказан только в одном сценарии из трёх."""
-        note = self._note()
-        self.assertIn("Чего НЕ установлено", note)
-        self.assertIn("`≥ 0.93`, и не больше", note)
+    def test_the_family_correction_is_not_borrowed_from_a_smaller_family(self):
+        from tools import s5b_qualify as Q
+        self.assertGreater(Q.SUITE_Z, prereg.COVERAGE_Z)
+        self.assertIn("одалживать поправку на меньшее семейство",
+                      " ".join(self._note().split()))
 
-    def test_both_branches_of_the_ladder_were_exercised(self):
-        note = self._note()
-        self.assertIn("Обе ветви исполнены", note)
+    def test_the_secondary_quantity_is_declared_as_not_gating(self):
+        """Покрытие на остановке названо заранее и заранее объявлено вторичным."""
+        flat = " ".join(self._note().split())
+        self.assertIn("как вторичное и не гейтящее число", flat)
+        self.assertIn("Гейт стоит НЕ на нём", flat)
+
+    def test_the_declared_immunity_of_two_scenarios_is_argued_in_advance(self):
+        from tools import s5b_qualify as Q
+        self.assertIn("уронить **не может**", " ".join(self._note().split()))
+        immune = {s.name for s in Q.SCENARIOS if not s.narrow_control_must_fail}
+        self.assertEqual(immune, {"boundary_zero", "degenerate_variance"})
+
+    def test_the_fast_path_substitution_is_disclosed_not_silent(self):
+        flat = " ".join(self._note().split())
+        self.assertIn("не дублируется", flat)
+        self.assertIn("РАБОЧИХ `M` (4000, 16000, 64000)", flat)
+
+    def test_the_pilot_peek_is_disclosed(self):
+        """Подсматривание было; оно записано, а не забыто."""
+        self.assertIn("был сделан до объявления** и здесь раскрыт",
+                      " ".join(self._note().split()))
+
+    def test_the_harness_is_versioned_code_not_a_run_artifact(self):
+        """ADR-0003 §6: гейтящие числа — только из версионированных скриптов."""
+        root = pathlib.Path(__file__).resolve().parents[3]
+        self.assertTrue((root / "research/python/tools/s5b_qualify.py").exists())
+        self.assertIn("ADR-0003 §6", self._note())
