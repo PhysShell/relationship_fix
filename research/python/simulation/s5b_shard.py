@@ -208,9 +208,11 @@ def store_for_look(arm: str, parts, *, look: int, expected) -> dict:
     return merge(arm, parts, look=look, expected=expected)
 
 
-def run_unit(unit: Unit, *, rate: float, shift: float, ratio: float,
-             c_rate: float, c_shift: float) -> dict:
-    """Исполнение одного задания. Ничего, кроме своего диапазона."""
-    return E.accumulate(unit.arm, unit.start, unit.stop, rate=rate,
-                        shift=shift, ratio=ratio, c_rate=c_rate,
-                        c_shift=c_shift)
+def run_unit(unit: Unit, **arm) -> dict:
+    """Исполнение одного задания. Ничего, кроме своего диапазона.
+
+    Параметры руки прокидываются как есть, включая `regime`/`magnitude`:
+    розыгрыш эффекта идёт из потока, зависящего только от `(tag, i)`, а не
+    от того, какому шарду достался диапазон.
+    """
+    return E.accumulate(unit.arm, unit.start, unit.stop, **arm)

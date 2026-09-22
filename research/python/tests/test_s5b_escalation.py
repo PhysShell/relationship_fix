@@ -141,13 +141,209 @@ class PrecisionLayerTests(unittest.TestCase):
         self.assertIn(300.0, horizons)
 
 
-class TheControlArmGapIsRecordedTests(unittest.TestCase):
-    """Какая рука есть `K`, prereg не говорит. Это записано, а не решено."""
+class TheGoldenCanonisedTheComputationNotTheSemanticsTests(unittest.TestCase):
+    """Золотой дайджест доказывает «то же, что раньше», и не более.
 
-    def test_the_pairing_is_flagged_as_unspecified(self):
-        self.assertIn("не определяет", E.CONTROL_ARM_IS_UNSPECIFIED)
-        self.assertIn("R0", E.CONTROL_ARM_READING)
+    Область действия оракула — ВЫЧИСЛЕНИЕ. Прав ли старый runner в смысле
+    режимов, он не говорит вовсе, и R4 это показал.
+    """
 
-    def test_no_cell_contrast_is_computed_on_an_assumed_pairing(self):
-        self.assertFalse(hasattr(E, "cell_contrast"),
-                         "контраст нельзя считать по угаданной паре")
+    def test_the_regime_path_reproduces_the_golden_for_R3(self):
+        """Золотой снят при (0.40, 0.75), то есть это R3 при m = 1."""
+        store = E.accumulate(GOLDEN_SEED, 0, GOLDEN_PERIODS, rate=6.0,
+                             c_rate=1.10, c_shift=-0.10,
+                             regime="R3", magnitude=1.0)
+        self.assertEqual(_digest(S.encode(E.roots_from(store))), GOLDEN_DIGEST)
+
+    def test_the_legacy_effect_is_marked_wrong_rather_than_quietly_fixed(self):
+        self.assertTrue(S.LEGACY_EFFECT_IS_WRONG_FOR_R4)
+        self.assertEqual(S.effect("R4", 1.0), (0.2, 0.87),
+                         "оракул обязан остаться записью того, ЧТО БЫЛО")
+        self.assertIn("не трогается", E.R4_SEMANTICS_MISMATCH)
+
+
+class RegimeSemanticsComeFromTheFrozenSourceTests(unittest.TestCase):
+    """Числа не переписываются руками — именно это и породило расхождение."""
+
+    def test_R0_to_R3_agree_with_the_legacy_effect_exactly(self):
+        for regime in ("R0", "R1", "R2", "R3"):
+            for magnitude in (0.5, 1.0, 2.0):
+                got = E.regime_effect("tag", 0, regime, magnitude)
+                want = S.effect(regime, magnitude)
+                self.assertAlmostEqual(got[0], want[0], places=12,
+                                       msg=(regime, magnitude))
+                self.assertAlmostEqual(got[1], want[1], places=12,
+                                       msg=(regime, magnitude))
+
+    def test_R4_deliberately_disagrees_with_the_legacy_effect(self):
+        legacy = S.effect("R4", 1.0)
+        drawn = {E.regime_effect("tag", i, "R4", 1.0) for i in range(50)}
+        self.assertNotIn(legacy, drawn)
+        self.assertEqual({r for _, r in drawn}, {1.0},
+                         "у R4 нет канала incidence вовсе")
+
+    def test_R4_is_a_fair_coin_over_periods(self):
+        from simulation.experiment import LATENCY_SHIFT
+        draws = [E.regime_effect("tag", i, "R4", 1.0)[0] for i in range(4_000)]
+        self.assertEqual(set(draws), {2 * LATENCY_SHIFT, 0.0})
+        treated = sum(x > 0 for x in draws) / len(draws)
+        self.assertGreater(treated, 0.46, treated)
+        self.assertLess(treated, 0.54, treated)
+
+    def test_R4_keeps_the_declared_mean_itt(self):
+        from simulation.experiment import LATENCY_SHIFT
+        for magnitude in (0.5, 1.0, 2.0):
+            draws = [E.regime_effect("tag", i, "R4", magnitude)[0]
+                     for i in range(4_000)]
+            mean = sum(draws) / len(draws)
+            self.assertAlmostEqual(mean, magnitude * LATENCY_SHIFT, delta=0.03,
+                                   msg=magnitude)
+
+    def test_the_multiplier_applies_before_the_split(self):
+        """`2·(m·L) = m·(2·L)`: буквальное чтение prereg и реализация сходятся.
+
+        Проверяется, а не объявляется — именно на этом месте prereg и
+        настаивает, что структура гетерогенности обязана сохраниться.
+        """
+        from simulation.experiment import LATENCY_SHIFT
+        for magnitude in (0.5, 1.0, 2.0):
+            for index in range(40):
+                got = E.regime_effect("tag", index, "R4", magnitude)[0]
+                literal = (2 * (magnitude * LATENCY_SHIFT)
+                           if got > 0 else 0.0)
+                self.assertAlmostEqual(got, literal, places=12)
+
+
+class TheEffectDrawIsItsOwnSubstreamTests(unittest.TestCase):
+    """Тип периода — функция только (tag, i). Ни шарда, ни порядка."""
+
+    def test_the_draw_does_not_touch_the_message_stream(self):
+        import random as _random
+        message = _random.Random(f"tag:{7}").random()
+        effect = _random.Random(f"tag:{E.EFFECT_SUBSTREAM}:{7}").random()
+        self.assertNotEqual(message, effect)
+
+    def test_the_period_type_is_the_same_whatever_the_chunk(self):
+        whole = [E.regime_effect("tag", i, "R4", 1.0) for i in range(60)]
+        pieces = ([E.regime_effect("tag", i, "R4", 1.0) for i in range(17)]
+                  + [E.regime_effect("tag", i, "R4", 1.0) for i in range(17, 60)])
+        self.assertEqual(whole, pieces)
+
+    def test_two_arms_do_not_share_the_heterogeneity_pattern(self):
+        left = [E.regime_effect("a", i, "R4", 1.0) for i in range(60)]
+        right = [E.regime_effect("b", i, "R4", 1.0) for i in range(60)]
+        self.assertNotEqual(left, right)
+
+    def test_the_store_built_from_chunks_matches_for_R4_too(self):
+        kw = dict(rate=6.0, c_rate=1.10, c_shift=-0.10,
+                  regime="R4", magnitude=1.0)
+        whole = E.accumulate(GOLDEN_SEED, 0, 24, **kw)
+        split = E.accumulate(GOLDEN_SEED, 0, 9, **kw)
+        split = E.accumulate(GOLDEN_SEED, 9, 24, store=split, **kw)
+        self.assertEqual(whole, split)
+
+    def test_the_draw_is_pinned_to_its_own_substream(self):
+        """Не упоминание имени потока, а ТОЖДЕСТВО с ним.
+
+        Слить поток эффекта с потоком сообщений значит скоррелировать, кто
+        пролечен, с тем, какая диада выпала. Детерминизм при этом
+        сохранится, поэтому поймать подмену можно только равенством.
+        """
+        import random as _random
+        from simulation.experiment import LATENCY_SHIFT
+        for index in range(30):
+            stream = _random.Random(f"{GOLDEN_SEED}:{E.EFFECT_SUBSTREAM}:{index}")
+            want = 2 * LATENCY_SHIFT if stream.random() < 0.5 else 0.0
+            got = E.regime_effect(GOLDEN_SEED, index, "R4", 1.0)[0]
+            self.assertEqual(got, want, index)
+
+    def test_R4_is_drawn_PER_PERIOD_not_once_for_the_arm(self):
+        """Розыгрыш, поднятый из цикла, дал бы однородную руку.
+
+        Тогда склад совпал бы с одним из двух постоянных вариантов, и
+        гетерогенность исчезла бы, не оставив следа в числах.
+        """
+        from simulation.experiment import LATENCY_SHIFT
+        kw = dict(rate=6.0, c_rate=1.10, c_shift=-0.10)
+        mixed = E.accumulate(GOLDEN_SEED, 0, 30, regime="R4",
+                             magnitude=1.0, **kw)
+        for constant in (2 * LATENCY_SHIFT, 0.0):
+            homogeneous = E.accumulate(GOLDEN_SEED, 0, 30, shift=constant,
+                                       ratio=1.0, **kw)
+            self.assertNotEqual(mixed, homogeneous, constant)
+
+    def test_R4_really_moves_the_endpoints(self):
+        """Иначе «исправили» означало бы «ничего не поменяли»."""
+        kw = dict(rate=6.0, c_rate=1.10, c_shift=-0.10)
+        fixed = E.roots_from(E.accumulate(GOLDEN_SEED, 0, 40,
+                                          regime="R4", magnitude=1.0, **kw))
+        legacy_shift, legacy_ratio = S.effect("R4", 1.0)
+        legacy = E.roots_from(E.accumulate(GOLDEN_SEED, 0, 40,
+                                           shift=legacy_shift,
+                                           ratio=legacy_ratio, **kw))
+        self.assertNotEqual(fixed, legacy)
+
+
+class TheControlArmMappingTests(unittest.TestCase):
+    """K = R0 той же (rate, C). Перескочить координаты нельзя."""
+
+    def test_only_the_regime_changes(self):
+        got = E.control_arm_for(24.0, 1.25, "R2", 2.0)
+        self.assertEqual(got, (24.0, 1.25, "R0", 1.0))
+
+    def test_R0_maps_to_itself(self):
+        self.assertEqual(E.control_arm_for(6.0, 1.10, "R0", 1.0),
+                         (6.0, 1.10, "R0", 1.0))
+
+    def test_the_rate_and_the_reactivity_point_are_carried_over(self):
+        from simulation import s5b_prereg as P
+        for rate in P.OPPORTUNITY_RATE_GRID:
+            for c_rate, _ in P.C_REACTIVITY_POINTS:
+                arm_rate, arm_c, regime, magnitude = E.control_arm_for(
+                    rate, c_rate, "R4", 0.5)
+                self.assertEqual((arm_rate, arm_c), (rate, c_rate))
+                self.assertEqual((regime, magnitude), ("R0", 1.0))
+
+    def test_the_completion_is_marked_as_post_freeze(self):
+        self.assertTrue(E.CONTROL_ARM_WAS_UNSPECIFIED_IN_BASELINE)
+        self.assertIn("T = (rate, C, Ri, magnitude)", E.CONTROL_ARM_MAPPING)
+        self.assertIn("R0", E.CONTROL_ARM_MAPPING)
+
+    def test_a_contrast_is_still_not_computed_here(self):
+        """Отображение есть; контраст — следующий шаг, не этот."""
+        self.assertFalse(hasattr(E, "cell_contrast"))
+
+
+class BothFindingsAreRecordedTests(unittest.TestCase):
+    """Находки записаны в документ, а не только в код."""
+
+    def _note(self):
+        import pathlib as _p
+        root = _p.Path(__file__).resolve().parents[3]
+        return (root / "docs/research/s5b-r4-semantics-and-control-arm.md"
+                ).read_text()
+
+    def test_the_r4_mismatch_is_written_down_with_both_defects(self):
+        note = " ".join(self._note().split())
+        self.assertIn("R4_SEMANTICS_MISMATCH", note)
+        self.assertIn("(0.20, 0.87)", note)
+        self.assertIn("Канала incidence у `R4` **нет вовсе**", note)
+        self.assertIn("Исправляется **реализация**, не prereg", note)
+
+    def test_the_scope_of_the_oracle_is_stated(self):
+        """Золотой дайджест доказывает «то же», а не «верно»."""
+        note = " ".join(self._note().split())
+        self.assertIn("область действия оракула — ВЫЧИСЛЕНИЕ, а не семантика",
+                      note)
+        self.assertIn("**не канонизировал** этот баг", note)
+
+    def test_the_control_arm_completion_is_marked_post_freeze(self):
+        note = " ".join(self._note().split())
+        self.assertIn("post-freeze specification completion", note)
+        self.assertIn("не делает вид, что существовала всегда", note)
+        self.assertIn("не обязательно `[0, 0]`", note)
+
+    def test_the_prereg_was_not_touched_by_either(self):
+        note = self._note()
+        self.assertIn("Prereg `2224eb8` не изменён ни одной из них", note)
+

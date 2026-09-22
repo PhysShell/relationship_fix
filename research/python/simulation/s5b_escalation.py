@@ -36,6 +36,7 @@ from coarsening.inversion import Piece, acceptance_set, convex_hull_interval
 from coarsening.paired import Stream
 from simulation import s5b_precision as PR
 from simulation import s5b_prereg as P
+from simulation.experiment import REGIMES
 from simulation.process import DyadParameters, generate_dyad
 
 DAY = 86400.0
@@ -48,16 +49,44 @@ SKIPPED_HORIZONS: tuple[float, ...] = ()
 #: ни в одной ветке, и тест это проверяет разбором исходника.
 PREDICTED_NEVER_DRIVES_CONTROL_FLOW = True
 
-#: ПРОБЕЛ СПЕЦИФИКАЦИИ, НАЙДЕННЫЙ ЗДЕСЬ И НЕ ЗАКРЫТЫЙ ДОГАДКОЙ.
-CONTROL_ARM_IS_UNSPECIFIED = (
-    "prereg объявляет объект гейта измерения как [λ⁻_T − λ⁺_K, λ⁺_T − λ⁻_K], "
-    "но не определяет, какая рука сетки есть K: ни одной строки о паре "
-    "(T, K) в 2224eb8 нет, и восстановленный runner пары не строит")
-CONTROL_ARM_READING = (
-    "естественное чтение: K — рука того же (rate, c_rate) с регимом R0, то "
-    "есть отличающаяся от T ТОЛЬКО эффектом лечения; c-реактивность есть "
-    "свойство популяции и присутствует в обеих. Чтение НЕ принято за "
-    "спецификацию: контраст здесь не считается")
+# ---------------------------------------------------------------------------
+# ЗАВЕРШЕНИЕ СПЕЦИФИКАЦИИ: какая рука есть K (post-freeze, не догадка)
+# ---------------------------------------------------------------------------
+#
+# Baseline определил МАТЕМАТИЧЕСКИЙ ОБЪЕКТ `[λ⁻_T − λ⁺_K, λ⁺_T − λ⁻_K]`, но не
+# отображение «сетка -> руки». Отображение ВОССТАНОВЛЕНО из уже замороженной
+# семантики, а не придумано:
+#
+#   1. `experiment.REGIMES["R0"]` — null: воздействие не меняет ничего;
+#      для любого non-null режима контрольная пара получает `TrueEffect()`,
+#      то есть ровно R0.
+#   2. Контраст prereg записан как Y(C,T) − Y(C,K) при ОБЩЕМ C: c-реактивность
+#      есть свойство популяции и присутствует в обеих руках.
+#   3. В сетке этапа 1 отдельной оси control НЕТ: тринадцать строк — это R0
+#      один раз плюс R1..R4 на три множителя. Единственный объект сетки,
+#      соответствующий K, — R0 той же базовой популяции и той же точки C.
+#
+# Строка НЕ делает вид, что существовала всегда: это post-freeze completion,
+# и оформлено оно отдельно.
+CONTROL_ARM_WAS_UNSPECIFIED_IN_BASELINE = True
+CONTROL_ARM_MAPPING = (
+    "T = (rate, C, Ri, magnitude);  K = (rate, C, R0, 1.0). Совпадают: "
+    "разрешение сбора, H, δ, длина окна, базовая популяция и точка "
+    "c-реактивности. Для строки R0 T и K — одна и та же рука")
+
+
+def control_arm_for(rate: float, c_rate: float, regime: str,
+                    magnitude: float) -> tuple[float, float, str, float]:
+    """Координаты контрольной руки K для данной T. Меняется ТОЛЬКО режим.
+
+    Перескочить между ставками или точками c-реактивности нельзя: это были
+    бы разные популяции, и разность перестала бы быть контрастом лечения.
+    R0 отображается сам в себя — контраст тогда строится из одной пары
+    границ и в общем случае НЕ равен [0, 0], потому что структурная ширина
+    идентификации никуда не девается.
+    """
+    del regime, magnitude                      # K не зависит ни от того, ни от другого
+    return (rate, c_rate, "R0", 1.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +103,59 @@ class Endpoint:
     look: int | None
 
 
+# ---------------------------------------------------------------------------
+# R4: ИСПРАВЛЕНИЕ СЕМАНТИКИ, НЕ ОПТИМИЗАЦИЯ
+# ---------------------------------------------------------------------------
+#
+# `s5b_stage1.effect` возвращает для R4 пару `(0.20, 0.87)`, то есть делает
+# R4 ОБЫЧНОЙ ОДНОРОДНОЙ рукой. Замороженный `experiment.REGIMES["R4"]`
+# говорит иное:
+#
+#     lambda rng: TrueEffect(latency_log_shift=2*LATENCY_SHIFT
+#                            if rng.random() < 0.5 else 0.0)
+#     mean_latency_shift = LATENCY_SHIFT,  heterogeneous = True
+#
+# То есть монетка НА ПАРУ: половина получает `0.8`, половина `0.0`, среднее
+# `0.4`. Канала incidence у R4 НЕТ ВООБЩЕ — приписанный `ratio = 0.87`
+# взялся ниоткуда. Похоже, «половина получает вдвое больше» было прочитано
+# как «в среднем половина от R3»: ошибка и в структуре, и в числах.
+#
+# ПОЧЕМУ ИСПРАВЛЯЕТСЯ РЕАЛИЗАЦИЯ, А НЕ PREREG. Prereg здесь достаточно
+# явен: «для R4 множитель применяется к БАЗОВОМУ эффекту ДО расщепления на
+# половины, чтобы заявленная структура гетерогенности сохранилась». Менять
+# нечего — расходится код.
+#
+# ИСТОЧНИК ИСТИНЫ — САМ `REGIMES`, А НЕ ПЕРЕПИСАННЫЕ ЧИСЛА. Транскрипция
+# констант руками и породила это расхождение один раз; повторять приём,
+# который уже подвёл, было бы странно.
+R4_SEMANTICS_MISMATCH = (
+    "s5b_stage1.effect даёт R4 = (0.20, 0.87) — однородная рука с половинным "
+    "сдвигом и несуществующим каналом incidence. experiment.REGIMES['R4'] "
+    "задаёт гетерогенность 50/50: половина периодов получает 2*LATENCY_SHIFT, "
+    "половина ноль, при среднем LATENCY_SHIFT и ratio = 1.0. Исправляется "
+    "РЕАЛИЗАЦИЯ; prereg не трогается")
+
+#: Поток розыгрыша эффекта ОТДЕЛЁН от потока сообщений. Тип периода обязан
+#: зависеть только от (tag, i) — иначе шард, порядок или размер куска
+#: меняли бы, какая половина пар считается пролеченной, и гетерогенность
+#: стала бы функцией расписания.
+EFFECT_SUBSTREAM = "effect"
+
+
+def regime_effect(tag: str, index: int, regime: str,
+                  magnitude: float) -> tuple[float, float]:
+    """`(сдвиг, отношение)` ДЛЯ ОДНОГО ПЕРИОДА. Для R0-R3 не зависит от `i`.
+
+    Множитель применяется к базовому эффекту; для R4 это тождественно
+    «умножить базу и потом расщепить», потому что `2·(m·L) = m·(2·L)` —
+    и это проверяется тестом, а не объявляется.
+    """
+    stream = random.Random(f"{tag}:{EFFECT_SUBSTREAM}:{index}")
+    base = REGIMES[regime].effect(stream)
+    return (base.latency_log_shift * magnitude,
+            base.opportunity_rate_ratio ** magnitude)
+
+
 def _params(rate: float, shift: float, ratio: float, c_rate: float,
             c_shift: float) -> DyadParameters:
     return DyadParameters(
@@ -82,18 +164,35 @@ def _params(rate: float, shift: float, ratio: float, c_rate: float,
         latency_log_mean=DyadParameters().latency_log_mean + shift + c_shift)
 
 
-def accumulate(tag: str, start: int, stop: int, *, rate: float, shift: float,
-               ratio: float, c_rate: float, c_shift: float,
+def accumulate(tag: str, start: int, stop: int, *, rate: float,
+               c_rate: float, c_shift: float, shift: float | None = None,
+               ratio: float | None = None, regime: str | None = None,
+               magnitude: float = 1.0,
                store: dict | None = None) -> dict[tuple, list]:
     """Периоды `start..stop-1` в общий склад. Дописывает, не пересоздаёт.
+
+    Эффект задаётся ЛИБО парой `(shift, ratio)` — однородная рука, как
+    считал восстановленный runner, — ЛИБО `regime`/`magnitude`, и тогда он
+    разыгрывается ПОКАЗАТЕЛЬНО ПО ПЕРИОДАМ из отдельного потока. Для
+    R0-R3 оба пути дают одно и то же; для R4 — намеренно разное.
 
     Порядок ключей и порядок периодов внутри ключа определяются ТОЛЬКО
     индексом `i`, поэтому склад, собранный по кускам, побитово совпадает со
     складом, собранным целиком.
     """
-    params = _params(rate, shift, ratio, c_rate, c_shift)
+    if (regime is None) == (shift is None):
+        raise ValueError("задать нужно РОВНО одно: regime или (shift, ratio)")
+    if regime is None:
+        def effect_for(_index, shift=shift, ratio=ratio):
+            return shift, ratio
+    else:
+        def effect_for(index, regime=regime, magnitude=magnitude):
+            return regime_effect(tag, index, regime, magnitude)
+
     store = {} if store is None else store
     for index in range(start, stop):
+        period_shift, period_ratio = effect_for(index)
+        params = _params(rate, period_shift, period_ratio, c_rate, c_shift)
         messages = generate_dyad(random.Random(f"{tag}:{index}"), params,
                                  days=P.LONGEST_DURATION_DAYS)
         if not messages:
@@ -171,8 +270,10 @@ def endpoints_from(store: dict[tuple, list], *, look: int,
     return out
 
 
-def run_arm(tag: str, *, rate: float, shift: float, ratio: float,
-            c_rate: float, c_shift: float, ladder=PR.LOOKS,
+def run_arm(tag: str, *, rate: float, c_rate: float, c_shift: float,
+            shift: float | None = None, ratio: float | None = None,
+            regime: str | None = None, magnitude: float = 1.0,
+            ladder=PR.LOOKS,
             z: float = PR.Z_PER_COMPARISON) -> dict[tuple, Endpoint]:
     """Честная лестница. Останавливается, когда ВСЕ концы руки точны.
 
@@ -184,8 +285,8 @@ def run_arm(tag: str, *, rate: float, shift: float, ratio: float,
     drawn = 0
     for size in ladder:
         store = accumulate(tag, drawn, size, rate=rate, shift=shift,
-                           ratio=ratio, c_rate=c_rate, c_shift=c_shift,
-                           store=store)
+                           ratio=ratio, regime=regime, magnitude=magnitude,
+                           c_rate=c_rate, c_shift=c_shift, store=store)
         drawn = size
         current = endpoints_from(store, look=size, z=z)
         for name, endpoint in current.items():

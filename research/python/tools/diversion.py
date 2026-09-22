@@ -328,6 +328,34 @@ DIVERSIONS = (
      '        raw = f"{self.arm}|{self.start}|{self.stop}"',
      '        raw = f"{self.arm}|{self.start}|{self.stop}|{self.weight}"',
      ["tests.test_s5b_shard"]),
+    ("R4 снова однороден по legacy-числам", "simulation/s5b_escalation.py",
+     "    base = REGIMES[regime].effect(stream)",
+     "    from simulation.s5b_stage1 import effect as _legacy\n"
+     "    from simulation.process import TrueEffect\n"
+     "    _s, _r = _legacy(regime, 1.0)\n"
+     "    base = TrueEffect(latency_log_shift=_s, opportunity_rate_ratio=_r)",
+     ["tests.test_s5b_escalation"]),
+    ("поток эффекта слит с потоком сообщений",
+     "simulation/s5b_escalation.py",
+     '    stream = random.Random(f"{tag}:{EFFECT_SUBSTREAM}:{index}")',
+     '    stream = random.Random(f"{tag}:{index}")',
+     ["tests.test_s5b_escalation"]),
+    ("эффект разыгран один раз на руку", "simulation/s5b_escalation.py",
+     "        period_shift, period_ratio = effect_for(index)",
+     "        period_shift, period_ratio = effect_for(start)",
+     ["tests.test_s5b_escalation"]),
+    ("контрольная рука взята не нулевым режимом",
+     "simulation/s5b_escalation.py",
+     '    return (rate, c_rate, "R0", 1.0)',
+     '    return (rate, c_rate, "R1", 1.0)',
+     ["tests.test_s5b_escalation"]),
+    ("контрольная рука перескочила точку c-реактивности",
+     "simulation/s5b_escalation.py",
+     '    del regime, magnitude                      # K не зависит ни от того, ни от другого\n'
+     '    return (rate, c_rate, "R0", 1.0)',
+     '    del regime, magnitude                      # K не зависит ни от того, ни от другого\n'
+     '    return (rate, 1.00, "R0", 1.0)',
+     ["tests.test_s5b_escalation"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
