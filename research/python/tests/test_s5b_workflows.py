@@ -144,3 +144,51 @@ class TheSmokeJobIsTheWorstCaseTests(unittest.TestCase):
         heavy = arms["r96.0:c1.25:R0:m1.0"]
         self.assertGreater(heavy["effective_rate"], heavy["rate"])
         self.assertAlmostEqual(heavy["effective_rate"], 96.0 * 1.25)
+
+
+@needs_yaml
+class TheSmokeResultIsRecordedTests(unittest.TestCase):
+    """Калибровка взята из прогона на настоящем раннере, а не с машины."""
+
+    def _note(self):
+        return " ".join((ROOT / "docs/research/s5b-smoke-record.md")
+                        .read_text().split())
+
+    def test_the_cost_model_is_calibrated_from_the_smoke_run(self):
+        self.assertAlmostEqual(S.SECONDS_PER_PERIOD_AT_REFERENCE, 0.0238626)
+        self.assertIn("35769710129", S.SECONDS_PER_PERIOD_MEASURED_ON)
+        self.assertGreater(S.SECONDS_PER_PERIOD_AT_REFERENCE,
+                           S.SECONDS_PER_PERIOD_BEFORE_SMOKE,
+                           "замер обязан был УВЕЛИЧИТЬ оценку, а не наоборот")
+
+    def test_the_calibration_matches_the_measured_seconds(self):
+        """Число выведено из замера, а не домножено на коэффициент."""
+        want = 16035.7 / (64_000 * (120.0 / 6.0) * (0.05 + 0.95 * 0.5))
+        self.assertAlmostEqual(S.SECONDS_PER_PERIOD_AT_REFERENCE, want,
+                               places=6)
+
+    def test_the_budget_keeps_real_room_under_the_platform_cap(self):
+        """Запас держит бюджет, а не точность одной точки калибровки."""
+        self.assertLessEqual(16035.7 / 3600, S.GITHUB_JOB_MAX_HOURS)
+        self.assertGreater(16035.7 / 3600, S.SHARD_BUDGET_HOURS,
+                           "проба обязана была пробить бюджет — иначе она "
+                           "ничего не проверила")
+
+    def test_the_recalibrated_plan_still_fits_every_documented_limit(self):
+        from simulation import s5b_precision as PR
+        units = S.plan([(a["tag"], a["effective_rate"])
+                        for a in S.production_arms()])
+        for look in PR.LOOKS:
+            step = [u for u in units if u.look == look]
+            count = S.shards_needed(step)
+            S.check_platform_limits(S.assign(step, count))
+            self.assertLessEqual(count, S.GITHUB_MATRIX_MAX_JOBS, look)
+
+    def test_the_record_states_what_the_single_point_does_not_prove(self):
+        note = self._note()
+        self.assertIn("одна точка", note)
+        self.assertIn("Форма квалифицирована", note)
+        self.assertIn("Бюджет шарда `4.0 ч` пробит фактом", note)
+        self.assertIn("b3d80674ae23c419", note)
+        self.assertIn("поймано ТОЛЬКО прогоном", note)
+
