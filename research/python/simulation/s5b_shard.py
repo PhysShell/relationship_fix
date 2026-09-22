@@ -54,6 +54,53 @@ REFERENCE_RATE = 6.0
 TARGET_UNIT_SECONDS = 600.0
 MIN_UNIT_PERIODS = 250
 
+# ---------------------------------------------------------------------------
+# ПЛАТФОРМЕННЫЕ ПРЕДЕЛЫ — СВЕРЕНЫ С ДОКУМЕНТАЦИЕЙ, А НЕ ВЗЯТЫ ПО ПАМЯТИ
+# ---------------------------------------------------------------------------
+#
+#   «A job matrix can generate a maximum of 256 jobs per workflow run. This
+#    limit applies to both GitHub-hosted and self-hosted runners.»
+#   «GitHub-hosted runners: up to 6 hours per job.»
+#
+# Оба предела меняют КОНСТРУКЦИЮ, а не оформление. При 1365 юнитах третьей
+# ступени «один юнит — одно задание» невозможно в принципе: это в пять раз
+# больше потолка матрицы. Поэтому юниты группируются в шарды, и шард — это
+# задание, а не юнит.
+GITHUB_MATRIX_MAX_JOBS = 256
+GITHUB_JOB_MAX_HOURS = 6.0
+
+#: Бюджет шарда с запасом на checkout, установку и выгрузку артефакта.
+#: Упереться в шестичасовой потолок значит потерять ВСЮ работу задания.
+SHARD_BUDGET_HOURS = 4.0
+
+
+class PlanRefused(Exception):
+    """План нарушает платформенный предел. Лучше отказ, чем потеря работы."""
+
+
+def shards_needed(units) -> int:
+    """Минимум шардов, при котором ни один не упрётся в потолок задания."""
+    total = sum(u.weight for u in units)
+    if total <= 0.0:
+        return 1
+    return max(1, -(-int(total) // int(SHARD_BUDGET_HOURS * 3600)))
+
+
+def check_platform_limits(buckets) -> None:
+    """Отказ, если матрица или длительность задания вне документированных
+    пределов. Проверяется ПЕРЕД запуском, а не по факту отмены."""
+    if len(buckets) > GITHUB_MATRIX_MAX_JOBS:
+        raise PlanRefused(
+            f"{len(buckets)} шардов против потолка матрицы "
+            f"{GITHUB_MATRIX_MAX_JOBS}")
+    for index, bucket in enumerate(buckets):
+        hours = sum(u.weight for u in bucket) / 3600.0
+        if hours > SHARD_BUDGET_HOURS:
+            raise PlanRefused(
+                f"шард {index}: {hours:.2f} ч против бюджета "
+                f"{SHARD_BUDGET_HOURS} ч (потолок задания "
+                f"{GITHUB_JOB_MAX_HOURS} ч)")
+
 
 @dataclass(frozen=True, slots=True)
 class Unit:

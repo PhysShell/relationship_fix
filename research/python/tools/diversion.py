@@ -356,6 +356,13 @@ DIVERSIONS = (
      '    del regime, magnitude                      # K не зависит ни от того, ни от другого\n'
      '    return (rate, 1.00, "R0", 1.0)',
      ["tests.test_s5b_escalation"]),
+    ("контраст берёт внутренние края вместо внешних",
+     "simulation/s5b_escalation.py",
+     "    return (treated_low.low - control_high.high,\n"
+     "            treated_high.high - control_low.low)",
+     "    return (treated_low.high - control_high.low,\n"
+     "            treated_high.low - control_low.high)",
+     ["tests.test_s5b_escalation"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",

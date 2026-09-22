@@ -309,9 +309,10 @@ class TheControlArmMappingTests(unittest.TestCase):
         self.assertIn("T = (rate, C, Ri, magnitude)", E.CONTROL_ARM_MAPPING)
         self.assertIn("R0", E.CONTROL_ARM_MAPPING)
 
-    def test_a_contrast_is_still_not_computed_here(self):
-        """Отображение есть; контраст — следующий шаг, не этот."""
-        self.assertFalse(hasattr(E, "cell_contrast"))
+    def test_the_contrast_consumes_the_mapping(self):
+        """Отображение было условием необходимым; теперь оно и используется."""
+        self.assertTrue(callable(E.cell_contrast))
+        self.assertIn("R0", E.CONTROL_ARM_MAPPING)
 
 
 class BothFindingsAreRecordedTests(unittest.TestCase):
@@ -346,4 +347,95 @@ class BothFindingsAreRecordedTests(unittest.TestCase):
     def test_the_prereg_was_not_touched_by_either(self):
         note = self._note()
         self.assertIn("Prereg `2224eb8` не изменён ни одной из них", note)
+
+
+class CellContrastTests(unittest.TestCase):
+    """`[inf A(λ⁻_T) − sup A(λ⁺_K), sup A(λ⁺_T) − inf A(λ⁻_K)]`."""
+
+    @staticmethod
+    def _end(maximise, low, high, *, look=16_000,
+             status=PR.PrecisionStatus.ACHIEVED):
+        return E.Endpoint(key=(1.0, 28.0, 3600.0, maximise),
+                          delta_fraction=0.01, point=(low + high) / 2,
+                          low=low, high=high, radius=1.0, status=status,
+                          look=look)
+
+    def test_the_arithmetic_takes_the_outer_edges(self):
+        got = E.cell_contrast(self._end(False, 100, 110),
+                              self._end(True, 120, 130),
+                              self._end(False, 90, 95),
+                              self._end(True, 100, 105))
+        self.assertEqual(got, (100 - 105, 130 - 90))
+
+    def test_the_null_row_is_not_a_point_at_zero(self):
+        """T = K даёт осмысленный null-сценарий, а не [0, 0].
+
+        Структурная ширина идентификации никуда не девается, и делать вид,
+        что контраст руки с самой собой обязан быть нулём, значило бы
+        стереть ровно то, что этап 1 и меряет.
+        """
+        low, high = self._end(False, 100, 110), self._end(True, 120, 130)
+        got = E.cell_contrast(low, high, low, high)
+        self.assertEqual(got, (100 - 130, 130 - 100))
+        self.assertNotEqual(got, (0.0, 0.0))
+
+    def test_each_endpoint_stays_at_its_own_tau(self):
+        """T на 16000, K на 64000 — контраст берёт оба как есть."""
+        got = E.cell_contrast(self._end(False, 100, 110, look=16_000),
+                              self._end(True, 120, 130, look=16_000),
+                              self._end(False, 90, 95, look=64_000),
+                              self._end(True, 100, 105, look=64_000))
+        self.assertEqual(got, (-5, 40))
+        self.assertTrue(E.EACH_ENDPOINT_AT_ITS_OWN_TAU)
+
+    def test_an_imprecise_endpoint_refuses_rather_than_returns_a_number(self):
+        """Число без гарантии выглядит ровно как число с гарантией."""
+        with self.assertRaises(ValueError):
+            E.cell_contrast(
+                self._end(False, 100, 110),
+                self._end(True, 120, 130),
+                self._end(False, 90, 95),
+                self._end(True, 100, 105,
+                          status=PR.PrecisionStatus.INSUFFICIENT))
+
+    def test_a_swapped_direction_refuses(self):
+        with self.assertRaises(ValueError):
+            E.cell_contrast(self._end(True, 100, 110),
+                            self._end(True, 120, 130),
+                            self._end(False, 90, 95),
+                            self._end(True, 100, 105))
+
+    def test_the_hull_is_used_so_a_hole_widens_and_never_narrows(self):
+        """Несвязное множество берётся целиком — иначе выбросили бы λ,
+        которые данные не исключают."""
+        from coarsening.inversion import convex_hull_interval
+        components = [(100.0, 104.0), (108.0, 110.0)]
+        low, high = convex_hull_interval(components)
+        self.assertEqual((low, high), (100.0, 110.0))
+        wide = E.cell_contrast(self._end(False, low, high),
+                               self._end(True, 120, 130),
+                               self._end(False, 90, 95),
+                               self._end(True, 100, 105))
+        narrow = E.cell_contrast(self._end(False, 100.0, 104.0),
+                                 self._end(True, 120, 130),
+                                 self._end(False, 90, 95),
+                                 self._end(True, 100, 105))
+        self.assertEqual(wide, narrow,
+                         "нижний конец берёт inf, дырка его не двигает")
+        self.assertLessEqual(wide[0], narrow[0])
+
+    def test_simultaneity_is_cited_not_re_derived(self):
+        """Гарантия на четвёрку уже куплена распределением уровня."""
+        invariant = E.SIMULTANEOUS_COVERAGE_INVARIANT
+        self.assertIn("B-13", invariant)
+        self.assertIn("α/12", invariant)
+        self.assertIn("Независимость не требуется", invariant)
+        from simulation import s5b_precision as _PR
+        self.assertEqual(_PR.COMPARISONS, 12)
+        self.assertAlmostEqual(
+            len(_PR.LOOKS) * _PR.ALPHA_PER_COMPARISON * _PR.ENDPOINTS_PER_CELL,
+            1.0 - _PR.CONFIDENCE_LEVEL)
+
+    def test_the_effect_substream_is_labelled_a_choice_not_a_consequence(self):
+        self.assertTrue(E.EFFECT_SUBSTREAM_IS_A_COMPLETION_CHOICE)
 
