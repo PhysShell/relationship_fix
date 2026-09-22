@@ -18,8 +18,24 @@
 # checkout v7, setup-python v7, upload-artifact v7. Мажоры разошлись.
 name: S5b smoke
 
+# ЗАПУСК ПО ФАЙЛУ-ЗАЯВКЕ, А НЕ ПО КАЖДОМУ КОММИТУ.
+#
+# `workflow_dispatch` здесь бесполезен, и это documented: «This event will
+# only trigger a workflow run if the workflow file exists on the default
+# branch». Файл лежит на рабочей ветке, дефолтная другая.
+#
+# У `push` такого ограничения нет: файл берётся ИЗ ОБНОВЛЁННОГО РЕФА.
+# Поэтому триггер — `push`, но сужен до одного файла-заявки: задание идёт
+# почти шесть часов, и срабатывать на каждую правку соседнего кода оно не
+# должно. Чтобы заказать прогон, меняется `.github/s5b-smoke-request.txt`,
+# и его содержимое объясняет, зачем прогон заказан.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'claude/**'
+    paths:
+      - '.github/s5b-smoke-request.txt'
 
 permissions:
   contents: read
