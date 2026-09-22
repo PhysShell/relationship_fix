@@ -1,8 +1,8 @@
 """Гейты шардинга. Главный: раскладка не имеет права менять результат.
 
-Этот слой вычислительный. Если он хоть где-то меняет ЧТО получается, а не
-КТО считает, он не ускорение, а подлог — поэтому здесь проверяется
-`serial == sharded == reordered`, а не «результаты похожи».
+Ось разреза — КЛЮЧИ. Они разделимы ВЫЧИСЛИТЕЛЬНО: конец ключа считается
+без состояния, выведенного из другого ключа. Статистической независимости
+между ключами нет и не требуется — они считаются по одним и тем же диадам.
 """
 
 from __future__ import annotations
@@ -14,62 +14,27 @@ from simulation import s5b_escalation as E
 from simulation import s5b_precision as PR
 from simulation import s5b_shard as S
 
-ARM = dict(rate=6.0, shift=0.40, ratio=0.75, c_rate=1.10, c_shift=-0.10)
+ARM = dict(rate=6.0, c_rate=1.10, c_shift=-0.10, regime="R3", magnitude=1.0)
 TAG = "golden"
-#: игрушечная лестница: свойства слияния от абсолютных чисел не зависят,
-#: а гонять 64000 периодов в наборе тестов было бы издевательством
-LADDER = (12, 30, 48)
+LADDER = (12, 30)
 
 
 def _units(ladder=LADDER, rate=6.0):
     return S.plan([(TAG, rate)], ladder=ladder)
 
 
-def _run(units):
-    return [(u, S.run_unit(u, **ARM)) for u in units]
-
-
 class TaskIdentityIsScientificOnlyTests(unittest.TestCase):
-    """Имя задания — функция координат, не раскладки."""
 
-    def test_the_id_does_not_move_with_the_number_of_shards(self):
-        units = _units()
-        names = {u.task_id for u in units}
-        for shards in (1, 3, 7, 64):
-            flat = [u for bucket in S.assign(units, shards) for u in bucket]
-            self.assertEqual({u.task_id for u in flat}, names, shards)
-            self.assertEqual(len(flat), len(units), shards)
-
-    def test_the_id_is_stable_across_calls_and_distinct_per_range(self):
-        first, second = _units(), _units()
-        self.assertEqual([u.task_id for u in first],
-                         [u.task_id for u in second])
-        self.assertEqual(len({u.task_id for u in first}), len(first))
-
-    def test_the_id_ignores_everything_computational(self):
-        """Имя — функция ТОЛЬКО (рука, начало, конец).
-
-        Диверсия «имя задания зависит от раскладки» прошла незамеченной:
-        прежние тесты проверяли стабильность имени ВНУТРИ прогона, а не
-        независимость от вычислительного слоя. Подмешать в имя `weight`
-        можно было бесследно — и тогда любая перенастройка модели
-        стоимости переименовала бы все задания разом, то есть убила бы
-        идемпотентность и чекпойнты между прогонами.
-        """
-        base = S.Unit(arm=TAG, start=0, stop=12, look=12, weight=1.0)
-        for other in (S.Unit(arm=TAG, start=0, stop=12, look=12, weight=999.0),
-                      S.Unit(arm=TAG, start=0, stop=12, look=48, weight=0.0),
-                      S.Unit(arm=TAG, start=0, stop=12, look=12, weight=1e-9)):
-            self.assertEqual(base.task_id, other.task_id,
-                             f"имя сдвинулось от {other}")
-        for other in (S.Unit(arm="другая", start=0, stop=12, look=12, weight=1.0),
-                      S.Unit(arm=TAG, start=1, stop=12, look=12, weight=1.0),
-                      S.Unit(arm=TAG, start=0, stop=13, look=12, weight=1.0)):
-            self.assertNotEqual(base.task_id, other.task_id,
-                                f"имя НЕ сдвинулось от {other}")
+    def test_the_id_is_a_function_of_arm_look_and_keys_only(self):
+        base = S.Unit(arm=TAG, look=12, keys=E.KEYS[:4], weight=1.0)
+        same = S.Unit(arm=TAG, look=12, keys=E.KEYS[:4], weight=999.0)
+        self.assertEqual(base.task_id, same.task_id, "вес попал в имя")
+        for other in (S.Unit(arm="иная", look=12, keys=E.KEYS[:4], weight=1.0),
+                      S.Unit(arm=TAG, look=30, keys=E.KEYS[:4], weight=1.0),
+                      S.Unit(arm=TAG, look=12, keys=E.KEYS[:5], weight=1.0)):
+            self.assertNotEqual(base.task_id, other.task_id, other)
 
     def test_the_cost_model_can_be_retuned_without_renaming_anything(self):
-        """Стоимость — оценка для балансировки. Науки в ней нет."""
         before = [u.task_id for u in _units()]
         saved = S.SECONDS_PER_PERIOD_AT_REFERENCE
         try:
@@ -79,131 +44,189 @@ class TaskIdentityIsScientificOnlyTests(unittest.TestCase):
             S.SECONDS_PER_PERIOD_AT_REFERENCE = saved
         self.assertEqual(before, after)
 
-    def test_the_manifest_is_a_function_of_its_input_only(self):
-        self.assertEqual(_units(), _units())
-        self.assertNotEqual(_units(rate=6.0), _units(rate=96.0))
-
-
-class UnitsRespectTheLadderTests(unittest.TestCase):
-    """Юнит НИКОГДА не пересекает ступень лестницы."""
-
-    def test_no_unit_straddles_a_look(self):
-        for unit in _units():
-            for look in LADDER:
-                self.assertFalse(unit.start < look < unit.stop,
-                                 f"{unit} пересекает {look}")
-
-    def test_units_tile_every_step_without_gap_or_overlap(self):
+    def test_the_id_does_not_move_with_the_number_of_shards(self):
         units = _units()
-        previous = 0
-        for look in LADDER:
-            step = sorted((u for u in units if u.look == look),
-                          key=lambda u: u.start)
-            self.assertTrue(step, look)
-            cursor = previous
-            for unit in step:
-                self.assertEqual(unit.start, cursor)
-                cursor = unit.stop
-            self.assertEqual(cursor, look)
-            previous = look
+        names = {u.task_id for u in units}
+        for shards in (1, 3, 9):
+            flat = [u for bucket in S.assign(units, shards) for u in bucket]
+            self.assertEqual({u.task_id for u in flat}, names, shards)
 
-    def test_the_production_manifest_also_respects_the_real_ladder(self):
-        units = S.plan([(TAG, 96.0)])
-        self.assertEqual({u.look for u in units}, set(PR.LOOKS))
-        for unit in units:
-            for look in PR.LOOKS:
-                self.assertFalse(unit.start < look < unit.stop)
+
+class UnitsTileTheKeySpaceTests(unittest.TestCase):
+
+    def test_each_arm_and_look_covers_every_key_exactly_once(self):
+        for look in LADDER:
+            keys = []
+            for unit in _units():
+                if unit.look == look:
+                    keys.extend(unit.keys)
+            self.assertEqual(len(keys), len(set(keys)), "ключи пересекаются")
+            self.assertEqual(set(keys), set(E.KEYS), "покрытие неполное")
+
+    def test_groups_are_contiguous_in_the_canonical_order(self):
+        for unit in _units():
+            first = E.KEYS.index(unit.keys[0])
+            self.assertEqual(tuple(E.KEYS[first:first + len(unit.keys)]),
+                             unit.keys)
+
+    def test_the_heaviest_production_arm_is_split_enough_to_fit(self):
+        """rate = 96 на третьей ступени: одна группа не влезает в потолок."""
+        self.assertGreater(S.cost_of(96.0, 64_000, 1.0) / 3600,
+                           S.SHARD_BUDGET_HOURS)
+        groups = S.groups_needed(96.0, 64_000)
+        self.assertGreater(groups, 1)
+        self.assertLessEqual(S.cost_of(96.0, 64_000, 1.0 / groups) / 3600,
+                             S.SHARD_BUDGET_HOURS)
 
 
 class ShardingDoesNotMoveTheResultTests(unittest.TestCase):
-    """serial == sharded == reordered. Побитово, а не «примерно»."""
+    """Юнит обязан давать ТО ЖЕ, что монолит. Побитово."""
 
-    def test_merged_equals_serial_and_order_does_not_matter(self):
-        units = _units()
-        parts = _run(units)
-        serial = E.accumulate(TAG, 0, LADDER[-1], **ARM)
+    def _monolith(self, look):
+        store = E.accumulate(TAG, 0, look, **ARM)
+        return E.endpoints_from(store, look=look)
 
-        merged = S.merge(TAG, parts, look=LADDER[-1], expected=units)
-        self.assertEqual(S.store_digest(merged), S.store_digest(serial))
-        self.assertEqual(set(merged), set(serial))
-        for key in serial:
-            self.assertEqual(merged[key], serial[key], key)
+    def test_a_unit_equals_the_monolith_on_its_own_keys(self):
+        look = LADDER[-1]
+        whole = self._monolith(look)
+        for unit in _units():
+            if unit.look != look:
+                continue
+            got = S.run_unit(unit, **ARM)
+            self.assertTrue(got, unit.task_id)
+            for name, endpoint in got.items():
+                self.assertEqual(endpoint, whole[name], name)
 
+    def test_the_merged_result_equals_the_monolith_entirely(self):
+        look = LADDER[-1]
+        units = [u for u in _units() if u.look == look]
+        parts = [(u, S.run_unit(u, **ARM)) for u in units]
+        merged = S.merge(TAG, look, parts, expected=units)
+        whole = self._monolith(look)
+        self.assertEqual(S.result_digest(merged), S.result_digest(whole))
+        self.assertEqual(merged, whole)
+
+    def test_the_order_of_parts_does_not_matter(self):
+        look = LADDER[-1]
+        units = [u for u in _units() if u.look == look]
+        parts = [(u, S.run_unit(u, **ARM)) for u in units]
         shuffled = list(parts)
-        random.Random(17).shuffle(shuffled)
-        reordered = S.merge(TAG, shuffled, look=LADDER[-1], expected=units)
-        self.assertEqual(S.store_digest(reordered), S.store_digest(serial))
+        random.Random(11).shuffle(shuffled)
+        self.assertEqual(S.merge(TAG, look, shuffled, expected=units),
+                         S.merge(TAG, look, parts, expected=units))
 
-    def test_every_intermediate_look_also_matches_serial(self):
-        units = _units()
-        parts = _run(units)
-        for look in LADDER:
-            merged = S.store_for_look(TAG, parts, look=look, expected=units)
-            serial = E.accumulate(TAG, 0, look, **ARM)
-            self.assertEqual(S.store_digest(merged), S.store_digest(serial),
-                             look)
-
-    def test_the_endpoints_themselves_are_identical(self):
-        """Сверка на уровне НАУЧНОГО выхода, а не только склада."""
-        units = _units()
-        merged = S.merge(TAG, _run(units), look=LADDER[-1], expected=units)
-        serial = E.accumulate(TAG, 0, LADDER[-1], **ARM)
-        self.assertEqual(E.roots_from(merged), E.roots_from(serial))
-
-
-class EarlyComputationIsNotEarlyLookingTests(unittest.TestCase):
-    """Посчитать заранее можно. Посмотреть заранее — нет."""
-
-    def test_future_units_are_invisible_to_an_earlier_look(self):
-        units = _units()
-        parts = _run(units)                      # посчитано ВСЁ, включая будущее
-        early = S.store_for_look(TAG, parts, look=LADDER[0], expected=units)
-        serial = E.accumulate(TAG, 0, LADDER[0], **ARM)
-        self.assertEqual(S.store_digest(early), S.store_digest(serial))
-        for key, pieces in early.items():
-            self.assertLessEqual(len(pieces), LADDER[0])
+    def test_the_prefix_is_recomputed_identically_not_resampled(self):
+        """Ступень 3, пересчитав 0..M3, обязана увидеть те же 0..M1."""
+        short = E.accumulate(TAG, 0, LADDER[0], **ARM)
+        long = E.accumulate(TAG, 0, LADDER[-1], **ARM)
+        for key, pieces in short.items():
+            self.assertEqual(long[key][:len(pieces)], pieces, key)
 
 
 class MergeFailsClosedTests(unittest.TestCase):
-    """Недосчитанный склад внешне неотличим от досчитанного: он короче."""
+    """Неполный набор концов внешне неотличим от полного: он короче."""
 
     def setUp(self):
-        self.units = _units()
-        self.parts = _run(self.units)
         self.look = LADDER[-1]
+        self.units = [u for u in _units() if u.look == self.look]
+        self.parts = [(u, S.run_unit(u, **ARM)) for u in self.units]
 
     def _refuse(self, parts, expected=None):
         with self.assertRaises(S.MergeRefused):
-            S.merge(TAG, parts, look=self.look,
-                    expected=expected or self.units)
+            S.merge(TAG, self.look, parts, expected=expected or self.units)
 
     def test_a_missing_unit_refuses(self):
         self._refuse(self.parts[:-1])
-        self._refuse(self.parts[1:])
 
     def test_a_duplicated_unit_refuses(self):
         self._refuse(self.parts + [self.parts[0]])
 
     def test_an_unexpected_unit_refuses(self):
-        stranger = S.Unit(arm=TAG, start=0, stop=3, look=LADDER[0], weight=1.0)
+        stranger = S.Unit(arm=TAG, look=self.look, keys=E.KEYS[:1], weight=1.0)
         self._refuse(self.parts + [(stranger, {})])
 
-    def test_a_gap_refuses(self):
-        thinned = [u for u in self.units if u.start != 0]
-        self._refuse([p for p in self.parts if p[0].start != 0], thinned)
+    def test_incomplete_key_coverage_refuses(self):
+        half = S.Unit(arm=TAG, look=self.look, keys=E.KEYS[:10], weight=1.0)
+        self._refuse([(half, {})], [half])
 
-    def test_an_overlap_refuses(self):
-        overlap = S.Unit(arm=TAG, start=0, stop=LADDER[-1], look=LADDER[-1],
-                         weight=1.0)
-        self._refuse(self.parts + [(overlap, {})], self.units + (overlap,))
+    def test_a_unit_returning_a_foreign_key_refuses(self):
+        """Юнит обязан отдавать СВОИ ключи и только их.
 
-    def test_the_empty_merge_refuses_rather_than_returning_nothing(self):
+        При одной группе своих ключей — все, поэтому чужой взять неоткуда;
+        пара строится явно, чтобы проверка не оказалась пустой.
+        """
+        half = len(E.KEYS) // 2
+        left = S.Unit(arm=TAG, look=self.look, keys=E.KEYS[:half], weight=1.0)
+        right = S.Unit(arm=TAG, look=self.look, keys=E.KEYS[half:], weight=1.0)
+        whole = S.run_unit(S.Unit(arm=TAG, look=self.look, keys=E.KEYS,
+                                  weight=1.0), **ARM)
+        mine = {n: e for n, e in whole.items() if n[0] in left.keys}
+        theirs = {n: e for n, e in whole.items() if n[0] in right.keys}
+        S.merge(TAG, self.look, [(left, mine), (right, theirs)],
+                expected=[left, right])            # чистый случай проходит
+        alien = next(iter(theirs))
+        polluted = dict(mine)
+        polluted[alien] = theirs[alien]
         with self.assertRaises(S.MergeRefused):
-            S.merge(TAG, [], look=self.look, expected=self.units)
+            S.merge(TAG, self.look, [(left, polluted), (right, theirs)],
+                    expected=[left, right])
+
+    def test_an_empty_merge_refuses(self):
+        self._refuse([])
+
+    def test_a_look_the_manifest_never_declared_refuses(self):
+        with self.assertRaises(S.MergeRefused):
+            S.merge(TAG, 99_999, self.parts, expected=self.units)
+
+
+class PlatformLimitsAreCheckedNotAssumedTests(unittest.TestCase):
+    """256 заданий на матрицу и 6 часов на задание — сверено с документацией."""
+
+    def test_the_documented_limits_are_recorded(self):
+        self.assertEqual(S.GITHUB_MATRIX_MAX_JOBS, 256)
+        self.assertEqual(S.GITHUB_JOB_MAX_HOURS, 6.0)
+        self.assertLess(S.SHARD_BUDGET_HOURS, S.GITHUB_JOB_MAX_HOURS,
+                        "бюджет обязан иметь запас до потолка")
+
+    def test_too_many_shards_refuses(self):
+        units = _units()
+        with self.assertRaises(S.PlanRefused):
+            S.check_platform_limits([units] * (S.GITHUB_MATRIX_MAX_JOBS + 1))
+
+    def test_an_over_budget_shard_refuses(self):
+        heavy = S.Unit(arm=TAG, look=64_000, keys=E.KEYS,
+                       weight=S.SHARD_BUDGET_HOURS * 3600 + 1.0)
+        with self.assertRaises(S.PlanRefused):
+            S.check_platform_limits([[heavy]])
+
+    def test_the_shard_count_is_derived_by_checking_the_real_assignment(self):
+        """Формула «сумма делить на бюджет» ошибается в опасную сторону.
+
+        Юнит неделим, идеальной упаковки не бывает, и на второй ступени
+        оценка давала 4.12 ч при бюджете 4.0 ч.
+        """
+        from simulation import s5b_prereg as P
+        from simulation import s5b_stage1 as T
+        arms = [(T.arm_tag(r, c, reg, m), r) for r in P.OPPORTUNITY_RATE_GRID
+                for c, _ in P.C_REACTIVITY_POINTS for reg, m in T.REGIMES]
+        units = S.plan(arms)
+        for look in PR.LOOKS:
+            step = [u for u in units if u.look == look]
+            count = S.shards_needed(step)
+            S.check_platform_limits(S.assign(step, count))
+            self.assertLessEqual(count, S.GITHUB_MATRIX_MAX_JOBS, look)
+            if count > 1:
+                with self.assertRaises(S.PlanRefused, msg=look):
+                    S.check_platform_limits(S.assign(step, count - 1))
+
+    def test_an_indivisible_over_budget_unit_refuses_outright(self):
+        huge = S.Unit(arm=TAG, look=64_000, keys=E.KEYS,
+                      weight=S.SHARD_BUDGET_HOURS * 3600 * 2)
+        with self.assertRaises(S.PlanRefused):
+            S.shards_needed([huge])
 
 
 class BalancingIsGreedyNotContiguousTests(unittest.TestCase):
-    """Непрерывная нарезка перекашивает: дорогие руки собираются вместе."""
 
     def _arms(self):
         from simulation import s5b_prereg as P
@@ -213,15 +236,12 @@ class BalancingIsGreedyNotContiguousTests(unittest.TestCase):
     def test_lpt_beats_contiguous_slicing_on_the_real_rate_grid(self):
         units = S.plan(self._arms())
         shards = 8
-        greedy = S.assign(units, shards)
-        greedy_max = max(sum(u.weight for u in b) for b in greedy)
-
+        greedy = max(sum(u.weight for u in b)
+                     for b in S.assign(units, shards))
         size = -(-len(units) // shards)
-        chunks = [units[i:i + size] for i in range(0, len(units), size)]
-        contiguous_max = max(sum(u.weight for u in c) for c in chunks)
-
-        self.assertLess(greedy_max, contiguous_max,
-                        "жадная раскладка обязана быть не хуже нарезки")
+        contiguous = max(sum(u.weight for u in units[i:i + size])
+                         for i in range(0, len(units), size))
+        self.assertLess(greedy, contiguous)
 
     def test_every_unit_is_placed_exactly_once(self):
         units = S.plan(self._arms())
@@ -233,3 +253,17 @@ class BalancingIsGreedyNotContiguousTests(unittest.TestCase):
     def test_a_nonsense_shard_count_refuses(self):
         with self.assertRaises(ValueError):
             S.assign(_units(), 0)
+
+
+class KeysAreSeparableNotIndependentTests(unittest.TestCase):
+    """Формулировка существенна: разделимость и независимость — разное."""
+
+    def test_the_claim_is_computational_separability(self):
+        self.assertTrue(E.KEYS_ARE_COMPUTATIONALLY_SEPARABLE_NOT_INDEPENDENT)
+
+    def test_keys_share_the_very_same_dyads(self):
+        """Раз диады общие, статистическая независимость не утверждается."""
+        left = E.accumulate(TAG, 0, 8, wanted=E.KEYS[:2], **ARM)
+        right = E.accumulate(TAG, 0, 8, wanted=E.KEYS[2:4], **ARM)
+        both = E.accumulate(TAG, 0, 8, wanted=E.KEYS[:4], **ARM)
+        self.assertEqual({**left, **right}, both)

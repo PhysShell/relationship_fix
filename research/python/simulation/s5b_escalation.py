@@ -41,6 +41,28 @@ from simulation.process import DyadParameters, generate_dyad
 
 DAY = 86400.0
 
+#: КАНОНИЧЕСКИЙ порядок ключей. Нужен, чтобы деление на группы было
+#: детерминированным, а не зависело от обхода словаря. `delta` снаружи
+#: намеренно: группа из смежных ключей тогда покрывает целые разрешения, и
+#: `to_bins` не считается для чужих.
+KEYS: tuple[tuple, ...] = tuple(
+    (delta, days, horizon, maximise)
+    for delta in P.ACQUISITION_RESOLUTIONS_SECONDS
+    for days in P.OBSERVATION_DAYS
+    for horizon in P.HORIZONS_SECONDS
+    for maximise in (False, True))
+
+#: КЛЮЧИ РАЗДЕЛИМЫ ВЫЧИСЛИТЕЛЬНО, А НЕ СТАТИСТИЧЕСКИ, и формулировка здесь
+#: существенна. Требуется лишь то, что конец ключа `K` считается без
+#: состояния, выведенного из другого ключа. СТАТИСТИЧЕСКОЙ независимости
+#: между ключами нет и не требуется: они считаются по ОДНИМ И ТЕМ ЖЕ
+#: диадам и вполне могут быть зависимы. Клеточный бюджет ошибки устроен
+#: через союзную границу, которой зависимость безразлична, поэтому
+#: подменять «можно считать порознь» на «независимы как случайные
+#: величины» нельзя — это разные утверждения, и второе здесь не доказано и
+#: не нужно.
+KEYS_ARE_COMPUTATIONALLY_SEPARABLE_NOT_INDEPENDENT = True
+
 #: Горизонты, пропускаемые по прогнозу. ПУСТО, и это решение, а не недосмотр.
 SKIPPED_HORIZONS: tuple[float, ...] = ()
 
@@ -175,7 +197,7 @@ def _params(rate: float, shift: float, ratio: float, c_rate: float,
 def accumulate(tag: str, start: int, stop: int, *, rate: float,
                c_rate: float, c_shift: float, shift: float | None = None,
                ratio: float | None = None, regime: str | None = None,
-               magnitude: float = 1.0,
+               magnitude: float = 1.0, wanted=None,
                store: dict | None = None) -> dict[tuple, list]:
     """Периоды `start..stop-1` в общий склад. Дописывает, не пересоздаёт.
 
@@ -197,6 +219,10 @@ def accumulate(tag: str, start: int, stop: int, *, rate: float,
         def effect_for(index, regime=regime, magnitude=magnitude):
             return regime_effect(tag, index, regime, magnitude)
 
+    wanted = None if wanted is None else frozenset(wanted)
+    deltas = (P.ACQUISITION_RESOLUTIONS_SECONDS if wanted is None
+              else tuple(d for d in P.ACQUISITION_RESOLUTIONS_SECONDS
+                         if any(k[0] == d for k in wanted)))
     store = {} if store is None else store
     for index in range(start, stop):
         period_shift, period_ratio = effect_for(index)
@@ -208,7 +234,7 @@ def accumulate(tag: str, start: int, stop: int, *, rate: float,
         stream = Stream(tuple(m.local_time for m in messages),
                         tuple(0 if m.actor == "partner" else 1 for m in messages),
                         tuple(m.message_id for m in messages))
-        for delta in P.ACQUISITION_RESOLUTIONS_SECONDS:
+        for delta in deltas:
             full = to_bins(stream, 1, delta=delta)
             for days in P.OBSERVATION_DAYS:
                 window = days * DAY
@@ -220,6 +246,9 @@ def accumulate(tag: str, start: int, stop: int, *, rate: float,
                     kw = dict(horizon=horizon, window_end=window, delta=delta,
                               time_layer=False, initiation_end=cut)
                     for maximise in (False, True):
+                        if wanted is not None and (
+                                delta, days, horizon, maximise) not in wanted:
+                            continue
                         hull = hull_of(
                             achievable_frontier(prefix, maximise=maximise, **kw),
                             upper=maximise)

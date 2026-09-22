@@ -1,0 +1,43 @@
+# Дымовая проба формы прогона на НАСТОЯЩЕМ раннере.
+#
+# Зачем отдельно от научного прогона: все оценки длительности сняты на
+# машине разработчика. Сравнивать их с шестичасовым потолком GitHub —
+# значит выдавать бенчмарк машины A за время исполнения машины B. Поэтому
+# самый тяжёлый production-shaped юнит гоняется здесь как есть, и
+# записываются wall time, пиковый RSS и дайджест.
+#
+# Версии действий сверены со страницами релизов, а не взяты по памяти:
+# checkout v7, setup-python v7, upload-artifact v7. Мажоры разошлись.
+name: S5b smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  worst-case-unit:
+    runs-on: ubuntu-latest
+    # Потолок задания на GitHub-hosted раннере — 6 часов. Сознательно ниже:
+    # упереться в платформенный потолок значит потерять ВСЮ работу задания
+    # без диагностики, а так оно падает само и с отчётом.
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Паспорт раннера
+        run: |
+          nproc; free -g | head -2; df -h / | tail -1
+          python3 -VV
+      - name: Самый дорогой юнит сетки
+        working-directory: research/python
+        env:
+          PYTHONPATH: .
+        run: python3 -B -m tools.s5b_stage1_cli smoke --out ../../out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: s5b-smoke
+          path: out/smoke.json
