@@ -187,12 +187,31 @@ class CostLivesOnlyInExecutionTests(unittest.TestCase):
         self.assertEqual(got, max(each))
         self.assertGreater(got, sum(each) / len(each))
 
-    def test_the_budget_sits_below_the_breached_one(self):
-        """4.0 пробит фактом 4.188 на первой же производственной ступени."""
-        self.assertLess(cost.SHARD_BUDGET_HOURS, 4.0)
+    def test_the_budget_is_checked_in_two_steps_not_against_a_sample_range(self):
+        """Прежний критерий сравнивал запас с размахом ШЕСТИ наблюдений.
+
+        1.963 — максимум шести замеров, а не верхняя граница распределения
+        скоростей раннеров. Сравнивать с ним значило бы выдавать выборку
+        за совокупность. Требование переформулировано: веса от
+        консервативной огибающей, а цель — существенно ниже потолка, и
+        это объявленный операционный выбор.
+        """
+        self.assertLess(cost.SHARD_BUDGET_HOURS, 4.0, "пробит фактом 4.188")
+        self.assertGreaterEqual(cost.BUDGET_HEADROOM, cost.MIN_BUDGET_HEADROOM)
         self.assertLess(cost.SHARD_BUDGET_HOURS, cost.PLATFORM_CAP_HOURS)
-        self.assertGreaterEqual(cost.BUDGET_HEADROOM,
-                                cost.OBSERVED_RUNNER_SPREAD)
+
+    def test_the_worst_predicted_job_fits_the_target_at_every_runnable_look(self):
+        """Проверяется ХУДШЕЕ предсказанное задание, а не среднее."""
+        from simulation import s5b_shard as S
+        for look in (4000, 16_000):
+            units = scheduler.units_for(look)
+            count = scheduler.shards_needed(units)
+            worst = max(sum(u.weight for u in b)
+                        for b in S.assign(units, count))
+            self.assertLessEqual(worst, cost.SHARD_BUDGET_HOURS * 3600.0,
+                                 f"look {look}")
+            self.assertLess(worst, cost.PLATFORM_CAP_HOURS * 3600.0 / 2.0,
+                            f"look {look}: худшее задание близко к потолку")
 
     def test_the_split_economy_is_refused_not_guessed(self):
         """Деление ключей не измерено ни разу — значит отказ, а не константа."""
@@ -372,3 +391,106 @@ class ManifestIsTheOnlySourceOfLayoutTests(unittest.TestCase):
             with self.assertRaises(Exception) as caught:
                 cli._verify_with_frozen_merge(where, 4000, payloads)
             self.assertIn("не хватает юнитов", str(caught.exception))
+
+
+class BoundariesAreProvenNotDeclaredTests(unittest.TestCase):
+    """Три инварианта, каждый закрывает дыру в том, что выглядело закрытым."""
+
+    def test_science_imported_from_elsewhere_is_refused(self):
+        """Execution-checkout — ПОЛНЫЙ репозиторий, там тоже research/python.
+
+        Сегодня коллизии нет лишь потому, что в PYTHONPATH попадает
+        `exec/execution`, а не `exec`. Это свойство одной строки, а не
+        гарантия: иначе SCIENCE_SHA стал бы табличкой на двери.
+        """
+        from s5b_execution import guard
+        got = guard.assert_science_comes_from(ROOT / "research/python")
+        self.assertIn("simulation.s5b_shard", got)
+        self.assertTrue(got["simulation.s5b_shard"].endswith("s5b_shard.py"))
+        with tempfile.TemporaryDirectory() as elsewhere:
+            with self.assertRaises(guard.BoundaryViolated):
+                guard.assert_science_comes_from(elsewhere)
+
+    def test_a_commit_touching_more_than_the_request_is_refused(self):
+        """Пина EXECUTION_SHA мало: YAML воркфлоу GitHub берёт с triggering ref."""
+        from s5b_execution import guard
+        guard.assert_request_is_only_a_signal([guard.REQUEST_PATH])
+        guard.assert_request_is_only_a_signal([])
+        with self.assertRaises(guard.BoundaryViolated) as caught:
+            guard.assert_request_is_only_a_signal(
+                [guard.REQUEST_PATH, ".github/workflows/s5b-stage1.yml"])
+        self.assertIn("s5b-stage1.yml", str(caught.exception))
+
+    def test_a_prior_set_with_another_digest_is_refused(self):
+        """prior_run якорем не является: task_id кодирует координаты, не байты."""
+        from s5b_execution import cli, provenance
+        from simulation import s5b_shard as S
+        keys = tuple(scheduler.KEYS)
+        unit = S.Unit(arm="armA", look=4000, keys=keys, weight=0.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            where = pathlib.Path(tmp)
+            (where / "manifest.json").write_text(json.dumps({
+                "look": 4000, "shards": 1, "units": [
+                    {"task_id": unit.task_id, "arm": "armA", "look": 4000,
+                     "shard": 0, "keys": [list(k) for k in keys]}]}))
+            (where / f"{unit.task_id}.json").write_text(json.dumps(
+                {"task_id": unit.task_id, "arm": "armA", "look": 4000,
+                 "keys": [list(k) for k in keys], "endpoints": [],
+                 "digest": "d0"}))
+            honest = provenance.digest_of([json.loads(
+                (where / f"{unit.task_id}.json").read_text())])
+            # верный отпечаток проходит
+            cli._ledger_from([where], honest)
+            # чужой — отказ
+            with self.assertRaises(SystemExit) as caught:
+                cli._ledger_from([where], "deadbeefdeadbeef")
+            self.assertIn("приехал не тот прогон", str(caught.exception))
+
+    def test_the_reduced_artifact_carries_the_whole_chain(self):
+        """Цепочка провенанса замкнута: вход, выход и чем считали.
+
+        Гейт поведенческий: он ЗАПУСКАЕТ сведение и читает артефакт.
+        Текстовая версия искала бы имена полей в исходнике и прошла бы
+        мимо подмены, оставившей их на месте, — ровно так сегодня
+        проскочила диверсия.
+        """
+        import os
+        from s5b_execution import cli
+        from simulation import s5b_shard as S
+        keys = tuple(scheduler.KEYS)
+        unit = S.Unit(arm="armA", look=4000, keys=keys, weight=0.0)
+        env = {"SCIENCE_SHA": "a" * 40, "EXECUTION_SHA": "b" * 40,
+               "REQUEST_SHA": "c" * 40}
+        keep = {k: os.environ.get(k) for k in env}
+        try:
+            os.environ.update(env)
+            with tempfile.TemporaryDirectory() as tmp:
+                where = pathlib.Path(tmp)
+                (where / "manifest.json").write_text(json.dumps({
+                    "look": 4000, "shards": 1, "units": [
+                        {"task_id": unit.task_id, "arm": "armA",
+                         "look": 4000, "shard": 0,
+                         "keys": [list(k) for k in keys]}]}))
+                (where / f"{unit.task_id}.json").write_text(json.dumps(
+                    {"task_id": unit.task_id, "arm": "armA", "look": 4000,
+                     "keys": [list(k) for k in keys],
+                     "endpoints": [_end(KEY_LOW, 0.1, achieved=True,
+                                        look=4000)],
+                     "digest": "d0"}))
+                cli.main(["reduce", "--look", "4000", "--out", str(where),
+                          "--prior-run", "35805206374"])
+                got = json.loads(
+                    (where / "reduced.json").read_text())["summary"]["provenance"]
+        finally:
+            for name, value in keep.items():
+                os.environ.pop(name, None)
+                if value is not None:
+                    os.environ[name] = value
+        for field in ("science_sha", "execution_sha", "request_sha", "look",
+                      "prior_run", "prior_digest", "input_digest",
+                      "output_digest"):
+            self.assertIn(field, got, field)
+        self.assertEqual(got["science_sha"], "a" * 40)
+        self.assertEqual(got["prior_run"], "35805206374")
+        self.assertTrue(got["input_digest"])
+        self.assertTrue(got["output_digest"])

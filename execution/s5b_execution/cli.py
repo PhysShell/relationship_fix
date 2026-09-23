@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import pathlib
 import resource
 import sys
@@ -21,7 +22,7 @@ import time
 from simulation import s5b_prereg as P
 from simulation import s5b_shard as S
 
-from . import cost, provenance, reduction, scheduler
+from . import cost, guard, provenance, reduction, scheduler
 from .identity import load_unit_payloads
 from .ledger import Ledger
 
@@ -70,8 +71,15 @@ def _verify_with_frozen_merge(directory, look: int, payloads) -> int:
     return len(expected)
 
 
-def _ledger_from(prior_dirs) -> tuple[Ledger, dict[str, str]]:
-    """Реестр по каталогам ступеней, впитанным ПО ВОЗРАСТАНИЮ."""
+def _ledger_from(prior_dirs, expected_digest: str = "") -> tuple[Ledger, dict]:
+    """Реестр по каталогам ступеней, впитанным ПО ВОЗРАСТАНИЮ.
+
+    `expected_digest` относится к САМОЙ РАННЕЙ ступени набора. `prior_run`
+    якорем не является: `task_id` кодирует научные координаты, а не байты
+    реализации, поэтому совместимый чужой прогон даст ровно те же имена
+    файлов. Отпечаток — единственное, что привязывает вход к конкретному
+    вычислению.
+    """
     ledger, inputs, loaded = Ledger(), {}, []
     for directory in prior_dirs:
         payloads = load_unit_payloads(directory)
@@ -79,10 +87,16 @@ def _ledger_from(prior_dirs) -> tuple[Ledger, dict[str, str]]:
         if len(looks) != 1:
             raise SystemExit(f"{directory}: смешаны ступени {sorted(looks)}")
         loaded.append((looks.pop(), payloads, directory))
-    for look, payloads, directory in sorted(loaded, key=lambda t: t[0]):
+    for index, (look, payloads, directory) in enumerate(
+            sorted(loaded, key=lambda t: t[0])):
         _verify_with_frozen_merge(directory, look, payloads)
+        got = provenance.digest_of(payloads)
+        if index == 0 and expected_digest and got != expected_digest:
+            raise SystemExit(
+                f"{directory}: отпечаток входа {got}, заявлен "
+                f"{expected_digest} — приехал не тот прогон")
         ledger.absorb(look, payloads)
-        inputs[str(directory)] = provenance.digest_of(payloads)
+        inputs[str(directory)] = got
     return ledger, inputs
 
 
@@ -101,12 +115,30 @@ def main(argv=None) -> int:
     parser.add_argument("--out", default="out")
     parser.add_argument("--prior", action="append", default=[])
     parser.add_argument("--manifest", default="manifest.json")
+    parser.add_argument("--prior-digest", default="")
+    parser.add_argument("--prior-run", default="")
+    parser.add_argument("--repo", default="")
+    parser.add_argument("--pin", default="")
+    parser.add_argument("--science", default="")
     args = parser.parse_args(argv)
     out = pathlib.Path(args.out)
 
     if args.mode == "plan":
-        ledger, inputs = (_ledger_from(args.prior) if args.prior
-                          else (None, {}))
+        # PREFLIGHT. Порядок не косметический: всё, что может обрушиться
+        # дёшево, обязано обрушиться ДО появления дорогой матрицы.
+        # Отдельная дымовая проба проверяла бы почти то же самое и
+        # добавляла бы ещё один церемониальный труп в историю проекта.
+        checks: dict = {}
+        if args.repo and args.pin:
+            changed = guard.changed_paths(args.repo, args.pin, os.environ.get(
+                "REQUEST_SHA", "HEAD"))
+            guard.assert_request_is_only_a_signal(changed)
+            checks["changed_since_pin"] = changed
+        if args.science:
+            checks["science_modules"] = guard.assert_science_comes_from(
+                args.science)
+        ledger, inputs = (_ledger_from(args.prior, args.prior_digest)
+                          if args.prior else (None, {}))
         units = scheduler.units_for(args.look, ledger)
         count = scheduler.shards_needed(units)
         buckets = S.assign(units, count)
@@ -124,9 +156,22 @@ def main(argv=None) -> int:
         rows.sort(key=lambda r: r["task_id"])
         manifest = {"look": args.look, "shards": count, "units": rows}
         body = json.dumps(manifest, sort_keys=True)
-        manifest["provenance"] = provenance.collect(
+        record = provenance.collect(
             inputs=inputs,
             manifest_digest=hashlib.sha256(body.encode()).hexdigest()[:16])
+        record["look"] = args.look
+        record["prior_run"] = args.prior_run
+        record["prior_digest"] = args.prior_digest
+        record["preflight"] = checks
+        manifest["provenance"] = record
+        # каждая строка манифеста обязана ДАВАТЬ свой task_id
+        for row in rows:
+            rebuilt = S.Unit(arm=row["arm"], look=row["look"],
+                             keys=tuple(tuple(k) for k in row["keys"]),
+                             weight=0.0)
+            if rebuilt.task_id != row["task_id"]:
+                raise SystemExit(f"манифест: {row['task_id']} не выводится "
+                                 f"из состава юнита")
         out.mkdir(parents=True, exist_ok=True)
         (out / "manifest.json").write_text(json.dumps(manifest, sort_keys=True))
         print(json.dumps({"shards": list(range(count)), "count": count,
@@ -175,7 +220,9 @@ def main(argv=None) -> int:
         return 0
 
     # reduce
-    ledger, inputs = _ledger_from(list(args.prior) + [out])
+    if args.science:
+        guard.assert_science_comes_from(args.science)
+    ledger, inputs = _ledger_from(list(args.prior) + [out], args.prior_digest)
     final = ledger.finalise(args.look)
     cells = reduction.cells_from(final)
     evaluable = sum(1 for c in cells if c["evaluable"])
@@ -188,6 +235,18 @@ def main(argv=None) -> int:
         "ledger_digest": ledger.digest(),
         "cells": len(cells), "cells_evaluable": evaluable,
         "inputs": inputs,
+    }
+    body = json.dumps({"summary": summary, "cells": cells}, sort_keys=True)
+    summary["provenance"] = {
+        "science_sha": os.environ.get("SCIENCE_SHA", ""),
+        "execution_sha": os.environ.get("EXECUTION_SHA", ""),
+        "request_sha": os.environ.get("REQUEST_SHA", ""),
+        "look": args.look,
+        "prior_run": args.prior_run,
+        "prior_digest": args.prior_digest,
+        "input_digest": provenance.digest_of(
+            load_unit_payloads(out)),
+        "output_digest": hashlib.sha256(body.encode()).hexdigest()[:16],
     }
     (out / "reduced.json").write_text(json.dumps(
         {"summary": summary, "cells": cells}, sort_keys=True))

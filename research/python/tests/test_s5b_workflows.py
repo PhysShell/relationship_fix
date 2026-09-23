@@ -230,8 +230,18 @@ class ScienceShaIsPinnedNotInheritedTests(unittest.TestCase):
         """
         if not (ROOT / ".github/s5b-stage1-request.txt").exists():
             self.skipTest("заявки нет — закреплять пока нечего")
-        self.assertNotEqual(self._stage1()["env"]["SCIENCE_SHA"], PLACEHOLDER,
-                            "заявка есть, а закреплён плейсхолдер")
+        env = self._stage1()["env"]
+        for name in ("SCIENCE_SHA", "EXECUTION_SHA", "EXECUTION_PIN_COMMIT"):
+            self.assertNotEqual(env[name], PLACEHOLDER,
+                                f"заявка есть, а {name} — плейсхолдер")
+
+    def test_every_pin_is_a_full_quoted_hex_sha(self):
+        env = self._stage1()["env"]
+        for name in ("SCIENCE_SHA", "EXECUTION_SHA", "EXECUTION_PIN_COMMIT"):
+            value = env[name]
+            self.assertIsInstance(value, str, f"{name}: нужны кавычки")
+            self.assertRegex(value, r"^[0-9a-f]{40}$", name)
+
 
     def test_every_computing_job_checks_out_both_pins(self):
         """Наука и исполнение — РАЗНЫЕ пины, и оба закреплены.
@@ -263,6 +273,39 @@ class ScienceShaIsPinnedNotInheritedTests(unittest.TestCase):
         self.assertEqual(len(set(refs.values())), 3,
                          "checkout'ы делят каталог — затрут друг друга")
 
+
+@needs_yaml
+class RequestIsOnlyASignalTests(unittest.TestCase):
+    """Пина EXECUTION_SHA мало: YAML берётся с triggering ref, не из пина."""
+
+    def _plan(self):
+        return _load(STAGE1)["jobs"]["plan"]
+
+    def test_the_request_checkout_has_the_history_the_diff_needs(self):
+        """Без истории diff пин..заявка не построить, и гейт стал бы немым."""
+        steps = [s for s in self._plan()["steps"]
+                 if s.get("uses", "").startswith("actions/checkout")
+                 and s["with"].get("ref") == "${{ github.sha }}"]
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0]["with"].get("fetch-depth"), 0)
+
+    def test_the_plan_passes_the_pin_and_the_science_checkout(self):
+        run = " ".join(s["run"] for s in self._plan()["steps"] if "run" in s)
+        self.assertIn("--pin", run)
+        self.assertIn("EXECUTION_PIN_COMMIT", run)
+        self.assertIn("--science", run)
+        self.assertIn("--prior-digest", run)
+
+    def test_the_compute_proves_where_science_came_from(self):
+        run = " ".join(s["run"] for s in _load(STAGE1)["jobs"]["compute"]["steps"]
+                       if "run" in s)
+        self.assertIn("assert_science_comes_from", run)
+
+    def test_the_reduce_verifies_the_prior_digest(self):
+        run = " ".join(s["run"] for s in _load(STAGE1)["jobs"]["reduce"]["steps"]
+                       if "run" in s)
+        self.assertIn("--prior-digest", run)
+        self.assertIn("--science", run)
 
 @needs_yaml
 class Stage1LaunchesByRequestFileTests(unittest.TestCase):

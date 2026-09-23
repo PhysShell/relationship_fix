@@ -22,6 +22,11 @@ permissions:
 env:
   SCIENCE_SHA: "7a62a3911f8bc000cf08ad97f76c0f962b07e615"
   EXECUTION_SHA: "0000000000000000000000000000000000000000"
+  # Коммит, которым закреплён EXECUTION_SHA. Между ним и коммитом-заявкой
+  # разрешено менять ТОЛЬКО файл заявки: сам YAML воркфлоу GitHub берёт с
+  # triggering ref, а не из пина, поэтому без этой проверки закреплённые
+  # SHA врали бы ровно на полшага.
+  EXECUTION_PIN_COMMIT: "0000000000000000000000000000000000000000"
 
 jobs:
   plan:
@@ -30,12 +35,15 @@ jobs:
       look: ${{ steps.request.outputs.look }}
       prior_look: ${{ steps.request.outputs.prior_look }}
       prior_run: ${{ steps.request.outputs.prior_run }}
+      prior_digest: ${{ steps.request.outputs.prior_digest }}
       shards: ${{ steps.plan.outputs.shards }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           path: request
+          # нужна история, иначе diff пин..заявка не построить
+          fetch-depth: 0
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.SCIENCE_SHA }}
@@ -54,17 +62,20 @@ jobs:
           LOOK=$(grep -oP '^look:\s*\K[0-9]+' "$FILE" | head -1)
           PRIOR_LOOK=$(grep -oP '^prior_look:\s*\K[0-9]+' "$FILE" | head -1 || true)
           PRIOR_RUN=$(grep -oP '^prior_run:\s*\K[0-9]+' "$FILE" | head -1 || true)
+          PRIOR_DIGEST=$(grep -oP '^prior_digest:\s*\K[0-9a-f]+' "$FILE" | head -1 || true)
           case "$LOOK" in
             4000|16000|64000) ;;
             *) echo "ступень $LOOK не из лестницы" >&2; exit 1 ;;
           esac
-          if [ "$LOOK" != "4000" ] && { [ -z "$PRIOR_LOOK" ] || [ -z "$PRIOR_RUN" ]; }; then
-            echo "ступень $LOOK требует prior_look и prior_run" >&2
+          if [ "$LOOK" != "4000" ] && { [ -z "$PRIOR_LOOK" ] || [ -z "$PRIOR_RUN" ] \
+               || [ -z "$PRIOR_DIGEST" ]; }; then
+            echo "ступень $LOOK требует prior_look, prior_run и prior_digest" >&2
             exit 1
           fi
           echo "look=$LOOK" >> "$GITHUB_OUTPUT"
           echo "prior_look=$PRIOR_LOOK" >> "$GITHUB_OUTPUT"
           echo "prior_run=$PRIOR_RUN" >> "$GITHUB_OUTPUT"
+          echo "prior_digest=$PRIOR_DIGEST" >> "$GITHUB_OUTPUT"
       - if: ${{ steps.request.outputs.prior_run != '' }}
         uses: actions/download-artifact@v8
         with:
@@ -93,7 +104,11 @@ jobs:
             PRIOR="--prior prior"
           fi
           OUT=$(python3 -B -m s5b_execution.cli plan \
-                  --look ${{ steps.request.outputs.look }} $PRIOR --out out)
+                  --look ${{ steps.request.outputs.look }} $PRIOR \
+                  --prior-run "${{ steps.request.outputs.prior_run }}" \
+                  --prior-digest "${{ steps.request.outputs.prior_digest }}" \
+                  --repo request --pin "${{ env.EXECUTION_PIN_COMMIT }}" \
+                  --science science/research/python --out out)
           echo "$OUT"
           echo "shards=$(echo "$OUT" | python3 -c \
             'import json,sys; print(json.dumps(json.load(sys.stdin)["shards"]))')" \
@@ -130,6 +145,10 @@ jobs:
       - env:
           PYTHONPATH: science/research/python:exec/execution
         run: |
+          python3 -B -c "import sys; sys.path[:0] = \
+            'science/research/python:exec/execution'.split(':'); \
+            from s5b_execution.guard import assert_science_comes_from as g; \
+            print(g('science/research/python'))"
           python3 -B -m s5b_execution.cli run \
             --look ${{ needs.plan.outputs.look }} \
             --manifest plan/manifest.json \
@@ -184,13 +203,19 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - env:
           PYTHONPATH: science/research/python:exec/execution
+          SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
+          EXECUTION_SHA: ${{ env.EXECUTION_SHA }}
+          REQUEST_SHA: ${{ github.sha }}
         run: |
           PRIOR=""
           if [ -n "${{ needs.plan.outputs.prior_run }}" ]; then
             PRIOR="--prior prior"
           fi
           python3 -B -m s5b_execution.cli reduce \
-            --look ${{ needs.plan.outputs.look }} $PRIOR --out out
+            --look ${{ needs.plan.outputs.look }} $PRIOR \
+            --prior-run "${{ needs.plan.outputs.prior_run }}" \
+            --prior-digest "${{ needs.plan.outputs.prior_digest }}" \
+            --science science/research/python --out out
       - uses: actions/upload-artifact@v7
         with:
           name: s5b-reduced-${{ needs.plan.outputs.look }}
