@@ -1,0 +1,199 @@
+"""Командная оболочка слоя исполнения.
+
+    plan    --look L [--prior D ...]   манифест ступени с учётом реестра
+    run     --look L --shard N         посчитать свой мешок замороженным run_unit
+    reduce  --look L --prior D ...     свести концы, каждый на своём tau
+
+`reduce` — не «слияние ради полноты». Он строит реестр по ВОСХОДЯЩИМ
+ступеням и отдаёт каждый конец на его собственном `tau`.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import pathlib
+import resource
+import sys
+import time
+
+from simulation import s5b_prereg as P
+from simulation import s5b_shard as S
+
+from . import cost, provenance, reduction, scheduler
+from .identity import load_unit_payloads
+from .ledger import Ledger
+
+LOOKS = tuple(P.LOOKS) if hasattr(P, "LOOKS") else None
+
+
+def _ladder():
+    from simulation import s5b_precision as PRC
+    return tuple(PRC.LOOKS)
+
+
+def _expected_units(directory, look: int):
+    """Юниты, ОБЪЯВЛЕННЫЕ манифестом ступени.
+
+    Читается манифест, а не приехавшие файлы. Вывести ожидаемое из
+    полученного значило бы сделать проверку полноты тавтологией: она бы
+    проходила всегда, ровно потому что сравнивает набор сам с собой.
+    """
+    path = pathlib.Path(directory) / "manifest.json"
+    if not path.exists():
+        raise SystemExit(f"{directory}: нет manifest.json — объявить нечего")
+    manifest = json.loads(path.read_text())
+    if manifest["look"] != look:
+        raise SystemExit(f"{directory}: манифест на ступень {manifest['look']}, "
+                         f"а файлы на {look}")
+    return [S.Unit(arm=u["arm"], look=u["look"],
+                   keys=tuple(tuple(k) for k in u["keys"]), weight=0.0)
+            for u in manifest["units"]]
+
+
+def _verify_with_frozen_merge(directory, look: int, payloads) -> int:
+    """Собрать концы КАЖДОЙ руки замороженным `s5b_shard.merge`.
+
+    Зовётся на ВСЕХ ступенях, а не только там, где рука дробится. На 4000
+    и 16000 у руки одна группа ключей и слияние тривиально — но именно
+    «тривиальный и потому не исполняемый путь» уронил прогон 35805206374:
+    шаг merge был единственным, который до того не отрабатывал ни разу.
+    """
+    expected = _expected_units(directory, look)
+    unit_of = {u.task_id: u for u in expected}
+    missing = [p["task_id"] for p in payloads if p["task_id"] not in unit_of]
+    if missing:
+        raise SystemExit(f"{directory}: файлы вне манифеста: {missing}")
+    for arm in sorted({u.arm for u in expected}):
+        reduction.merge_arm(arm, look, payloads, expected, unit_of)
+    return len(expected)
+
+
+def _ledger_from(prior_dirs) -> tuple[Ledger, dict[str, str]]:
+    """Реестр по каталогам ступеней, впитанным ПО ВОЗРАСТАНИЮ."""
+    ledger, inputs, loaded = Ledger(), {}, []
+    for directory in prior_dirs:
+        payloads = load_unit_payloads(directory)
+        looks = {p["look"] for p in payloads}
+        if len(looks) != 1:
+            raise SystemExit(f"{directory}: смешаны ступени {sorted(looks)}")
+        loaded.append((looks.pop(), payloads, directory))
+    for look, payloads, directory in sorted(loaded, key=lambda t: t[0]):
+        _verify_with_frozen_merge(directory, look, payloads)
+        ledger.absorb(look, payloads)
+        inputs[str(directory)] = provenance.digest_of(payloads)
+    return ledger, inputs
+
+
+def _encode(results) -> list:
+    return [{"key": list(name[0]), "fraction": name[1],
+             "point": e.point, "low": e.low, "high": e.high,
+             "radius": e.radius, "status": e.status.value, "look": e.look}
+            for name, e in sorted(results.items(), key=repr)]
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mode", choices=("plan", "run", "reduce"))
+    parser.add_argument("--look", type=int, required=True)
+    parser.add_argument("--shard", type=int, default=0)
+    parser.add_argument("--out", default="out")
+    parser.add_argument("--prior", action="append", default=[])
+    parser.add_argument("--manifest", default="manifest.json")
+    args = parser.parse_args(argv)
+    out = pathlib.Path(args.out)
+
+    if args.mode == "plan":
+        ledger, inputs = (_ledger_from(args.prior) if args.prior
+                          else (None, {}))
+        units = scheduler.units_for(args.look, ledger)
+        count = scheduler.shards_needed(units)
+        buckets = S.assign(units, count)
+        scheduler.check_platform(buckets)
+        # РАСКЛАДКА ПИШЕТСЯ В МАНИФЕСТ, а не выводится заново в `run`.
+        # Пусть план и исполнение расходятся невозможным образом, а не
+        # «одинаково считают»: сегодняшний отказ прогона был ровно из
+        # расхождения двух мест, которые обязаны были совпасть.
+        rows = []
+        for shard, bucket in enumerate(buckets):
+            for unit in bucket:
+                rows.append({"task_id": unit.task_id, "arm": unit.arm,
+                             "look": unit.look, "shard": shard,
+                             "keys": [list(k) for k in unit.keys]})
+        rows.sort(key=lambda r: r["task_id"])
+        manifest = {"look": args.look, "shards": count, "units": rows}
+        body = json.dumps(manifest, sort_keys=True)
+        manifest["provenance"] = provenance.collect(
+            inputs=inputs,
+            manifest_digest=hashlib.sha256(body.encode()).hexdigest()[:16])
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "manifest.json").write_text(json.dumps(manifest, sort_keys=True))
+        print(json.dumps({"shards": list(range(count)), "count": count,
+                          "units": len(rows),
+                          "carried": 0 if ledger is None
+                          else ledger.settled_count()}))
+        return 0
+
+    if args.mode == "run":
+        manifest = json.loads(
+            pathlib.Path(args.manifest).read_text())
+        if manifest["look"] != args.look:
+            raise SystemExit(f"манифест на ступень {manifest['look']}, "
+                             f"запрошена {args.look}")
+        mine = [u for u in manifest["units"] if u["shard"] == args.shard]
+        if not mine:
+            raise SystemExit(f"в манифесте нет юнитов шарда {args.shard}")
+        known = scheduler.arms()
+        out.mkdir(parents=True, exist_ok=True)
+        for row in mine:
+            unit = S.Unit(arm=row["arm"], look=row["look"],
+                          keys=tuple(tuple(k) for k in row["keys"]),
+                          weight=0.0)
+            if unit.task_id != row["task_id"]:
+                raise SystemExit(
+                    f"манифест объявил {row['task_id']}, а состав юнита даёт "
+                    f"{unit.task_id}: происхождение нарушено")
+            arm = known[unit.arm]
+            started = time.perf_counter()
+            results = S.run_unit(unit, rate=arm["rate"], c_rate=arm["c_rate"],
+                                 c_shift=arm["c_shift"], regime=arm["regime"],
+                                 magnitude=arm["magnitude"])
+            payload = {"task_id": unit.task_id, "arm": unit.arm,
+                       "look": unit.look,
+                       "keys": [list(k) for k in unit.keys],
+                       "endpoints": _encode(results)}
+            payload["digest"] = hashlib.sha256(
+                json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
+            payload["seconds"] = round(time.perf_counter() - started, 1)
+            payload["peak_rss_mb"] = round(
+                resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+            (out / f"{unit.task_id}.json").write_text(
+                json.dumps(payload, sort_keys=True))
+            print(f"{unit.task_id} {unit.arm} {payload['seconds']}s "
+                  f"{payload['digest']}", flush=True)
+        return 0
+
+    # reduce
+    ledger, inputs = _ledger_from(list(args.prior) + [out])
+    final = ledger.finalise(args.look)
+    cells = reduction.cells_from(final)
+    evaluable = sum(1 for c in cells if c["evaluable"])
+    summary = {
+        "look": args.look,
+        "looks_absorbed": list(ledger.looks_absorbed),
+        "endpoints_seen": ledger.seen_count(),
+        "endpoints_settled": ledger.settled_count(),
+        "ignored_because_already_settled": ledger.ignored_because_already_settled,
+        "ledger_digest": ledger.digest(),
+        "cells": len(cells), "cells_evaluable": evaluable,
+        "inputs": inputs,
+    }
+    (out / "reduced.json").write_text(json.dumps(
+        {"summary": summary, "cells": cells}, sort_keys=True))
+    print(json.dumps(summary, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

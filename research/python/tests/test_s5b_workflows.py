@@ -73,7 +73,7 @@ class TimeoutsStayUnderThePlatformCapTests(unittest.TestCase):
         cap = S.GITHUB_JOB_MAX_HOURS * 60
         for path in (SMOKE, STAGE1):
             for name, job in _load(path)["jobs"].items():
-                if name in ("plan", "merge"):
+                if name == "plan":
                     continue
                 timeout = job.get("timeout-minutes")
                 self.assertIsNotNone(timeout, f"{path.name}:{name}")
@@ -120,8 +120,8 @@ class TheMatrixIsShapedByTheDocumentedLimitsTests(unittest.TestCase):
             self.assertIn("matrix.shard", name,
                           "имя артефакта обязано нести значение матрицы")
 
-    def test_the_merge_runs_even_when_a_shard_failed(self):
-        merge = _load(STAGE1)["jobs"]["merge"]
+    def test_the_reduce_runs_even_when_a_shard_failed(self):
+        merge = _load(STAGE1)["jobs"]["reduce"]
         self.assertIn("cancelled()", str(merge["if"]))
         download = [s for s in merge["steps"]
                     if s.get("uses", "").startswith("actions/download-artifact")]
@@ -233,26 +233,35 @@ class ScienceShaIsPinnedNotInheritedTests(unittest.TestCase):
         self.assertNotEqual(self._stage1()["env"]["SCIENCE_SHA"], PLACEHOLDER,
                             "заявка есть, а закреплён плейсхолдер")
 
-    def test_every_computing_job_checks_out_the_pinned_sha(self):
-        for name in ("compute", "merge"):
+    def test_every_computing_job_checks_out_both_pins(self):
+        """Наука и исполнение — РАЗНЫЕ пины, и оба закреплены.
+
+        Ни одно вычисляющее задание не смеет брать код с ветки: иначе
+        коммит-заявка молча менял бы то, чем считают.
+        """
+        for name in ("compute", "reduce"):
             job = self._stage1()["jobs"][name]
             refs = [step["with"]["ref"] for step in job["steps"]
                     if step.get("uses", "").startswith("actions/checkout")]
             self.assertTrue(refs, name)
+            self.assertIn("${{ env.SCIENCE_SHA }}", refs, name)
+            self.assertIn("${{ env.EXECUTION_SHA }}", refs, name)
             for ref in refs:
-                self.assertIn("SCIENCE_SHA", ref, (name, ref))
+                self.assertNotIn("github.sha", ref,
+                                 f"{name}: код взят с коммита-заявки")
 
     def test_the_plan_reads_the_request_from_the_branch_and_code_from_the_pin(self):
-        """Два checkout'а, и они РАЗНЫЕ по назначению."""
+        """Три checkout'а: заявка, наука, исполнение. Все в РАЗНЫЕ каталоги."""
         steps = [s for s in self._stage1()["jobs"]["plan"]["steps"]
                  if s.get("uses", "").startswith("actions/checkout")]
-        self.assertEqual(len(steps), 2)
+        self.assertEqual(len(steps), 3)
         refs = {s["with"]["ref"]: s["with"]["path"] for s in steps}
         self.assertIn("${{ github.sha }}", refs, "заявка не читается с ветки")
-        pinned = [r for r in refs if "SCIENCE_SHA" in r]
-        self.assertEqual(len(pinned), 1, "научный код не закреплён")
-        self.assertNotEqual(refs["${{ github.sha }}"], refs[pinned[0]],
-                            "оба checkout'а в один каталог — затрут друг друга")
+        self.assertIn("${{ env.SCIENCE_SHA }}", refs, "наука не закреплена")
+        self.assertIn("${{ env.EXECUTION_SHA }}", refs,
+                      "исполнение не закреплено")
+        self.assertEqual(len(set(refs.values())), 3,
+                         "checkout'ы делят каталог — затрут друг друга")
 
 
 @needs_yaml
@@ -319,11 +328,19 @@ def _run_blocks(path: pathlib.Path):
     return out
 
 
+#: модуль CLI -> его исходник. Флаги и режимы читаются из ОРИГИНАЛА, а не
+#: переписываются в тест: копия разошлась бы с ним молча.
+CLI_SOURCES = {
+    "tools.s5b_stage1_cli": "research/python/tools/s5b_stage1_cli.py",
+    "s5b_execution.cli": "execution/s5b_execution/cli.py",
+}
+
+
 def _cli_commands(text: str):
     """Вызовы CLI из текста `run:` так, как их увидит оболочка."""
     joined = text.replace("\\\n", " ")
     for raw in joined.splitlines():
-        if "s5b_stage1_cli" not in raw:
+        if not any(m in raw for m in CLI_SOURCES):
             continue
         cut = raw[raw.index("python3"):]
         if raw[:raw.index("python3")].endswith("$("):
@@ -344,9 +361,16 @@ class WorkflowCliContract(unittest.TestCase):
     #: флаги, объявленные самим CLI, читаются из его исходника, а не
     #: переписываются сюда: копия разошлась бы с оригиналом молча
     @staticmethod
-    def _declared_flags() -> set[str]:
+    def _module_of(command: str) -> str:
+        for module in CLI_SOURCES:
+            if module in command:
+                return module
+        raise AssertionError(f"неизвестный CLI в {command!r}")
+
+    @classmethod
+    def _declared_flags(cls, module: str) -> set[str]:
         import re
-        src = (ROOT / "research/python/tools/s5b_stage1_cli.py").read_text()
+        src = (ROOT / CLI_SOURCES[module]).read_text()
         return set(re.findall(r'add_argument\("(--[a-z-]+)"', src))
 
     def test_a_multiline_run_is_always_a_block_scalar(self):
@@ -384,28 +408,34 @@ class WorkflowCliContract(unittest.TestCase):
     def test_every_cli_flag_is_one_the_cli_declares(self):
         """Флаг, которого CLI не знает, — отказ с кодом 2 и потерянный прогон."""
         import shlex
-        declared = self._declared_flags()
-        self.assertIn("--look", declared)
         for path in (STAGE1, SMOKE):
             for _, text, _ in _run_blocks(path):
                 for command in _cli_commands(text):
+                    module = self._module_of(command)
+                    declared = self._declared_flags(module)
+                    self.assertIn("--look", declared, module)
                     for token in shlex.split(command):
                         if token.startswith("--"):
                             self.assertIn(
                                 token, declared,
-                                f"{path.name}: CLI не объявляет {token!r}")
+                                f"{path.name}: {module} не объявляет {token!r}")
 
     def test_the_mode_word_is_one_the_cli_accepts(self):
         """Режим — позиционный аргумент с закрытым списком значений."""
         import re
         import shlex
-        src = (ROOT / "research/python/tools/s5b_stage1_cli.py").read_text()
-        choices = set(re.findall(r'"(plan|run|merge|smoke)"', src))
-        self.assertEqual(choices, {"plan", "run", "merge", "smoke"})
         for path in (STAGE1, SMOKE):
             for _, text, _ in _run_blocks(path):
                 for command in _cli_commands(text):
+                    module = self._module_of(command)
+                    src = (ROOT / CLI_SOURCES[module]).read_text()
+                    line = re.search(r'add_argument\("mode",\s*choices=\(([^)]*)\)',
+                                     src, re.S)
+                    self.assertIsNotNone(line, module)
+                    choices = set(re.findall(r'"([a-z]+)"', line.group(1)))
+                    self.assertTrue(choices, module)
                     parts = shlex.split(command)
-                    mode = parts[parts.index("tools.s5b_stage1_cli") + 1]
+                    mode = parts[parts.index(module) + 1]
                     self.assertIn(mode, choices,
-                                  f"{path.name}: режим {mode!r} не объявлен")
+                                  f"{path.name}: режим {mode!r} не объявлен "
+                                  f"модулем {module}")

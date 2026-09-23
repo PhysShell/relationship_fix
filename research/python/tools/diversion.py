@@ -377,18 +377,86 @@ DIVERSIONS = (
      "    return (treated_low.high - control_high.low,\n"
      "            treated_high.low - control_low.high)",
      ["tests.test_s5b_escalation"]),
+    ("ранний tau подменяется поздним просмотром",
+     "../../execution/s5b_execution/ledger.py",
+     "        if identity in self._settled:\n"
+     "            # УЖЕ ОСТАНОВИЛСЯ. Свежая копия не заменяет ничего.\n"
+     "            self.ignored_because_already_settled += 1\n"
+     "            return\n",
+     "        if identity in self._settled:\n"
+     "            self.ignored_because_already_settled += 1\n",
+     ["tests.test_s5b_execution"]),
+    ("ступени впитываются в любом порядке",
+     "../../execution/s5b_execution/ledger.py",
+     "        if self._absorbed and look <= self._absorbed[-1]:\n"
+     "            raise LedgerRefused(",
+     "        if False:\n"
+     "            raise LedgerRefused(",
+     ["tests.test_s5b_execution"]),
+    ("огибающая стоимости заменена средним",
+     "../../execution/s5b_execution/cost.py",
+     "    at_fit = max(a + b * max(rate, 0.0) for a, b in RUNNER_FITS)",
+     "    at_fit = (sum(a + b * max(rate, 0.0) for a, b in RUNNER_FITS)\n"
+     "              / len(RUNNER_FITS))",
+     ["tests.test_s5b_execution"]),
+    ("неизмеренная экономия деления ключей подставлена константой",
+     "../../execution/s5b_execution/cost.py",
+     "UNDIVIDED_SHARE: float | None = None",
+     "UNDIVIDED_SHARE: float | None = 0.05",
+     ["tests.test_s5b_execution"]),
+    ("бюджет шарда возвращён к пробитому",
+     "../../execution/s5b_execution/cost.py",
+     "SHARD_BUDGET_HOURS = 2.75",
+     "SHARD_BUDGET_HOURS = 4.0",
+     ["tests.test_s5b_execution"]),
+    ("полнота набора выводится из приехавшего, а не из манифеста",
+     "../../execution/s5b_execution/cli.py",
+     "    expected = _expected_units(directory, look)\n"
+     "    unit_of = {u.task_id: u for u in expected}",
+     "    expected = [S.Unit(arm=p[\"arm\"], look=p[\"look\"],\n"
+     "                      keys=tuple(tuple(k) for k in p[\"keys\"]),\n"
+     "                      weight=0.0) for p in payloads]\n"
+     "    unit_of = {u.task_id: u for u in expected}",
+     ["tests.test_s5b_execution"]),
     ("многострочный run: снова плоский скаляр",
      "../../.github/workflows/s5b-stage1.yml",
      "        run: |\n"
-     "          python3 -B -m tools.s5b_stage1_cli merge \\\n"
-     "            --look ${{ needs.plan.outputs.look }} --out ../../out",
-     "        run: python3 -B -m tools.s5b_stage1_cli merge \\\n"
-     "               --look ${{ needs.plan.outputs.look }} --out ../../out",
+     "          python3 -B -m s5b_execution.cli run \\\n"
+     "            --look ${{ needs.plan.outputs.look }} \\\n",
+     "        run: python3 -B -m s5b_execution.cli run \\\n"
+     "            --look ${{ needs.plan.outputs.look }} \\\n",
      ["tests.test_s5b_workflows"]),
     ("воркфлоу зовёт флаг, которого у CLI нет",
      "../../.github/workflows/s5b-stage1.yml",
-     "            --look ${{ needs.plan.outputs.look }} --out ../../out",
-     "            --step ${{ needs.plan.outputs.look }} --out ../../out",
+     "            --manifest plan/manifest.json \\\n",
+     "            --plan plan/manifest.json \\\n",
+     ["tests.test_s5b_workflows"]),
+    ("вычисляющее задание берёт код с коммита-заявки",
+     "../../.github/workflows/s5b-stage1.yml",
+     "  compute:\n"
+     "    needs: plan\n"
+     "    runs-on: ubuntu-latest\n"
+     "    timeout-minutes: 350\n"
+     "    strategy:\n"
+     "      fail-fast: false\n"
+     "      matrix:\n"
+     "        shard: ${{ fromJSON(needs.plan.outputs.shards) }}\n"
+     "    steps:\n"
+     "      - uses: actions/checkout@v7\n"
+     "        with:\n"
+     "          ref: ${{ env.SCIENCE_SHA }}\n",
+     "  compute:\n"
+     "    needs: plan\n"
+     "    runs-on: ubuntu-latest\n"
+     "    timeout-minutes: 350\n"
+     "    strategy:\n"
+     "      fail-fast: false\n"
+     "      matrix:\n"
+     "        shard: ${{ fromJSON(needs.plan.outputs.shards) }}\n"
+     "    steps:\n"
+     "      - uses: actions/checkout@v7\n"
+     "        with:\n"
+     "          ref: ${{ github.sha }}\n",
      ["tests.test_s5b_workflows"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
