@@ -34,7 +34,8 @@ def arms() -> dict[str, dict]:
     return {a["tag"]: a for a in S.production_arms()}
 
 
-def units_for(look: int, ledger: Ledger | None = None) -> list:
+def units_for(look: int, ledger: Ledger | None = None,
+              skip: set[str] | None = None) -> list:
     """Юниты ступени `look`, отфильтрованные по реестру.
 
     Без реестра — вся сетка (так считалась первая ступень). С реестром
@@ -57,6 +58,11 @@ def units_for(look: int, ledger: Ledger | None = None) -> list:
             if ledger is not None and not ledger.unit_is_needed(
                     tag, keys, FRACTIONS):
                 continue
+            unit = S.Unit(arm=tag, look=look, keys=keys,
+                          weight=cost.seconds_for(arm["effective_rate"], look)
+                          * (len(keys) / len(KEYS)))
+            if skip and unit.task_id in skip:
+                continue                      # уже посчитан прошлым прогоном
             out.append(S.Unit(arm=tag, look=look, keys=keys,
                               weight=cost.seconds_for(
                                   arm["effective_rate"], look)
@@ -64,27 +70,70 @@ def units_for(look: int, ledger: Ledger | None = None) -> list:
     return out
 
 
-def shards_needed(units) -> int:
-    """Наименьшее число заданий, при котором раскладка ВЛЕЗАЕТ в бюджет.
+def makespan(buckets, max_parallel: int) -> float:
+    """Предсказанное время ПРОГОНА при `max_parallel` одинаковых слотах.
 
-    Выводится проверкой настоящей раскладки, а не формулой: юниты
-    неделимы, и формула уже однажды дала 4.12 ч при бюджете 4.0.
+    Список заданий раскладывается на слоты жадно: очередное задание уходит
+    в слот, освобождающийся раньше всех. Это ровно то, что делает GitHub,
+    и ровно то, чего не знает «время худшего задания».
+
+    Считать число волн как `ceil(n / parallel) * budget` — грубее: волны
+    предполагают, что все задания одинаковы. LPT делает их почти
+    одинаковыми, но не точно, и на хвосте разница видна.
+    """
+    if max_parallel < 1:
+        raise PlanRefused("одновременных заданий должно быть хотя бы одно")
+    slots = [0.0] * max_parallel
+    costs = sorted((sum(u.weight for u in b) + cost.JOB_OVERHEAD_SECONDS
+                    for b in buckets), reverse=True)
+    for c in costs:
+        i = min(range(max_parallel), key=lambda k: slots[k])
+        slots[i] += c
+    return max(slots)
+
+
+def shards_needed(units, max_parallel: int = None) -> int:
+    """Число заданий, минимизирующее предсказанный MAKESPAN.
+
+    Не «наименьшее, при котором влезает в бюджет». Эти две задачи
+    расходятся: мельче дробить — каждое задание безопаснее, но заданий
+    больше, и при ограниченном числе слотов прогон идёт ДОЛЬШЕ.
+
+    Ограничения, все обязательные:
+        каждое задание <= бюджета шарда;
+        заданий <= потолка матрицы;
+        одновременность <= объявленного max_parallel (его ставит
+            `strategy.max-parallel`, а не наша арифметика).
+
+    Юниты неделимы, поэтому и здесь проверяется НАСТОЯЩАЯ раскладка, а не
+    формула: формула уже однажды дала 4.12 ч при бюджете 4.0.
     """
     if not units:
         raise PlanRefused("юнитов нет: считать нечего")
+    if max_parallel is None:
+        max_parallel = cost.MAX_PARALLEL
     budget = cost.SHARD_BUDGET_HOURS * 3600.0
     heaviest = max(u.weight for u in units)
     if heaviest > budget:
         raise PlanRefused(
             f"юнит весом {heaviest/3600:.2f} ч не влезает в бюджет "
             f"{cost.SHARD_BUDGET_HOURS} ч и неделим")
-    for count in range(1, S.GITHUB_MATRIX_MAX_JOBS + 1):
+    best = None
+    for count in range(1, min(len(units), S.GITHUB_MATRIX_MAX_JOBS) + 1):
         buckets = S.assign(units, count)
-        if all(sum(u.weight for u in b) <= budget for b in buckets):
-            return count
-    raise PlanRefused(
-        f"{len(units)} юнитов не раскладываются в {S.GITHUB_MATRIX_MAX_JOBS} "
-        f"заданий при бюджете {cost.SHARD_BUDGET_HOURS} ч")
+        if any(sum(u.weight for u in b) > budget for b in buckets):
+            continue
+        span = makespan(buckets, max_parallel)
+        # при равном makespan берётся МЕНЬШЕЕ число заданий: лишние
+        # задания стоят очередей и чужих слотов, ничего не ускоряя
+        if best is None or span < best[0] - 1e-9:
+            best = (span, count)
+    if best is None:
+        raise PlanRefused(
+            f"{len(units)} юнитов не раскладываются в "
+            f"{S.GITHUB_MATRIX_MAX_JOBS} заданий при бюджете "
+            f"{cost.SHARD_BUDGET_HOURS} ч")
+    return best[1]
 
 
 def check_platform(buckets) -> None:

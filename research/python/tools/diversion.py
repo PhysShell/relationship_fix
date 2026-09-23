@@ -46,6 +46,63 @@ def _clear_caches() -> None:
             shutil.rmtree(cache, ignore_errors=True)
 
 
+def _live_harness_pids() -> list[int]:
+    """PID'ы процессов, ДЕЙСТВИТЕЛЬНО исполняющих этот harness.
+
+    Не `pgrep -f`: он ищет подстроку во всей командной строке и потому
+    находит собственную оболочку — её `bash -c '... tools/diversion.py ...'`
+    содержит имя файла целиком. Первая версия стража отказывала при каждом
+    запуске именно поэтому.
+
+    Не родословная: при запуске через `( ... & )` процесс переподчиняется
+    init РАНЬШЕ, чем страж успевает посмотреть предков, и оболочка
+    перестаёт быть предком. Вторая версия из-за этого отвергала сама себя.
+
+    Здесь разбирается `argv`: у настоящего процесса harness'а ОТДЕЛЬНЫЙ
+    аргумент оканчивается на `diversion.py`, а `argv[0]` — интерпретатор.
+    Без второго условия флаг получает обёртка `timeout`, у которой такой
+    аргумент тоже есть. Все три ошибки найдены запуском, не рассуждением.
+    """
+    mine = os.getpid()
+    out = []
+    for entry in pathlib.Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        if pid == mine:
+            continue
+        try:
+            argv = (entry / "cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue                       # процесс ушёл, пока читали
+        if not argv or not argv[0]:
+            continue
+        if b"python" not in argv[0].rsplit(b"/", 1)[-1]:
+            continue
+        if any(a.endswith(b"diversion.py") for a in argv[1:] if a):
+            out.append(pid)
+    return sorted(out)
+
+
+def _refuse_if_another_run_is_live() -> None:
+    """Два harness'а одновременно портят и восстанавливают одни файлы.
+
+    23 сентября это произошло: забытый прогон с `timeout 1800` пережил
+    уведомление о завершении своей задачи, и полчаса показаний были про
+    гонку, а не про код — «после восстановления набор красный» и счётчик
+    якорей, менявшийся между тремя проверками подряд.
+
+    Уведомление сообщает о завершении ОБОЛОЧКИ, а не порождённого ею
+    процесса. Поэтому проверяется процесс.
+    """
+    others = _live_harness_pids()
+    if others:
+        raise SystemExit(
+            f"уже идёт прогон диверсий: {others}. Два harness'а правят одни "
+            f"файлы навстречу друг другу, и показания становятся про гонку, "
+            f"а не про код. Дождитесь или снимите тот процесс.")
+
+
 def run_tests(modules: list[str]) -> bool:
     """True, если набор зелёный, и исполнен ИМЕННО текущий исходник.
 
@@ -436,13 +493,6 @@ DIVERSIONS = (
      "        got = payload[\"digest\"]\n"
      "        if got != payload[\"digest\"]:",
      ["tests.test_s5b_execution"]),
-    ("руки сверяются с манифестом вместо замороженной сетки",
-     "../../execution/s5b_execution/cli.py",
-     "    canonical = {a[\"tag\"] for a in S.production_arms()}\n"
-     "    arrived = {p[\"arm\"] for p in payloads}",
-     "    arrived = {p[\"arm\"] for p in payloads}\n"
-     "    canonical = arrived",
-     ["tests.test_s5b_execution"]),
     ("родство якоря и заявки не доказывается",
      "../../execution/s5b_execution/guard.py",
      "    if done.returncode != 0:\n"
@@ -507,31 +557,73 @@ DIVERSIONS = (
      ["tests.test_s5b_workflows"]),
     ("вычисляющее задание берёт код с коммита-заявки",
      "../../.github/workflows/s5b-stage1.yml",
-     "  compute:\n"
-     "    needs: plan\n"
-     "    runs-on: ubuntu-latest\n"
-     "    timeout-minutes: 350\n"
-     "    strategy:\n"
-     "      fail-fast: false\n"
-     "      matrix:\n"
-     "        shard: ${{ fromJSON(needs.plan.outputs.shards) }}\n"
      "    steps:\n"
      "      - uses: actions/checkout@v7\n"
      "        with:\n"
-     "          ref: ${{ env.SCIENCE_SHA }}\n",
-     "  compute:\n"
-     "    needs: plan\n"
-     "    runs-on: ubuntu-latest\n"
-     "    timeout-minutes: 350\n"
-     "    strategy:\n"
-     "      fail-fast: false\n"
-     "      matrix:\n"
-     "        shard: ${{ fromJSON(needs.plan.outputs.shards) }}\n"
+     "          ref: ${{ env.SCIENCE_SHA }}\n"
+     "          path: science\n"
+     "      - uses: actions/checkout@v7\n"
+     "        with:\n"
+     "          ref: ${{ env.EXECUTION_SHA }}\n"
+     "          path: exec\n"
+     "      - uses: actions/setup-python@v7\n"
+     "        with:\n"
+     "          python-version: '3.11'\n"
+     "      - uses: actions/download-artifact@v8\n"
+     "        with:\n"
+     "          name: s5b-manifest-",
      "    steps:\n"
      "      - uses: actions/checkout@v7\n"
      "        with:\n"
-     "          ref: ${{ github.sha }}\n",
+     "          ref: ${{ github.sha }}\n"
+     "          path: science\n"
+     "      - uses: actions/checkout@v7\n"
+     "        with:\n"
+     "          ref: ${{ env.EXECUTION_SHA }}\n"
+     "          path: exec\n"
+     "      - uses: actions/setup-python@v7\n"
+     "        with:\n"
+     "          python-version: '3.11'\n"
+     "      - uses: actions/download-artifact@v8\n"
+     "        with:\n"
+     "          name: s5b-manifest-",
      ["tests.test_s5b_workflows"]),
+    ("ранний tau теряется при обороте через чекпойнт",
+     "../../execution/s5b_execution/ledger.py",
+     '                tau=row["tau"], payload=dict(row["payload"]))',
+     '                tau=max(data["looks_absorbed"]),\n'
+     '                payload=dict(row["payload"]))',
+     ["tests.test_s5b_execution"]),
+    ("чекпойнт принимается без сверки отпечатка",
+     "../../execution/s5b_execution/ledger.py",
+     '        got = out.digest()\n        if got != data["ledger_digest"]:',
+     '        got = out.digest()\n        if False:',
+     ["tests.test_s5b_execution"]),
+    ("переиспользуется часть чужого SCIENCE_SHA",
+     "../../execution/s5b_execution/resume.py",
+     "    if was != science_sha:", "    if False:",
+     ["tests.test_s5b_execution"]),
+    ("юнит, посчитанный дважды, молча принимается",
+     "../../execution/s5b_execution/resume.py",
+     "    both = sorted(set(reused) & set(fresh))", "    both = []",
+     ["tests.test_s5b_execution"]),
+    ("матрица снова забирает столько слотов, сколько найдёт",
+     "../../.github/workflows/s5b-stage1.yml",
+     "      max-parallel: 8\n", "",
+     ["tests.test_s5b_workflows"]),
+    ("предел параллелизма разошёлся с планировщиком",
+     "../../execution/s5b_execution/cost.py",
+     "MAX_PARALLEL = 8", "MAX_PARALLEL = 20",
+     ["tests.test_s5b_workflows"]),
+    ("запланированная рука вне замороженной сетки проходит",
+     "../../execution/s5b_execution/cli.py",
+     "    stray = sorted(scheduled - canonical)", "    stray = []",
+     ["tests.test_s5b_execution"]),
+    ("руки сверяются с приехавшим вместо замороженной сетки",
+     "../../execution/s5b_execution/cli.py",
+     '    canonical = {a["tag"] for a in S.production_arms()}',
+     '    canonical = {p["arm"] for p in payloads}',
+     ["tests.test_s5b_execution"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
@@ -541,6 +633,7 @@ DIVERSIONS = (
 
 
 def main() -> int:
+    _refuse_if_another_run_is_live()
     self_test()
     print("  самопроверка: внесённая правка видна, откат виден")
     for name, path, old, new, modules in DIVERSIONS:

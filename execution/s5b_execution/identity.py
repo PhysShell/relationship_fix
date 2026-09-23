@@ -22,7 +22,7 @@ LOOK_IS_NOT_PART_OF_IDENTITY = True
 #: Файлы каталога ступени, которые part-файлами НЕ являются. Список
 #: именно перечислен, а не заменён на «пропускать незнакомое»: иначе
 #: чужой или битый файл тихо выпал бы из проверки полноты.
-NOT_PART_FILES = ("manifest.json", "reduced.json")
+NOT_PART_FILES = ("manifest.json", "reduced.json", "checkpoint.json")
 
 
 #: Поля, из которых part-файл ИСХОДНО считал свой digest. `seconds` и

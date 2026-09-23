@@ -163,6 +163,62 @@ class Ledger:
                                  "status": INSUFFICIENT, "look": None}
         return out
 
+    # -- чекпойнт между ступенями ----------------------------------------
+
+    def to_checkpoint(self, *, canonical_arms, provenance: dict) -> dict:
+        """Полное состояние реестра для следующей ступени.
+
+        `reduced.json` несёт сводку и ячейки, но НЕ реестр. Этого хватало,
+        пока ступеней было две: реестр собирался заново из сырых частей
+        всех прошлых ступеней. На переходе 16000 -> 64000 это ломается —
+        сырые части 16000 не содержат концов, остановившихся на 4000, а
+        значит ранний `tau` неоткуда взять. Отсюда чекпойнт.
+
+        Хранится ровно то, что нельзя восстановить: у каждого
+        закрывшегося конца его `tau` и ЗАМОРОЖЕННЫЙ payload того просмотра.
+        """
+        return {
+            "version": 1,
+            "looks_absorbed": list(self._absorbed),
+            "settled": [
+                {"id": i.as_json(), "tau": s.tau, "payload": s.payload}
+                for i, s in sorted(self._settled.items(),
+                                   key=lambda kv: repr(kv[0].as_json()))],
+            "seen": [i.as_json() for i in
+                     sorted(self._seen, key=lambda i: repr(i.as_json()))],
+            "canonical_arms": sorted(canonical_arms),
+            "ignored_because_already_settled":
+                self.ignored_because_already_settled,
+            "ledger_digest": self.digest(),
+            "provenance": provenance,
+        }
+
+    @classmethod
+    def from_checkpoint(cls, data: dict) -> "Ledger":
+        """Реестр из чекпойнта, с проверкой отпечатка.
+
+        Отпечаток сверяется ПОСЛЕ восстановления: чекпойнт, чьё состояние
+        не даёт объявленного отпечатка, описывает не то, что несёт.
+        """
+        if data.get("version") != 1:
+            raise LedgerRefused(f"чекпойнт версии {data.get('version')!r}")
+        out = cls()
+        for row in data["settled"]:
+            arm, key, fraction = row["id"]
+            out._settled[EndpointId(arm, tuple(key), fraction)] = Settled(
+                tau=row["tau"], payload=dict(row["payload"]))
+        for arm, key, fraction in data["seen"]:
+            out._seen.add(EndpointId(arm, tuple(key), fraction))
+        out._absorbed = list(data["looks_absorbed"])
+        out.ignored_because_already_settled = int(
+            data.get("ignored_because_already_settled", 0))
+        got = out.digest()
+        if got != data["ledger_digest"]:
+            raise LedgerRefused(
+                f"чекпойнт объявляет отпечаток {data['ledger_digest']}, а "
+                f"состояние даёт {got}")
+        return out
+
     def digest(self) -> str:
         """Устойчивый отпечаток состояния. От порядка чтения не зависит."""
         rows = sorted(

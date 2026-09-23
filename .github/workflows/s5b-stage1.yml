@@ -31,6 +31,7 @@ jobs:
       prior_look: ${{ steps.request.outputs.prior_look }}
       prior_run: ${{ steps.request.outputs.prior_run }}
       prior_digest: ${{ steps.request.outputs.prior_digest }}
+      resume_run: ${{ steps.request.outputs.resume_run }}
       shards: ${{ steps.plan.outputs.shards }}
     steps:
       - uses: actions/checkout@v7
@@ -58,6 +59,8 @@ jobs:
           PRIOR_LOOK=$(grep -oP '^prior_look:\s*\K[0-9]+' "$FILE" | head -1 || true)
           PRIOR_RUN=$(grep -oP '^prior_run:\s*\K[0-9]+' "$FILE" | head -1 || true)
           PRIOR_DIGEST=$(grep -oP '^prior_digest:\s*\K[0-9a-f]+' "$FILE" | head -1 || true)
+          RESUME_RUN=$(grep -oP '^resume_run:\s*\K[0-9]+' "$FILE" | head -1 || true)
+          echo "resume_run=$RESUME_RUN" >> "$GITHUB_OUTPUT"
           PIN=$(grep -oP '^execution_pin:\s*\K[0-9a-f]{40}' "$FILE" | head -1)
           WF=$(grep -oP '^workflow_sha256:\s*\K[0-9a-f]{64}' "$FILE" | head -1)
           if [ -z "$PIN" ] || [ -z "$WF" ]; then
@@ -94,6 +97,21 @@ jobs:
           name: s5b-manifest-${{ steps.request.outputs.prior_look }}
           run-id: ${{ steps.request.outputs.prior_run }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.request.outputs.resume_run != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-${{ steps.request.outputs.look }}-*
+          merge-multiple: true
+          run-id: ${{ steps.request.outputs.resume_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.request.outputs.resume_run != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          name: s5b-manifest-${{ steps.request.outputs.look }}
+          run-id: ${{ steps.request.outputs.resume_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - id: plan
         env:
           PYTHONPATH: science/research/python:exec/execution
@@ -105,6 +123,9 @@ jobs:
           PRIOR=""
           if [ -n "${{ steps.request.outputs.prior_run }}" ]; then
             PRIOR="--prior prior"
+          fi
+          if [ -n "${{ steps.request.outputs.resume_run }}" ]; then
+            PRIOR="$PRIOR --resume resumed"
           fi
           OUT=$(python3 -B -m s5b_execution.cli plan \
                   --look ${{ steps.request.outputs.look }} $PRIOR \
@@ -129,6 +150,18 @@ jobs:
     timeout-minutes: 350
     strategy:
       fail-fast: false
+      # НЕ ЗАБИРАТЬ ВЕСЬ ОБЩИЙ РЕСУРС. Предел одновременных заданий даётся
+      # на ПЛАН, а не на репозиторий (Free 20, Pro 40), и 23 сентября 41
+      # задание S5b заняло все 20 слотов аккаунта: пилот в соседнем
+      # репозитории простоял в очереди, не начавшись. max-parallel
+      # ограничивает одновременность ВНУТРИ этой матрицы — «will run a
+      # maximum of two jobs at a time, even if there are runners available
+      # to run all six jobs at once» (docs GitHub).
+      #
+      # Литерал, а не выражение: поддержку выражений документация не
+      # утверждает, а опираться на непроверенную возможность здесь нечего.
+      # Совпадение с cost.MAX_PARALLEL держит гейт.
+      max-parallel: 8
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
@@ -206,6 +239,21 @@ jobs:
           name: s5b-manifest-${{ needs.plan.outputs.prior_look }}
           run-id: ${{ needs.plan.outputs.prior_run }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ needs.plan.outputs.resume_run != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-${{ needs.plan.outputs.look }}-*
+          merge-multiple: true
+          run-id: ${{ needs.plan.outputs.resume_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ needs.plan.outputs.resume_run != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          name: s5b-manifest-${{ needs.plan.outputs.look }}
+          run-id: ${{ needs.plan.outputs.resume_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - env:
           PYTHONPATH: science/research/python:exec/execution
           SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
@@ -216,6 +264,9 @@ jobs:
           if [ -n "${{ needs.plan.outputs.prior_run }}" ]; then
             PRIOR="--prior prior"
           fi
+          if [ -n "${{ needs.plan.outputs.resume_run }}" ]; then
+            PRIOR="$PRIOR --resume resumed"
+          fi
           python3 -B -m s5b_execution.cli reduce \
             --look ${{ needs.plan.outputs.look }} $PRIOR \
             --prior-run "${{ needs.plan.outputs.prior_run }}" \
@@ -224,4 +275,6 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: s5b-reduced-${{ needs.plan.outputs.look }}
-          path: out/reduced.json
+          path: |
+            out/reduced.json
+            out/checkpoint.json

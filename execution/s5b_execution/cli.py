@@ -22,7 +22,7 @@ import time
 from simulation import s5b_prereg as P
 from simulation import s5b_shard as S
 
-from . import cost, guard, provenance, reduction, scheduler
+from . import cost, guard, provenance, reduction, resume, scheduler
 from .identity import load_unit_payloads
 from .ledger import Ledger
 
@@ -53,21 +53,35 @@ def _expected_units(directory, look: int):
             for u in manifest["units"]]
 
 
-def _verify_canonical_arms(directory, payloads) -> set[str]:
-    """Руки сетки берутся из ЗАМОРОЖЕННОЙ науки, а не из манифеста.
+def _verify_arms(directory, payloads, scheduled: set[str]) -> None:
+    """Три РАЗНЫХ множества рук, и их нельзя сливать.
 
-    Утверждение, НЕЗАВИСИМОЕ от манифеста. Иначе ошибочный манифест и
-    ошибочный набор частей подтвердили бы друг друга: оба описывали бы
-    одно и то же заблуждение, и согласие выглядело бы как проверка.
+        canonical  вся сетка замороженной науки — что вообще существует;
+        scheduled  что объявил манифест ЭТОЙ ступени;
+        arrived    что реально приехало.
+
+    Требование `arrived == canonical` было верно ровно до тех пор, пока
+    лестница считала всю сетку на каждой ступени. После остановки это
+    неверно: рука, все концы которой закрылись, законно не планируется
+    дальше, и её отсутствие — правильная работа реестра, а не пропажа.
+
+    Проверяется поэтому: `arrived == scheduled` (ничего не потеряно и
+    ничего лишнего) и `scheduled` подмножество `canonical` (ничего
+    выдуманного). Каноническое множество берётся из ЗАМОРОЖЕННОЙ науки и
+    остаётся утверждением, независимым от манифеста.
     """
     canonical = {a["tag"] for a in S.production_arms()}
-    arrived = {p["arm"] for p in payloads}
-    if arrived != canonical:
+    stray = sorted(scheduled - canonical)
+    if stray:
         raise SystemExit(
-            f"{directory}: руки не совпали с сеткой замороженной науки; "
-            f"нет {sorted(canonical - arrived)[:3]}, лишние "
-            f"{sorted(arrived - canonical)[:3]}")
-    return canonical
+            f"{directory}: манифест запланировал руки вне сетки замороженной "
+            f"науки: {stray[:3]}")
+    arrived = {p["arm"] for p in payloads}
+    if arrived != scheduled:
+        raise SystemExit(
+            f"{directory}: приехавшие руки не совпали с запланированными; "
+            f"нет {sorted(scheduled - arrived)[:3]}, лишние "
+            f"{sorted(arrived - scheduled)[:3]}")
 
 
 def _verify_with_frozen_merge(directory, look: int, payloads) -> int:
@@ -80,12 +94,29 @@ def _verify_with_frozen_merge(directory, look: int, payloads) -> int:
     """
     expected = _expected_units(directory, look)
     unit_of = {u.task_id: u for u in expected}
+    _verify_arms(directory, payloads, {u.arm for u in expected})
     missing = [p["task_id"] for p in payloads if p["task_id"] not in unit_of]
     if missing:
         raise SystemExit(f"{directory}: файлы вне манифеста: {missing}")
     for arm in sorted({u.arm for u in expected}):
         reduction.merge_arm(arm, look, payloads, expected, unit_of)
     return len(expected)
+
+
+def _prior_state(args) -> tuple[Ledger | None, dict]:
+    """Состояние прошлых ступеней: из ЧЕКПОЙНТА либо из сырых частей.
+
+    Чекпойнт предпочтительнее и на 64000 обязателен: сырые части 16000 не
+    содержат концов, остановившихся на 4000, поэтому собрать из них
+    полный реестр нельзя в принципе.
+    """
+    if args.checkpoint:
+        data = json.loads(pathlib.Path(args.checkpoint).read_text())
+        led = Ledger.from_checkpoint(data)
+        return led, {args.checkpoint: data.get("ledger_digest", "")}
+    if args.prior:
+        return _ledger_from(args.prior, args.prior_digest)
+    return None, {}
 
 
 def _ledger_from(prior_dirs, expected_digest: str = "") -> tuple[Ledger, dict]:
@@ -106,7 +137,6 @@ def _ledger_from(prior_dirs, expected_digest: str = "") -> tuple[Ledger, dict]:
         loaded.append((looks.pop(), payloads, directory))
     for index, (look, payloads, directory) in enumerate(
             sorted(loaded, key=lambda t: t[0])):
-        _verify_canonical_arms(directory, payloads)
         _verify_with_frozen_merge(directory, look, payloads)
         got = provenance.digest_of(payloads)
         if index == 0 and expected_digest and got != expected_digest:
@@ -140,6 +170,10 @@ def main(argv=None) -> int:
     parser.add_argument("--workflow", default="")
     parser.add_argument("--workflow-sha256", default="")
     parser.add_argument("--science", default="")
+    parser.add_argument("--resume", default="",
+                        help="каталог частей прерванного прогона ЭТОЙ ступени")
+    parser.add_argument("--checkpoint", default="",
+                        help="чекпойнт реестра предыдущей ступени")
     args = parser.parse_args(argv)
     out = pathlib.Path(args.out)
 
@@ -167,9 +201,18 @@ def main(argv=None) -> int:
         if args.science:
             checks["science_modules"] = guard.assert_science_comes_from(
                 args.science)
-        ledger, inputs = (_ledger_from(args.prior, args.prior_digest)
-                          if args.prior else (None, {}))
-        units = scheduler.units_for(args.look, ledger)
+        ledger, inputs = _prior_state(args)
+        done: set[str] = set()
+        if args.resume:
+            got = resume.completed(args.resume, look=args.look,
+                                   science_sha=os.environ.get("SCIENCE_SHA", ""))
+            done = set(got)
+            checks["reused_task_ids"] = len(done)
+        units = scheduler.units_for(args.look, ledger, skip=done)
+        if not units:
+            raise SystemExit(
+                f"все юниты ступени {args.look} уже посчитаны прошлым "
+                f"прогоном: считать нечего, сразу reduce")
         count = scheduler.shards_needed(units)
         buckets = S.assign(units, count)
         scheduler.check_platform(buckets)
@@ -252,7 +295,25 @@ def main(argv=None) -> int:
     # reduce
     if args.science:
         guard.assert_science_comes_from(args.science)
-    ledger, inputs = _ledger_from(list(args.prior) + [out], args.prior_digest)
+    if args.resume:
+        reused = resume.completed(args.resume, look=args.look,
+                                  science_sha=os.environ.get("SCIENCE_SHA", ""))
+        fresh = {p["task_id"]: p for p in load_unit_payloads(out)}
+        merged = resume.merge_parts(reused, fresh)
+        for tid, payload in reused.items():
+            (out / f"{tid}.json").write_text(json.dumps(payload, sort_keys=True))
+        print(f"переиспользовано {len(reused)}, посчитано заново {len(fresh)}, "
+              f"всего {len(merged)}")
+    if args.checkpoint:
+        ledger = Ledger.from_checkpoint(
+            json.loads(pathlib.Path(args.checkpoint).read_text()))
+        payloads = load_unit_payloads(out)
+        _verify_with_frozen_merge(out, args.look, payloads)
+        ledger.absorb(args.look, payloads)
+        inputs = {str(out): provenance.digest_of(payloads)}
+    else:
+        ledger, inputs = _ledger_from(list(args.prior) + [out],
+                                      args.prior_digest)
     final = ledger.finalise(args.look)
     cells = reduction.cells_from(final)
     evaluable = sum(1 for c in cells if c["evaluable"])
@@ -266,7 +327,18 @@ def main(argv=None) -> int:
         "cells": len(cells), "cells_evaluable": evaluable,
         "inputs": inputs,
     }
-    body = json.dumps({"summary": summary, "cells": cells}, sort_keys=True)
+    # Отпечаток ВЫХОДА берётся от НАУЧНОГО результата: ячейки и реестр.
+    #
+    # Прежде он считался от всей сводки, а та несёт `inputs`, ключами
+    # которых служат ПУТИ каталогов. Тот же результат, собранный из другого
+    # каталога, давал другой отпечаток — и «частичный + возобновление»
+    # расходился с непрерывным прогоном при побайтово одинаковой науке.
+    # Отпечаток, меняющийся от переноса каталога, отпечатком результата не
+    # является.
+    body = json.dumps({"cells": cells,
+                       "ledger_digest": summary["ledger_digest"],
+                       "endpoints_settled": summary["endpoints_settled"]},
+                      sort_keys=True)
     summary["provenance"] = {
         "science_sha": os.environ.get("SCIENCE_SHA", ""),
         "execution_sha": os.environ.get("EXECUTION_SHA", ""),
@@ -280,6 +352,11 @@ def main(argv=None) -> int:
     }
     (out / "reduced.json").write_text(json.dumps(
         {"summary": summary, "cells": cells}, sort_keys=True))
+    # ЧЕКПОЙНТ: без него следующая ступень не восстановит ранние tau
+    (out / "checkpoint.json").write_text(json.dumps(
+        ledger.to_checkpoint(
+            canonical_arms={a["tag"] for a in S.production_arms()},
+            provenance=summary["provenance"]), sort_keys=True))
     print(json.dumps(summary, sort_keys=True))
     return 0
 

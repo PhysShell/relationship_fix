@@ -393,27 +393,28 @@ class ManifestIsTheOnlySourceOfLayoutTests(unittest.TestCase):
     def test_a_unit_declared_but_never_delivered_is_refused(self):
         """Ожидаемое берётся из МАНИФЕСТА, а не из приехавшего.
 
-        Вывести ожидаемое из полученного значило бы сравнить набор сам с
-        собой: проверка полноты проходила бы всегда. Гейт поведенческий
-        намеренно — его текстовая версия диверсию ПРОПУСТИЛА, потому что
-        подмена оставила docstring на месте.
+        Одна рука, два юнита по половине ключей — приезжает один. Ключи
+        руки покрыты наполовину, и замороженное слияние обязано отказать.
+        Это ровно тот путь, который впервые заработает на 64000.
         """
         from s5b_execution import cli
         from simulation import s5b_shard as S
         keys = tuple(scheduler.KEYS)
-        came = S.Unit(arm="armA", look=4000, keys=keys, weight=0.0)
-        never = S.Unit(arm="armB", look=4000, keys=keys, weight=0.0)
+        half = len(keys) // 2
+        # настоящий тег сетки: выдуманный отвергнет гейт канонических рук
+        tag = sorted(a["tag"] for a in S.production_arms())[0]
+        a = S.Unit(arm=tag, look=4000, keys=keys[:half], weight=0.0)
+        b = S.Unit(arm=tag, look=4000, keys=keys[half:], weight=0.0)
         with tempfile.TemporaryDirectory() as tmp:
             where = pathlib.Path(tmp)
             (where / "manifest.json").write_text(json.dumps({
                 "look": 4000, "shards": 1, "units": [
-                    {"task_id": u.task_id, "arm": u.arm, "look": 4000,
-                     "shard": 0, "keys": [list(k) for k in keys]}
-                    for u in (came, never)]}))
-            (where / f"{came.task_id}.json").write_text(json.dumps(
-                _unit(came.task_id, "armA", 4000, [], keys)))
+                    {"task_id": u.task_id, "arm": tag, "look": 4000,
+                     "shard": 0, "keys": [list(k) for k in u.keys]}
+                    for u in (a, b)]}))
+            (where / f"{a.task_id}.json").write_text(json.dumps(
+                _unit(a.task_id, tag, 4000, [], a.keys)))
             payloads = load_unit_payloads(where)
-            self.assertEqual(len(payloads), 1)
             with self.assertRaises(Exception) as caught:
                 cli._verify_with_frozen_merge(where, 4000, payloads)
             self.assertIn("не хватает юнитов", str(caught.exception))
@@ -660,21 +661,256 @@ class TheAncestryIsProvenBeforeTheDiffTests(unittest.TestCase):
             self.assertEqual(guard.changed_paths(tmp, base, head), ["b.txt"])
 
 
-class TheCanonicalArmSetComesFromScienceTests(unittest.TestCase):
-    """Манифест и части не должны подтверждать друг друга при общей ошибке."""
+class ThreeArmSetsAreNotOneTests(unittest.TestCase):
+    """canonical / scheduled / arrived — разные множества."""
 
-    def test_a_missing_arm_is_caught_against_the_frozen_grid(self):
+    def test_a_scheduled_arm_outside_the_frozen_grid_is_refused(self):
+        from s5b_execution import cli
+        with self.assertRaises(SystemExit) as caught:
+            cli._verify_arms("где-то", [{"arm": "выдуманная"}],
+                             {"выдуманная"})
+        self.assertIn("вне сетки замороженной науки", str(caught.exception))
+
+    def test_a_scheduled_arm_that_never_arrived_is_refused(self):
+        from s5b_execution import cli
+        from simulation import s5b_shard as S
+        tags = sorted(a["tag"] for a in S.production_arms())[:2]
+        with self.assertRaises(SystemExit) as caught:
+            cli._verify_arms("где-то", [{"arm": tags[0]}], set(tags))
+        self.assertIn("не совпали с запланированными", str(caught.exception))
+
+    def test_an_arm_that_arrived_unscheduled_is_refused(self):
+        from s5b_execution import cli
+        from simulation import s5b_shard as S
+        tags = sorted(a["tag"] for a in S.production_arms())[:2]
+        with self.assertRaises(SystemExit) as caught:
+            cli._verify_arms("где-то", [{"arm": t} for t in tags], {tags[0]})
+        self.assertIn("не совпали с запланированными", str(caught.exception))
+
+    def test_a_settled_arm_absent_from_the_manifest_is_legitimate(self):
+        """Рука, все концы которой закрылись, законно не планируется дальше.
+
+        Прежнее требование `arrived == canonical` объявило бы это пропажей.
+        После остановки это НОРМАЛЬНАЯ работа реестра, и следующая ступень
+        обязана считаться без неё.
+        """
         from s5b_execution import cli
         from simulation import s5b_shard as S
         tags = sorted(a["tag"] for a in S.production_arms())
-        self.assertEqual(len(tags), 156)
-        short = [{"arm": t} for t in tags[:-1]]
-        with self.assertRaises(SystemExit) as caught:
-            cli._verify_canonical_arms("где-то", short)
-        self.assertIn("замороженной науки", str(caught.exception))
+        subset = set(tags[:5])
+        cli._verify_arms("где-то", [{"arm": t} for t in subset], subset)
 
-    def test_the_full_grid_passes(self):
-        from s5b_execution import cli
+
+# ---------------------------------------------------------------------------
+# Возобновление прерванного прогона
+# ---------------------------------------------------------------------------
+
+def _run_manifest(where, units, look=4000, science="a" * 40):
+    """Манифест прогона с провенансом, как его пишет `plan`."""
+    (pathlib.Path(where) / "manifest.json").write_text(json.dumps({
+        "look": look, "shards": 1,
+        "units": [{"task_id": u.task_id, "arm": u.arm, "look": look,
+                   "shard": 0, "keys": [list(k) for k in u.keys]}
+                  for u in units],
+        "provenance": {"science_sha": science, "execution_sha": "b" * 40,
+                       "request_sha": "c" * 40, "inputs": {},
+                       "manifest_digest": "x"}}))
+
+
+def _two_arms(look=4000):
+    from simulation import s5b_shard as S
+    keys = tuple(scheduler.KEYS)
+    tags = sorted(a["tag"] for a in S.production_arms())[:2]
+    return [S.Unit(arm=t, look=look, keys=keys, weight=0.0) for t in tags]
+
+
+class ResumeIsKeyedByTaskIdTests(unittest.TestCase):
+    """Переиспользуется `task_id`, а не номер шарда.
+
+    Номер шарда — решение планировщика: при возобновлении оставшиеся
+    юниты перепаковываются как угодно. Привязка к старому номеру сделала
+    бы переиспользование заложником раскладки.
+    """
+
+    def test_a_complete_part_is_reused(self):
+        from s5b_execution import resume
+        units = _two_arms()
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units)
+            (pathlib.Path(tmp) / f"{units[0].task_id}.json").write_text(
+                json.dumps(_unit(units[0].task_id, units[0].arm, 4000,
+                                 [_end(KEY_LOW, 0.1, achieved=True, look=4000)],
+                                 units[0].keys)))
+            got = resume.completed(tmp, look=4000, science_sha="a" * 40)
+            self.assertEqual(set(got), {units[0].task_id})
+
+    def test_a_part_from_another_science_sha_is_refused(self):
+        """Склеить два вычисления и выдать за одно нельзя."""
+        from s5b_execution import resume
+        units = _two_arms()
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units, science="d" * 40)
+            (pathlib.Path(tmp) / f"{units[0].task_id}.json").write_text(
+                json.dumps(_unit(units[0].task_id, units[0].arm, 4000, [],
+                                 units[0].keys)))
+            with self.assertRaises(resume.ResumeRefused) as caught:
+                resume.completed(tmp, look=4000, science_sha="a" * 40)
+            self.assertIn("разные вычисления", str(caught.exception))
+
+    def test_a_part_not_declared_by_the_manifest_is_refused(self):
+        from s5b_execution import resume
         from simulation import s5b_shard as S
-        whole = [{"arm": a["tag"]} for a in S.production_arms()]
-        self.assertEqual(len(cli._verify_canonical_arms("где-то", whole)), 156)
+        units = _two_arms()
+        stray = S.Unit(arm=sorted(a["tag"] for a in S.production_arms())[5],
+                       look=4000, keys=tuple(scheduler.KEYS), weight=0.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units)
+            (pathlib.Path(tmp) / f"{stray.task_id}.json").write_text(
+                json.dumps(_unit(stray.task_id, stray.arm, 4000, [],
+                                 stray.keys)))
+            with self.assertRaises(resume.ResumeRefused) as caught:
+                resume.completed(tmp, look=4000, science_sha="a" * 40)
+            self.assertIn("не объявлена манифестом", str(caught.exception))
+
+    def test_a_part_from_another_look_is_refused(self):
+        from s5b_execution import resume
+        units = _two_arms()
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units, look=16_000)
+            with self.assertRaises(resume.ResumeRefused):
+                resume.completed(tmp, look=4000, science_sha="a" * 40)
+
+    def test_tampered_content_with_the_old_digest_is_refused(self):
+        """Диверсия из директивы: payload подменён, отпечаток старый."""
+        from s5b_execution import resume
+        from s5b_execution.identity import ArtifactRefused, recompute_digest
+        units = _two_arms()
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units)
+            good = _unit(units[0].task_id, units[0].arm, 4000,
+                         [_end(KEY_LOW, 0.1, achieved=True, look=4000)],
+                         units[0].keys)
+            keep = good["digest"]
+            good["endpoints"] = [_end(KEY_LOW, 0.1, achieved=True, look=4000,
+                                      point=999.0)]
+            good["digest"] = keep
+            (pathlib.Path(tmp) / f"{units[0].task_id}.json").write_text(
+                json.dumps(good))
+            with self.assertRaises(ArtifactRefused):
+                resume.completed(tmp, look=4000, science_sha="a" * 40)
+
+    def test_recomputing_a_reused_unit_is_refused(self):
+        """План считал юнит недостающим, хотя он был. Молчать нельзя."""
+        from s5b_execution import resume
+        a = {"t1": {"task_id": "t1"}}
+        with self.assertRaises(resume.ResumeRefused) as caught:
+            resume.merge_parts(a, {"t1": {"task_id": "t1"}})
+        self.assertIn("посчитаны заново", str(caught.exception))
+        self.assertEqual(set(resume.merge_parts(a, {"t2": {}})), {"t1", "t2"})
+
+
+class FullRunEqualsPartialPlusResumeTests(unittest.TestCase):
+    """Итог возобновления обязан совпасть с непрерывным прогоном."""
+
+    def _parts(self, units, where):
+        out = {}
+        for i, u in enumerate(units):
+            ends = [_end(KEY_LOW, 0.1, achieved=True, look=4000,
+                         point=100.0 + i),
+                    _end(KEY_LOW, 0.01, achieved=False, look=None)]
+            out[u.task_id] = _unit(u.task_id, u.arm, 4000, ends, u.keys)
+        return out
+
+    def test_the_ledger_and_digest_are_identical(self):
+        from s5b_execution import resume
+        from s5b_execution.ledger import Ledger
+        units = _two_arms()
+        with tempfile.TemporaryDirectory() as tmp:
+            parts = self._parts(units, tmp)
+            whole = Ledger()
+            whole.absorb(4000, list(parts.values()))
+
+            # частичный прогон: посчитан первый юнит; возобновление — второй
+            reused = {units[0].task_id: parts[units[0].task_id]}
+            fresh = {units[1].task_id: parts[units[1].task_id]}
+            joined = resume.merge_parts(reused, fresh)
+            after = Ledger()
+            after.absorb(4000, list(joined.values()))
+
+            self.assertEqual(whole.digest(), after.digest())
+            self.assertEqual(whole.settled_count(), after.settled_count())
+            self.assertEqual(
+                {k: v for k, v in whole.finalise(4000).items()},
+                {k: v for k, v in after.finalise(4000).items()})
+
+    def test_the_order_of_reuse_does_not_change_the_result(self):
+        """Переупаковка оставшихся юнитов в другие шарды ничего не меняет."""
+        from s5b_execution.ledger import Ledger
+        units = _two_arms()
+        with tempfile.TemporaryDirectory() as tmp:
+            parts = self._parts(units, tmp)
+            one, two = Ledger(), Ledger()
+            one.absorb(4000, [parts[units[0].task_id],
+                              parts[units[1].task_id]])
+            two.absorb(4000, [parts[units[1].task_id],
+                              parts[units[0].task_id]])
+            self.assertEqual(one.digest(), two.digest())
+
+
+class CheckpointCarriesTheEarlyTauTests(unittest.TestCase):
+    """Блокер 64000: сырые части 16000 не содержат концов с tau = 4000."""
+
+    def _ledger(self):
+        from s5b_execution.ledger import Ledger
+        early = _unit("u1", "armT", 4000, [
+            _end(KEY_LOW, 0.1, achieved=True, look=4000, point=100.0),
+            _end(KEY_LOW, 0.01, achieved=False, look=None)])
+        late = _unit("u1", "armT", 16_000, [
+            # тот же конец: другое значение И потеря точности
+            _end(KEY_LOW, 0.1, achieved=False, look=None),
+            _end(KEY_LOW, 0.01, achieved=True, look=16_000, point=50.0)])
+        led = Ledger()
+        led.absorb(4000, [early])
+        led.absorb(16_000, [late])
+        return led
+
+    def test_a_roundtrip_keeps_the_payload_and_the_tau(self):
+        from s5b_execution.ledger import Ledger
+        led = self._ledger()
+        cp = led.to_checkpoint(canonical_arms={"armT"}, provenance={})
+        back = Ledger.from_checkpoint(cp)
+        got = back.finalise(16_000)[EndpointId("armT", tuple(KEY_LOW), 0.1)]
+        self.assertEqual(got["look"], 4000, "ранний tau потерян в чекпойнте")
+        self.assertEqual(got["point"], 100.0)
+        self.assertEqual(back.digest(), led.digest())
+
+    def test_the_next_look_builds_on_the_checkpoint(self):
+        """Чекпойнт 16000 + сырые 64000 -> ранний tau всё ещё 4000."""
+        from s5b_execution.ledger import Ledger
+        cp = self._ledger().to_checkpoint(canonical_arms={"armT"},
+                                          provenance={})
+        back = Ledger.from_checkpoint(cp)
+        back.absorb(64_000, [_unit("u1", "armT", 64_000, [
+            _end(KEY_LOW, 0.1, achieved=True, look=64_000, point=7.0),
+            _end(KEY_LOW, 0.01, achieved=True, look=64_000, point=8.0)])])
+        final = back.finalise(64_000)
+        self.assertEqual(final[EndpointId("armT", tuple(KEY_LOW), 0.1)]["look"],
+                         4000)
+        self.assertEqual(final[EndpointId("armT", tuple(KEY_LOW), 0.1)]["point"],
+                         100.0)
+        self.assertEqual(final[EndpointId("armT", tuple(KEY_LOW), 0.01)]["look"],
+                         16_000)
+
+    def test_a_checkpoint_whose_digest_disagrees_is_refused(self):
+        from s5b_execution.ledger import Ledger, LedgerRefused
+        cp = self._ledger().to_checkpoint(canonical_arms={"armT"},
+                                          provenance={})
+        cp["settled"][0]["payload"]["point"] = 12345.0
+        with self.assertRaises(LedgerRefused) as caught:
+            Ledger.from_checkpoint(cp)
+        self.assertIn("отпечаток", str(caught.exception))
+
+    def test_an_unknown_checkpoint_version_is_refused(self):
+        from s5b_execution.ledger import Ledger, LedgerRefused
+        with self.assertRaises(LedgerRefused):
+            Ledger.from_checkpoint({"version": 99})

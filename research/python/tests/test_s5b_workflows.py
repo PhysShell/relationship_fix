@@ -275,6 +275,68 @@ class ScienceShaIsPinnedNotInheritedTests(unittest.TestCase):
 
 
 @needs_yaml
+class TheMatrixDoesNotTakeTheWholePoolTests(unittest.TestCase):
+    """Предел одновременных заданий даётся на ПЛАН, а не на репозиторий.
+
+    23 сентября 41 задание S5b заняло все 20 слотов аккаунта, и пилот в
+    соседнем репозитории простоял в очереди, не начавшись. `max-parallel`
+    ограничивает одновременность внутри матрицы независимо от того,
+    сколько слотов свободно.
+    """
+
+    def test_the_compute_matrix_declares_max_parallel(self):
+        strategy = _load(STAGE1)["jobs"]["compute"]["strategy"]
+        self.assertIn("max-parallel", strategy,
+                      "матрица заберёт столько слотов, сколько найдёт")
+        self.assertIsInstance(strategy["max-parallel"], int)
+
+    def test_the_declared_limit_matches_the_planner(self):
+        """Иначе планировщик считает makespan не для того, что исполнится."""
+        import sys as _s
+        if str(ROOT / "execution") not in _s.path:
+            _s.path.insert(0, str(ROOT / "execution"))
+        from s5b_execution import cost
+        self.assertEqual(_load(STAGE1)["jobs"]["compute"]["strategy"]
+                         ["max-parallel"], cost.MAX_PARALLEL)
+
+    def test_the_limit_leaves_room_for_other_repositories(self):
+        """Free-план даёт 20 слотов на аккаунт. Забрать все — не вариант."""
+        import sys as _s
+        if str(ROOT / "execution") not in _s.path:
+            _s.path.insert(0, str(ROOT / "execution"))
+        from s5b_execution import cost
+        self.assertLessEqual(cost.MAX_PARALLEL, 10)
+        self.assertGreaterEqual(cost.MAX_PARALLEL, 1)
+
+
+@needs_yaml
+class ResumeIsWiredThroughTests(unittest.TestCase):
+    """Отменённый прогон должен продолжаться, а не пересчитываться."""
+
+    def test_the_plan_downloads_and_passes_the_resumed_parts(self):
+        plan = _load(STAGE1)["jobs"]["plan"]
+        run = " ".join(s["run"] for s in plan["steps"] if "run" in s)
+        self.assertIn("resume_run", run)
+        self.assertIn("--resume", run)
+        downloads = [s for s in plan["steps"]
+                     if s.get("uses", "").startswith("actions/download-artifact")]
+        self.assertTrue(any(s["with"].get("path") == "resumed"
+                            for s in downloads))
+
+    def test_the_reduce_merges_the_resumed_parts(self):
+        run = " ".join(s["run"] for s in _load(STAGE1)["jobs"]["reduce"]["steps"]
+                       if "run" in s)
+        self.assertIn("--resume", run)
+
+    def test_the_checkpoint_leaves_the_run(self):
+        """Без выгруженного чекпойнта следующая ступень не увидит ранние tau."""
+        up = [s for s in _load(STAGE1)["jobs"]["reduce"]["steps"]
+              if s.get("uses", "").startswith("actions/upload-artifact")]
+        self.assertTrue(any("checkpoint.json" in str(s["with"]["path"])
+                            for s in up))
+
+
+@needs_yaml
 class RequestIsOnlyASignalTests(unittest.TestCase):
     """Пина EXECUTION_SHA мало: YAML берётся с triggering ref, не из пина."""
 
