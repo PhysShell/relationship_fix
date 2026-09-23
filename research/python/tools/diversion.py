@@ -377,6 +377,19 @@ DIVERSIONS = (
      "    return (treated_low.high - control_high.low,\n"
      "            treated_high.low - control_low.high)",
      ["tests.test_s5b_escalation"]),
+    ("многострочный run: снова плоский скаляр",
+     "../../.github/workflows/s5b-stage1.yml",
+     "        run: |\n"
+     "          python3 -B -m tools.s5b_stage1_cli merge \\\n"
+     "            --look ${{ needs.plan.outputs.look }} --out ../../out",
+     "        run: python3 -B -m tools.s5b_stage1_cli merge \\\n"
+     "               --look ${{ needs.plan.outputs.look }} --out ../../out",
+     ["tests.test_s5b_workflows"]),
+    ("воркфлоу зовёт флаг, которого у CLI нет",
+     "../../.github/workflows/s5b-stage1.yml",
+     "            --look ${{ needs.plan.outputs.look }} --out ../../out",
+     "            --step ${{ needs.plan.outputs.look }} --out ../../out",
+     ["tests.test_s5b_workflows"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",

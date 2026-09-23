@@ -282,3 +282,130 @@ class Stage1LaunchesByRequestFileTests(unittest.TestCase):
         from simulation import s5b_precision as PR
         self.assertIn(int(found.group(1)), PR.LOOKS)
 
+
+
+# ---------------------------------------------------------------------------
+# Контракт «воркфлоу -> CLI»
+# ---------------------------------------------------------------------------
+
+def _run_blocks(path: pathlib.Path):
+    """Каждое значение `run:` файла как (номер строки, текст, блочный ли).
+
+    Читается БЕЗ PyYAML намеренно. Гейт ниже ловит ошибку, которая уже
+    стоила прогона, и пропущенный гейт не ловит ничего: `skipIf` превратил
+    бы его в украшение ровно в той среде, ради которой он написан.
+    """
+    lines = path.read_text().splitlines()
+    out, i = [], 0
+    while i < len(lines):
+        stripped = lines[i].lstrip()
+        if stripped.startswith("run:"):
+            indent = len(lines[i]) - len(stripped)
+            value = stripped[len("run:"):].strip()
+            body, i = [], i + 1
+            while i < len(lines):
+                nxt = lines[i]
+                if nxt.strip() and (len(nxt) - len(nxt.lstrip())) <= indent:
+                    break
+                body.append(nxt.strip())
+                i += 1
+            if value == "|":
+                out.append((indent, "\n".join(body), True))
+            else:
+                # плоский скаляр: YAML свернёт переносы в ПРОБЕЛЫ
+                out.append((indent, " ".join([value] + body), False))
+            continue
+        i += 1
+    return out
+
+
+def _cli_commands(text: str):
+    """Вызовы CLI из текста `run:` так, как их увидит оболочка."""
+    joined = text.replace("\\\n", " ")
+    for raw in joined.splitlines():
+        if "s5b_stage1_cli" not in raw:
+            continue
+        cut = raw[raw.index("python3"):]
+        if raw[:raw.index("python3")].endswith("$("):
+            cut = cut.rsplit(")", 1)[0]
+        yield cut
+
+
+class WorkflowCliContract(unittest.TestCase):
+    """Команда, которую шлёт воркфлоу, обязана РАЗБИРАТЬСЯ этим CLI.
+
+    Двадцать шесть прежних гейтов проверяли, что в файле упомянуты нужные
+    имена. Ни один не спросил, работает ли команда. Прогон 35805206374
+    посчитал все 156 юнитов и упал на слиянии: `run:` был записан плоским
+    скаляром, YAML свернул перенос в пробел, и `\\` стал экранированным
+    пробелом — аргумент приехал как `" --look"` с ведущим пробелом.
+    """
+
+    #: флаги, объявленные самим CLI, читаются из его исходника, а не
+    #: переписываются сюда: копия разошлась бы с оригиналом молча
+    @staticmethod
+    def _declared_flags() -> set[str]:
+        import re
+        src = (ROOT / "research/python/tools/s5b_stage1_cli.py").read_text()
+        return set(re.findall(r'add_argument\("(--[a-z-]+)"', src))
+
+    def test_a_multiline_run_is_always_a_block_scalar(self):
+        """Перенос строки в плоском скаляре YAML становится пробелом.
+
+        Значит `\\` в конце строки перестаёт быть продолжением команды и
+        начинает экранировать пробел. Блочный `run: |` переносы сохраняет.
+        """
+        for path in (STAGE1, SMOKE):
+            for indent, text, is_block in _run_blocks(path):
+                if "\n" in text or " \\ " in text:
+                    self.assertTrue(
+                        is_block,
+                        f"{path.name}: многострочный run: обязан быть "
+                        f"блочным (run: |), иначе YAML свернёт перенос "
+                        f"в пробел: {text[:70]!r}")
+
+    def test_every_cli_invocation_tokenises_cleanly(self):
+        """Ни одного токена с краевым пробелом и ни одного голого `\\`."""
+        import shlex
+        seen = 0
+        for path in (STAGE1, SMOKE):
+            for _, text, _ in _run_blocks(path):
+                for command in _cli_commands(text):
+                    seen += 1
+                    for token in shlex.split(command):
+                        self.assertEqual(
+                            token, token.strip(),
+                            f"{path.name}: токен {token!r} приехал с "
+                            f"краевым пробелом — это свёрнутый YAML-перенос")
+                        self.assertNotEqual(token, "\\",
+                                            f"{path.name}: голый '\\'")
+        self.assertGreaterEqual(seen, 3, "вызовы CLI не найдены вовсе")
+
+    def test_every_cli_flag_is_one_the_cli_declares(self):
+        """Флаг, которого CLI не знает, — отказ с кодом 2 и потерянный прогон."""
+        import shlex
+        declared = self._declared_flags()
+        self.assertIn("--look", declared)
+        for path in (STAGE1, SMOKE):
+            for _, text, _ in _run_blocks(path):
+                for command in _cli_commands(text):
+                    for token in shlex.split(command):
+                        if token.startswith("--"):
+                            self.assertIn(
+                                token, declared,
+                                f"{path.name}: CLI не объявляет {token!r}")
+
+    def test_the_mode_word_is_one_the_cli_accepts(self):
+        """Режим — позиционный аргумент с закрытым списком значений."""
+        import re
+        import shlex
+        src = (ROOT / "research/python/tools/s5b_stage1_cli.py").read_text()
+        choices = set(re.findall(r'"(plan|run|merge|smoke)"', src))
+        self.assertEqual(choices, {"plan", "run", "merge", "smoke"})
+        for path in (STAGE1, SMOKE):
+            for _, text, _ in _run_blocks(path):
+                for command in _cli_commands(text):
+                    parts = shlex.split(command)
+                    mode = parts[parts.index("tools.s5b_stage1_cli") + 1]
+                    self.assertIn(mode, choices,
+                                  f"{path.name}: режим {mode!r} не объявлен")
