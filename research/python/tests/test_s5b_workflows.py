@@ -572,3 +572,94 @@ class WorkflowCliContract(unittest.TestCase):
                     self.assertIn(mode, choices,
                                   f"{path.name}: режим {mode!r} не объявлен "
                                   f"модулем {module}")
+
+
+def _job_text(path: pathlib.Path, name: str) -> str:
+    """Текст одного задания. БЕЗ PyYAML: гейт ниже не имеет права пропускаться.
+
+    Он держит механизм, чей отказ МОЛЧАЛИВ: при обрезанной цепочке работа
+    раннего прогона просто считается заново, и по зелёному прогону этого
+    не видно.
+    """
+    lines = path.read_text().splitlines()
+    out, taking = [], False
+    for line in lines:
+        if line.startswith("  ") and line.strip().endswith(":") and \
+                not line.startswith("   "):
+            taking = line.strip() == f"{name}:"
+            continue
+        if taking:
+            out.append(line)
+    if not out:
+        raise AssertionError(f"в воркфлоу нет задания {name}")
+    return "\n".join(out)
+
+
+class TheResumeChainIsWholeTests(unittest.TestCase):
+    """Возобновление указывает на ЦЕПОЧКУ прогонов, а не на один прогон.
+
+    Прогон-продолжение объявляет ОСТАТОК. Указать на него одного —
+    значит не увидеть работу более раннего прогона: проверено запуском,
+    трёхчастная цепочка планировала 102 юнита вместо 71 и молча считала
+    заново уже посчитанное. Потому скачиваются части ВСЕХ прогонов
+    цепочки, а манифест — только у первого, объявившего ступень целиком.
+    """
+
+    def _text(self, name):
+        return _job_text(STAGE1, name)
+
+    def test_the_cap_equals_the_number_of_wired_slots(self):
+        """Потолок цепочки сверяется с ЧИСЛОМ СЛОТОВ, а не с текстом рядом.
+
+        Первая версия гейта искала фразу «не больше трёх прогонов» —
+        и диверсия, поднявшая порог до 99 и оставившая фразу на месте,
+        прошла незамеченной. Сообщение не обязано совпадать с условием;
+        условие обязано совпадать с механизмом.
+        """
+        import re
+        plan = self._text("plan")
+        slots = {m.group(0) for m in
+                 re.finditer(r"resume_run(?:_[0-9]+)?(?==\$\{|\}\})", plan)}
+        slots |= {m.group(1) for m in
+                  re.finditer(r"echo \"(resume_run(?:_[0-9]+)?)=", plan)}
+        self.assertGreaterEqual(len(slots), 2, "слоты цепочки не разобраны")
+        caps = re.findall(r'if \[ "\$#" -gt ([0-9]+) \]', plan)
+        self.assertEqual(len(caps), 1, "потолка цепочки нет ровно одного")
+        self.assertEqual(
+            int(caps[0]), len(slots),
+            f"потолок {caps[0]} при {len(slots)} заведённых слотах: "
+            f"лишние прогоны цепочки были бы приняты и не скачаны")
+
+    def test_both_jobs_download_every_run_of_the_chain(self):
+        """У каждого слота цепочки СВОЙ шаг: и условие, и run-id.
+
+        Сверяются обе половины шага, а не упоминание имени. Слот, чей
+        `run-id` остался третьим, а условие скопировано с первого,
+        выглядит в файле правильно и не скачивает ничего.
+        """
+        for job in ("plan", "reduce"):
+            blocks = self._text(job).split("- if:")
+            for slot in ("resume_run", "resume_run_2", "resume_run_3"):
+                fit = [b for b in blocks
+                       if b.lstrip().startswith(f"${{{{ needs.plan.outputs.{slot} !=")
+                       or b.lstrip().startswith(
+                           f"${{{{ steps.request.outputs.{slot} !=")]
+                fit = [b for b in fit if f"outputs.{slot} }}}}" in b
+                       and "pattern: s5b-shard-" in b]
+                self.assertTrue(
+                    fit, f"{job}: у слота {slot} нет шага, где И условие, "
+                         f"И run-id указывают на него")
+
+    def test_only_the_first_run_of_the_chain_gives_the_manifest(self):
+        """Манифест продолжения объявляет остаток — брать его нельзя."""
+        for job in ("plan", "reduce"):
+            text = self._text(job)
+            blocks = text.split("- if:")
+            manifest_from = [b for b in blocks
+                             if "name: s5b-manifest-" in b and "resumed" in b]
+            self.assertTrue(manifest_from, f"{job}: манифест цепочки не берётся")
+            for block in manifest_from:
+                self.assertNotIn("resume_run_2", block,
+                                 f"{job}: манифест взят у продолжения")
+                self.assertNotIn("resume_run_3", block,
+                                 f"{job}: манифест взят у продолжения")

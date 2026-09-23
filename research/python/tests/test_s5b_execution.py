@@ -7,8 +7,12 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -17,7 +21,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 if str(ROOT / "execution") not in sys.path:
     sys.path.insert(0, str(ROOT / "execution"))
 
-from s5b_execution import cost, provenance, reduction, scheduler   # noqa: E402
+from s5b_execution import (cli, cost, provenance,       # noqa: E402
+                           reduction, scheduler)
 from s5b_execution.identity import (ACHIEVED, INSUFFICIENT,        # noqa: E402
                                     ArtifactRefused, EndpointId,
                                     load_unit_payloads)
@@ -64,7 +69,11 @@ def _canonical_parts(where, look=4000, endpoints=None):
                      "look": look, "shard": 0,
                      "keys": [list(k) for k in keys]})
     (where / "manifest.json").write_text(json.dumps(
-        {"look": look, "shards": 1, "units": rows}))
+        {"look": look, "shards": 1, "units": rows,
+         # провенанс обязателен: возобновление сверяет по нему SCIENCE_SHA
+         "provenance": {"science_sha": "a" * 40, "execution_sha": "b" * 40,
+                        "request_sha": "c" * 40, "inputs": {},
+                        "manifest_digest": "x"}}))
     return rows
 
 
@@ -914,3 +923,492 @@ class CheckpointCarriesTheEarlyTauTests(unittest.TestCase):
         from s5b_execution.ledger import Ledger, LedgerRefused
         with self.assertRaises(LedgerRefused):
             Ledger.from_checkpoint({"version": 99})
+
+
+# ---------------------------------------------------------------------------
+# Адверсариальный аудит возобновления и чекпойнта.
+#
+# Сценарии подбирались НЕ для подтверждения, а для поломки: каждый описывает
+# способ, которым прерванный прогон мог бы тихо испортить науку.
+# ---------------------------------------------------------------------------
+
+def _payload(unit, look=4000, point=100.0, achieved=True):
+    ends = [_end(KEY_LOW, 0.1, achieved=achieved, look=look, point=point),
+            _end(KEY_LOW, 0.01, achieved=False, look=None)]
+    return _unit(unit.task_id, unit.arm, look, ends, unit.keys)
+
+
+def _n_arms(n, look=4000):
+    from simulation import s5b_shard as S
+    keys = tuple(scheduler.KEYS)
+    tags = sorted(a["tag"] for a in S.production_arms())[:n]
+    return [S.Unit(arm=t, look=look, keys=keys, weight=0.0) for t in tags]
+
+
+class ResumeAdversarialTests(unittest.TestCase):
+    """Попытки сломать переиспользование."""
+
+    def test_the_filesystem_cannot_hold_two_copies_of_one_task_id(self):
+        """Дубликат с ОДИНАКОВЫМ содержимым невозможен по построению.
+
+        Файл называется своим `task_id`, поэтому каталог физически не
+        удержит две копии. При `merge-multiple` вторая перезаписывает
+        первую. Записано тестом, чтобы проверка на дубликат в
+        `resume.completed` не считалась защитой от того, чего не бывает.
+        """
+        from s5b_execution import resume
+        units = _n_arms(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units)
+            path = pathlib.Path(tmp) / f"{units[0].task_id}.json"
+            path.write_text(json.dumps(_payload(units[0], point=1.0)))
+            path.write_text(json.dumps(_payload(units[0], point=2.0)))
+            got = resume.completed(tmp, look=4000, science_sha="a" * 40)
+            self.assertEqual(len(got), 1)
+            self.assertEqual(got[units[0].task_id]["endpoints"][0]["point"],
+                             2.0)
+
+    def test_a_conflicting_duplicate_is_refused_where_it_can_occur(self):
+        """Там, где дубликат ВОЗМОЖЕН — при слиянии частей — он отказ."""
+        from s5b_execution import resume
+        units = _n_arms(1)
+        a = _payload(units[0], point=1.0)
+        b = _payload(units[0], point=2.0)
+        with self.assertRaises(resume.ResumeRefused):
+            resume.merge_parts({units[0].task_id: a}, {units[0].task_id: b})
+
+    def test_correct_parts_with_a_tampered_manifest_are_refused(self):
+        """Манифест подменён, части настоящие. Координаты разойдутся."""
+        from s5b_execution import resume
+        units = _n_arms(2)
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units)
+            m = json.loads((pathlib.Path(tmp) / "manifest.json").read_text())
+            m["units"][0]["keys"] = [list(scheduler.KEYS[0])]   # обрезан
+            (pathlib.Path(tmp) / "manifest.json").write_text(json.dumps(m))
+            (pathlib.Path(tmp) / f"{units[0].task_id}.json").write_text(
+                json.dumps(_payload(units[0])))
+            with self.assertRaises(resume.ResumeRefused) as caught:
+                resume.completed(tmp, look=4000, science_sha="a" * 40)
+            self.assertIn("координаты", str(caught.exception))
+
+    def test_a_reused_part_from_another_execution_sha_is_allowed(self):
+        """EXECUTION_SHA науку не определяет — значит не запрещает.
+
+        Допустимость держится на трёх вещах: тот же SCIENCE_SHA, те же
+        научные координаты, сошедшийся отпечаток содержимого. Слой
+        исполнения в этот список не входит намеренно: иначе любая правка
+        планировщика обесценивала бы посчитанное.
+        """
+        from s5b_execution import resume
+        units = _n_arms(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units)          # execution_sha = "b"*40
+            m = json.loads((pathlib.Path(tmp) / "manifest.json").read_text())
+            m["provenance"]["execution_sha"] = "9" * 40      # другой слой
+            (pathlib.Path(tmp) / "manifest.json").write_text(json.dumps(m))
+            (pathlib.Path(tmp) / f"{units[0].task_id}.json").write_text(
+                json.dumps(_payload(units[0])))
+            got = resume.completed(tmp, look=4000, science_sha="a" * 40)
+            self.assertEqual(set(got), {units[0].task_id})
+
+    def test_the_origin_of_reused_parts_is_preserved(self):
+        """Провенанс обязан помнить, откуда взята переиспользованная часть."""
+        from s5b_execution import resume
+        units = _n_arms(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_manifest(tmp, units)
+            (pathlib.Path(tmp) / f"{units[0].task_id}.json").write_text(
+                json.dumps(_payload(units[0])))
+            got = resume.origin(tmp, look=4000, science_sha="a" * 40)
+            self.assertEqual(got["reused"], 1)
+            self.assertEqual(got["from_execution_sha"], "b" * 40)
+            self.assertEqual(got["from_science_sha"], "a" * 40)
+            self.assertTrue(got["parts_digest"])
+
+
+class TwoInterruptionsGiveTheSameScienceTests(unittest.TestCase):
+    """АРИФМЕТИКА слияния и реестра — и только она.
+
+    Этот класс НЕ доказывает, что цепочка прогонов даёт ту же науку:
+    он собирает реестр вручную из `merge_parts` и `Ledger`, минуя
+    `plan`/`reduce`. Именно поэтому он оставался зелёным, пока
+    настоящий конвейер на тех же данных ОТКАЗЫВАЛ: сведение сверяет
+    приехавшее с манифестом своего прогона, а продолжение объявляет
+    лишь остаток. Свойство цепочки доказывается в
+    `ChainThroughTheCliTests`, через CLI и на всех 156 юнитах.
+    """
+
+    def _split(self, units, sizes):
+        parts = {u.task_id: _payload(u, point=100.0 + i)
+                 for i, u in enumerate(units)}
+        ids = sorted(parts)
+        out, at = [], 0
+        for n in sizes:
+            out.append({t: parts[t] for t in ids[at:at + n]})
+            at += n
+        self.assertEqual(at, len(ids))
+        return parts, out
+
+    def test_three_runs_equal_one(self):
+        from s5b_execution import resume
+        from s5b_execution.ledger import Ledger
+        units = _n_arms(10)
+        parts, chunks = self._split(units, [2, 3, 5])
+
+        whole = Ledger()
+        whole.absorb(4000, list(parts.values()))
+
+        joined: dict = {}
+        checkpoints = []
+        for chunk in chunks:
+            joined = resume.merge_parts(joined, chunk)
+            step = Ledger()
+            step.absorb(4000, list(joined.values()))
+            checkpoints.append(step.to_checkpoint(
+                canonical_arms={u.arm for u in units}, provenance={}))
+
+        self.assertEqual(whole.digest(), checkpoints[-1]["ledger_digest"])
+        after = Ledger.from_checkpoint(checkpoints[-1])
+        self.assertEqual(whole.finalise(4000), after.finalise(4000))
+
+    def test_every_intermediate_checkpoint_round_trips(self):
+        from s5b_execution import resume
+        from s5b_execution.ledger import Ledger
+        units = _n_arms(10)
+        parts, chunks = self._split(units, [2, 3, 5])
+        joined: dict = {}
+        for chunk in chunks:
+            joined = resume.merge_parts(joined, chunk)
+            step = Ledger()
+            step.absorb(4000, list(joined.values()))
+            cp = step.to_checkpoint(canonical_arms={u.arm for u in units},
+                                    provenance={})
+            self.assertEqual(Ledger.from_checkpoint(cp).digest(),
+                             step.digest())
+
+    def test_the_order_of_the_chunks_does_not_matter(self):
+        from s5b_execution import resume
+        from s5b_execution.ledger import Ledger
+        units = _n_arms(10)
+        parts, chunks = self._split(units, [2, 3, 5])
+        a, b = {}, {}
+        for c in chunks:
+            a = resume.merge_parts(a, c)
+        for c in reversed(chunks):
+            b = resume.merge_parts(b, c)
+        one, two = Ledger(), Ledger()
+        one.absorb(4000, list(a.values()))
+        two.absorb(4000, list(b.values()))
+        self.assertEqual(one.digest(), two.digest())
+
+
+class CheckpointTravelsTests(unittest.TestCase):
+    """Чекпойнт переносится между каталогами и машинами."""
+
+    def test_moving_the_file_does_not_change_the_science(self):
+        from s5b_execution.ledger import Ledger
+        units = _n_arms(3)
+        led = Ledger()
+        led.absorb(4000, [_payload(u, point=100.0 + i)
+                          for i, u in enumerate(units)])
+        cp = led.to_checkpoint(canonical_arms={u.arm for u in units},
+                               provenance={"inputs": {"/where/it/ran": "d0"}})
+        with tempfile.TemporaryDirectory() as one, \
+                tempfile.TemporaryDirectory() as two:
+            (pathlib.Path(one) / "checkpoint.json").write_text(
+                json.dumps(cp, sort_keys=True))
+            moved = json.loads(
+                (pathlib.Path(one) / "checkpoint.json").read_text())
+            (pathlib.Path(two) / "checkpoint.json").write_text(
+                json.dumps(moved, sort_keys=True))
+            back = Ledger.from_checkpoint(json.loads(
+                (pathlib.Path(two) / "checkpoint.json").read_text()))
+        self.assertEqual(back.digest(), led.digest())
+        self.assertEqual(back.finalise(4000), led.finalise(4000))
+
+    def test_a_settled_arm_absent_next_look_survives_the_round_trip(self):
+        """Рука закрылась целиком, на следующей ступени её нет вовсе."""
+        from s5b_execution.ledger import Ledger
+        from simulation import s5b_shard as S
+        keys = tuple(scheduler.KEYS)
+        tags = sorted(a["tag"] for a in S.production_arms())[:2]
+        gone = S.Unit(arm=tags[0], look=4000, keys=keys, weight=0.0)
+        stays = S.Unit(arm=tags[1], look=4000, keys=keys, weight=0.0)
+        led = Ledger()
+        led.absorb(4000, [
+            _unit(gone.task_id, gone.arm, 4000, [
+                _end(KEY_LOW, 0.1, achieved=True, look=4000, point=7.0),
+                _end(KEY_LOW, 0.01, achieved=True, look=4000, point=8.0)],
+                gone.keys),
+            _payload(stays, point=50.0)])
+        cp = led.to_checkpoint(canonical_arms=set(tags), provenance={})
+        back = Ledger.from_checkpoint(cp)
+        # следующая ступень: закрывшейся руки НЕТ, приезжает только вторая
+        nxt = S.Unit(arm=tags[1], look=16_000, keys=keys, weight=0.0)
+        back.absorb(16_000, [_unit(nxt.task_id, nxt.arm, 16_000, [
+            _end(KEY_LOW, 0.1, achieved=True, look=16_000, point=999.0),
+            _end(KEY_LOW, 0.01, achieved=True, look=16_000, point=5.0)],
+            nxt.keys)])
+        final = back.finalise(16_000)
+        self.assertEqual(final[EndpointId(tags[0], tuple(KEY_LOW), 0.1)]["point"],
+                         7.0, "закрывшаяся рука потеряна вместе с ранним tau")
+        self.assertEqual(final[EndpointId(tags[1], tuple(KEY_LOW), 0.1)]["look"],
+                         4000, "ранний tau второй руки подменён поздним")
+        self.assertEqual(final[EndpointId(tags[1], tuple(KEY_LOW), 0.01)]["look"],
+                         16_000)
+
+
+class TheOriginIsActuallyWiredIntoTheArtefactTests(unittest.TestCase):
+    """Функция работает — этого мало. Она должна быть ПОДКЛЮЧЕНА.
+
+    Предыдущая версия проверяла `resume.origin()` напрямую, и диверсия,
+    удалившая строку `"reused": reuse_origin,` из провенанса, прошла
+    незамеченной: функция осталась рабочей, артефакт — безголосым. Тот же
+    класс, на котором сегодня уже горел `merge_arm`.
+    """
+
+    def test_a_resumed_reduce_records_where_the_parts_came_from(self):
+        import os
+        from s5b_execution import cli
+        env = {"SCIENCE_SHA": "a" * 40, "EXECUTION_SHA": "e" * 40,
+               "REQUEST_SHA": "c" * 40}
+        keep = {k: os.environ.get(k) for k in env}
+        try:
+            os.environ.update(env)
+            with tempfile.TemporaryDirectory() as old, \
+                    tempfile.TemporaryDirectory() as new:
+                rows = _canonical_parts(old, endpoints=[
+                    _end(KEY_LOW, 0.1, achieved=True, look=4000)])
+                # половина остаётся в старом прогоне, половина в новом
+                ids = sorted(r["task_id"] for r in rows)
+                half = len(ids) // 2
+                shutil = __import__("shutil")
+                shutil.copy(pathlib.Path(old) / "manifest.json",
+                            pathlib.Path(new) / "manifest.json")
+                for t in ids[half:]:
+                    shutil.move(str(pathlib.Path(old) / f"{t}.json"),
+                                str(pathlib.Path(new) / f"{t}.json"))
+                cli.main(["reduce", "--look", "4000", "--resume", old,
+                          "--out", new])
+                got = json.loads((pathlib.Path(new) / "reduced.json")
+                                 .read_text())["summary"]["provenance"]
+        finally:
+            for name, value in keep.items():
+                os.environ.pop(name, None)
+                if value is not None:
+                    os.environ[name] = value
+        self.assertIn("reused", got, "артефакт не помнит происхождения частей")
+        self.assertEqual(got["reused"]["reused"], half)
+        self.assertEqual(got["reused"]["from_science_sha"], "a" * 40)
+        self.assertTrue(got["reused"]["parts_digest"])
+
+
+# --- ЦЕПОЧКА ПРОГОНОВ ЧЕРЕЗ CLI ----------------------------------------
+#
+# Прежний «главный» тест сравнивал реестры, собранные вручную из
+# `merge_parts` и `Ledger`. Он был ЗЕЛЁНЫМ И ЛОЖНЫМ: настоящий конвейер
+# в той же ситуации отказывался, потому что сведение сверяет приехавшее
+# с манифестом ЭТОГО прогона, а прогон-продолжение объявляет лишь
+# остаток. Проверялась арифметика слияния, а не механизм. Тот же класс
+# ошибки, на котором уже горели `merge_arm` и `resume.origin`.
+
+@contextlib.contextmanager
+def _chain_env():
+    names = {"SCIENCE_SHA": "a" * 40, "EXECUTION_SHA": "b" * 40,
+             "REQUEST_SHA": "c" * 40}
+    keep = {k: os.environ.get(k) for k in names}
+    os.environ.update(names)
+    try:
+        yield
+    finally:
+        for name, value in keep.items():
+            os.environ.pop(name, None)
+            if value is not None:
+                os.environ[name] = value
+
+
+def _cli(argv):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        cli.main(argv)
+    return buf.getvalue()
+
+
+def _plan(out, resume_dir=""):
+    argv = ["plan", "--look", "4000", "--out", str(out)]
+    if resume_dir:
+        argv += ["--resume", str(resume_dir)]
+    return json.loads(_cli(argv).strip().splitlines()[-1])
+
+
+def _reduce(out, resume_dir=""):
+    argv = ["reduce", "--look", "4000", "--out", str(out)]
+    if resume_dir:
+        argv += ["--resume", str(resume_dir)]
+    _cli(argv)
+    return json.loads((pathlib.Path(out) / "reduced.json").read_text())
+
+
+def _compute(manifest_path, out, only=None):
+    """Подмена вычисления: наука здесь не проверяется, проверяется механика."""
+    from s5b_execution.identity import recompute_digest
+    rows = sorted(json.loads(pathlib.Path(manifest_path).read_text())["units"],
+                  key=lambda r: r["task_id"])
+    if only is not None:
+        rows = rows[:only]
+    out = pathlib.Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    for row in rows:
+        base = 100.0 + (int(row["task_id"][:6], 16) % 97)
+        ends = [{"key": list(key), "fraction": scheduler.FRACTIONS[0],
+                 "point": base, "low": base - 1.0, "high": base + 1.0,
+                 "radius": 1.0, "status": ACHIEVED, "look": row["look"]}
+                for key in row["keys"]]
+        payload = {"task_id": row["task_id"], "arm": row["arm"],
+                   "look": row["look"], "keys": row["keys"], "endpoints": ends}
+        payload["digest"] = recompute_digest(payload)
+        (out / f"{row['task_id']}.json").write_text(
+            json.dumps(payload, sort_keys=True))
+    return [r["task_id"] for r in rows]
+
+
+def _run_chain(root, shares, whole_chain=True):
+    """Цепочка прогонов. `whole_chain` — видит ли следующий прогон ВСЮ
+    цепочку (части всех прогонов плюс манифест первого) или только
+    предыдущий прогон."""
+    root = pathlib.Path(root)
+    res = root / "resumed"
+    dirs, done, total = [], 0, None
+
+    def refill(upto):
+        if res.exists():
+            shutil.rmtree(res)
+        res.mkdir(parents=True)
+        srcs = dirs[:upto] if whole_chain else dirs[upto - 1:upto]
+        for src in srcs:
+            for f in src.glob("*.json"):
+                if f.name != "manifest.json":
+                    shutil.copy(f, res / f.name)
+        shutil.copy((dirs[0] if whole_chain else dirs[upto - 1]) / "manifest.json",
+                    res / "manifest.json")
+
+    for i, share in enumerate(shares):
+        d = root / f"run{i}"
+        d.mkdir(parents=True, exist_ok=True)
+        if i:
+            refill(i)
+        got = _plan(d, resume_dir=res if i else "")
+        if total is None:
+            total = got["units"]
+        ids = _compute(d / "manifest.json", d,
+                       None if i == len(shares) - 1 else int(total * share))
+        done += len(ids)
+        dirs.append(d)
+    return dirs[-1], res, done, total
+
+
+class ChainThroughTheCliTests(unittest.TestCase):
+    """Один непрерывный прогон против цепочки прерванных — ЧЕРЕЗ CLI.
+
+    Сверяется всё, чем ступень отчитывается: реестр, ранний `tau`
+    каждого конца, ячейки и научный отпечаток выхода. Проход идёт по
+    настоящему `plan`/`reduce` на всех 156 юнитах сетки.
+    """
+
+    #: эталон считается ОДИН раз на класс: он одинаков для всех разбиений,
+    #: а 156 юнитов сетки — не та цена, чтобы платить её дважды
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        with _chain_env():
+            whole = pathlib.Path(cls._tmp.name) / "whole"
+            cls.total = _plan(whole)["units"]
+            _compute(whole / "manifest.json", whole)
+            cls.ref = _reduce(whole)
+            cls.ref_dir = whole
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _same(self, ref, got, where):
+        self.assertEqual(got["summary"]["ledger_digest"],
+                         ref["summary"]["ledger_digest"], f"{where}: реестр")
+        self.assertEqual(got["summary"]["provenance"]["output_digest"],
+                         ref["summary"]["provenance"]["output_digest"],
+                         f"{where}: научный отпечаток выхода")
+        self.assertEqual(got["cells"], ref["cells"], f"{where}: ячейки")
+
+    def _same_tau(self, ref_dir, got_dir, where):
+        a = json.loads((pathlib.Path(ref_dir) / "checkpoint.json").read_text())
+        b = json.loads((pathlib.Path(got_dir) / "checkpoint.json").read_text())
+        self.assertEqual({json.dumps(r["id"], sort_keys=True): r["tau"]
+                          for r in a["settled"]},
+                         {json.dumps(r["id"], sort_keys=True): r["tau"]
+                          for r in b["settled"]},
+                         f"{where}: ранний tau разошёлся")
+
+    def _chain(self, name, shares):
+        with _chain_env(), tempfile.TemporaryDirectory() as tmp:
+            last, res, done, total = _run_chain(tmp, shares)
+            self.assertEqual(total, self.total)
+            self.assertEqual(done, self.total,
+                             f"{name}: цепочка пересчитала уже посчитанное "
+                             f"либо потеряла часть работы")
+            got = _reduce(last, resume_dir=res)
+            self._same(self.ref, got, name)
+            self._same_tau(self.ref_dir, last, name)
+
+    def test_a_two_part_chain_gives_the_same_science(self):
+        self._chain("две части", [0.5, 0.5])
+
+    def test_a_three_part_chain_gives_the_same_science(self):
+        """Реальная эксплуатация после 23 сентября: не одна остановка, а две."""
+        self._chain("три части", [0.2, 0.35, 0.45])
+
+
+class TheChainMustBeWholeTests(unittest.TestCase):
+    """Указание на один прогон цепочки — отказ, и ДО вычисления.
+
+    Прогон-продолжение объявляет остаток. Если указать возобновление на
+    него, работа более раннего прогона не видна: трёхчастная цепочка
+    планировала 102 юнита вместо 71 и молча считала заново то, что уже
+    было посчитано. Молча — худшее из возможных поведений.
+    """
+
+    def test_pointing_at_a_continuation_is_refused_at_plan(self):
+        with _chain_env(), tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(SystemExit) as caught:
+                _run_chain(pathlib.Path(tmp) / "cut", [0.2, 0.35, 0.45],
+                           whole_chain=False)
+            self.assertIn("это продолжение, а не начало", str(caught.exception))
+
+    def test_reduce_refuses_a_truncated_chain_on_its_own(self):
+        """Гейт плана — не единственный: сведение тоже обязано отказать.
+
+        Объявленное ступенью = манифест этого прогона плюс манифест
+        цепочки, и объединение держится гейтом «продолжение объявляет
+        ПОДМНОЖЕСТВО». Если цепочка обрезана, подмножеством оно быть
+        перестаёт, и сведение отказывает даже там, где план обошли.
+        """
+        with _chain_env(), tempfile.TemporaryDirectory() as tmp:
+            first = pathlib.Path(tmp) / "first"
+            _plan(first)
+            _compute(first / "manifest.json", first, only=80)
+            res = pathlib.Path(tmp) / "resumed"
+            res.mkdir()
+            for f in first.glob("*.json"):
+                shutil.copy(f, res / f.name)
+            second = pathlib.Path(tmp) / "second"
+            second.mkdir()
+            _plan(second, resume_dir=res)
+            _compute(second / "manifest.json", second)
+            # цепочку обрезали: её манифест стал объявлять лишь часть
+            m = json.loads((res / "manifest.json").read_text())
+            m["units"] = m["units"][:100]
+            (res / "manifest.json").write_text(json.dumps(m))
+            with self.assertRaises(SystemExit) as caught:
+                _reduce(second, resume_dir=res)
+            self.assertIn("которых нет в манифесте цепочки",
+                          str(caught.exception))

@@ -32,6 +32,8 @@ jobs:
       prior_run: ${{ steps.request.outputs.prior_run }}
       prior_digest: ${{ steps.request.outputs.prior_digest }}
       resume_run: ${{ steps.request.outputs.resume_run }}
+      resume_run_2: ${{ steps.request.outputs.resume_run_2 }}
+      resume_run_3: ${{ steps.request.outputs.resume_run_3 }}
       shards: ${{ steps.plan.outputs.shards }}
     steps:
       - uses: actions/checkout@v7
@@ -59,8 +61,22 @@ jobs:
           PRIOR_LOOK=$(grep -oP '^prior_look:\s*\K[0-9]+' "$FILE" | head -1 || true)
           PRIOR_RUN=$(grep -oP '^prior_run:\s*\K[0-9]+' "$FILE" | head -1 || true)
           PRIOR_DIGEST=$(grep -oP '^prior_digest:\s*\K[0-9a-f]+' "$FILE" | head -1 || true)
-          RESUME_RUN=$(grep -oP '^resume_run:\s*\K[0-9]+' "$FILE" | head -1 || true)
-          echo "resume_run=$RESUME_RUN" >> "$GITHUB_OUTPUT"
+          # ЦЕПОЧКА, А НЕ ОДНА ОСТАНОВКА. Прогон-продолжение объявляет
+          # ОСТАТОК, поэтому указать на него одного мало: работа ещё более
+          # раннего прогона тогда не видна и считается заново. Проверено
+          # запуском: трёхчастная цепочка планировала 102 юнита вместо 71.
+          # Первый в списке — тот, что объявил ступень ЦЕЛИКОМ: его
+          # манифест и берётся. Потолок три: ступень, пережившая больше
+          # трёх остановок, должна планироваться заново, а не склеиваться.
+          RESUME_RUNS=$(grep -oP '^resume_run:\s*\K[0-9 ]+' "$FILE" | head -1 | xargs || true)
+          set -- $RESUME_RUNS
+          if [ "$#" -gt 3 ]; then
+            echo "resume_run: не больше трёх прогонов, получено $#" >&2
+            exit 1
+          fi
+          echo "resume_run=${1:-}" >> "$GITHUB_OUTPUT"
+          echo "resume_run_2=${2:-}" >> "$GITHUB_OUTPUT"
+          echo "resume_run_3=${3:-}" >> "$GITHUB_OUTPUT"
           PIN=$(grep -oP '^execution_pin:\s*\K[0-9a-f]{40}' "$FILE" | head -1)
           WF=$(grep -oP '^workflow_sha256:\s*\K[0-9a-f]{64}' "$FILE" | head -1)
           if [ -z "$PIN" ] || [ -z "$WF" ]; then
@@ -105,6 +121,24 @@ jobs:
           merge-multiple: true
           run-id: ${{ steps.request.outputs.resume_run }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.request.outputs.resume_run_2 != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-${{ steps.request.outputs.look }}-*
+          merge-multiple: true
+          run-id: ${{ steps.request.outputs.resume_run_2 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.request.outputs.resume_run_3 != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-${{ steps.request.outputs.look }}-*
+          merge-multiple: true
+          run-id: ${{ steps.request.outputs.resume_run_3 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # манифест — ТОЛЬКО от первого прогона цепочки: он объявил ступень
+      # целиком, остальные объявляли остаток
       - if: ${{ steps.request.outputs.resume_run != '' }}
         uses: actions/download-artifact@v8
         with:
@@ -161,7 +195,7 @@ jobs:
       # Литерал, а не выражение: поддержку выражений документация не
       # утверждает, а опираться на непроверенную возможность здесь нечего.
       # Совпадение с cost.MAX_PARALLEL держит гейт.
-      max-parallel: 8
+      max-parallel: 6
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
@@ -247,6 +281,23 @@ jobs:
           merge-multiple: true
           run-id: ${{ needs.plan.outputs.resume_run }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ needs.plan.outputs.resume_run_2 != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-${{ needs.plan.outputs.look }}-*
+          merge-multiple: true
+          run-id: ${{ needs.plan.outputs.resume_run_2 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ needs.plan.outputs.resume_run_3 != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-${{ needs.plan.outputs.look }}-*
+          merge-multiple: true
+          run-id: ${{ needs.plan.outputs.resume_run_3 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # манифест — ТОЛЬКО от первого прогона цепочки
       - if: ${{ needs.plan.outputs.resume_run != '' }}
         uses: actions/download-artifact@v8
         with:

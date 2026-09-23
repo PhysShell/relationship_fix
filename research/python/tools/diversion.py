@@ -479,7 +479,7 @@ DIVERSIONS = (
      ["tests.test_s5b_execution"]),
     ("полнота набора выводится из приехавшего, а не из манифеста",
      "../../execution/s5b_execution/cli.py",
-     "    expected = _expected_units(directory, look)\n"
+     "    expected = _expected_units(directory, look, also)\n"
      "    unit_of = {u.task_id: u for u in expected}",
      "    expected = [S.Unit(arm=p[\"arm\"], look=p[\"look\"],\n"
      "                      keys=tuple(tuple(k) for k in p[\"keys\"]),\n"
@@ -609,11 +609,11 @@ DIVERSIONS = (
      ["tests.test_s5b_execution"]),
     ("матрица снова забирает столько слотов, сколько найдёт",
      "../../.github/workflows/s5b-stage1.yml",
-     "      max-parallel: 8\n", "",
+     "      max-parallel: 6\n", "",
      ["tests.test_s5b_workflows"]),
     ("предел параллелизма разошёлся с планировщиком",
      "../../execution/s5b_execution/cost.py",
-     "MAX_PARALLEL = 8", "MAX_PARALLEL = 20",
+     "MAX_PARALLEL = 6", "MAX_PARALLEL = 20",
      ["tests.test_s5b_workflows"]),
     ("запланированная рука вне замороженной сетки проходит",
      "../../execution/s5b_execution/cli.py",
@@ -624,6 +624,59 @@ DIVERSIONS = (
      '    canonical = {a["tag"] for a in S.production_arms()}',
      '    canonical = {p["arm"] for p in payloads}',
      ["tests.test_s5b_execution"]),
+    ("происхождение переиспользованных частей не записывается",
+     "../../execution/s5b_execution/cli.py",
+     '        "reused": reuse_origin,\n', "",
+     ["tests.test_s5b_execution"]),
+    ("научные координаты части не сверяются с манифестом",
+     "../../execution/s5b_execution/resume.py",
+     '        if payload["arm"] != row["arm"] or payload["keys"] != row["keys"]:',
+     "        if False:",
+     ["tests.test_s5b_execution"]),
+    ("цепочка возобновления снова сводится к одному прогону",
+     "../../execution/s5b_execution/cli.py",
+     "    mine = _declared_by(directory, look)\n    if not also:\n"
+     "        return mine",
+     "    mine = _declared_by(directory, look)\n    if True:\n"
+     "        return mine",
+     ["tests.test_s5b_execution"]),
+    ("продолжение может объявить юнит вне цепочки",
+     "../../execution/s5b_execution/cli.py",
+     "    stray = sorted(u.task_id for u in mine if u.task_id not in by_id)\n",
+     "    stray = []\n",
+     ["tests.test_s5b_execution"]),
+    ("обрезанная цепочка принимается планом",
+     "../../execution/s5b_execution/cli.py",
+     "            short = sorted(whole - declared)\n",
+     "            short = []\n",
+     ["tests.test_s5b_execution"]),
+    ("третий прогон цепочки скачивается с условием первого",
+     "../../.github/workflows/s5b-stage1.yml",
+     "      - if: ${{ needs.plan.outputs.resume_run_3 != '' }}\n",
+     "      - if: ${{ needs.plan.outputs.resume_run != '' }}\n",
+     ["tests.test_s5b_workflows"]),
+    ("манифест цепочки берётся у продолжения",
+     "../../.github/workflows/s5b-stage1.yml",
+     "      # манифест — ТОЛЬКО от первого прогона цепочки\n"
+     "      - if: ${{ needs.plan.outputs.resume_run != '' }}\n"
+     "        uses: actions/download-artifact@v8\n"
+     "        with:\n"
+     "          path: resumed\n"
+     "          name: s5b-manifest-${{ needs.plan.outputs.look }}\n"
+     "          run-id: ${{ needs.plan.outputs.resume_run }}\n",
+     "      # манифест — ТОЛЬКО от первого прогона цепочки\n"
+     "      - if: ${{ needs.plan.outputs.resume_run_2 != '' }}\n"
+     "        uses: actions/download-artifact@v8\n"
+     "        with:\n"
+     "          path: resumed\n"
+     "          name: s5b-manifest-${{ needs.plan.outputs.look }}\n"
+     "          run-id: ${{ needs.plan.outputs.resume_run_2 }}\n",
+     ["tests.test_s5b_workflows"]),
+    ("потолок цепочки снят",
+     "../../.github/workflows/s5b-stage1.yml",
+     '          if [ "$#" -gt 3 ]; then\n',
+     '          if [ "$#" -gt 99 ]; then\n',
+     ["tests.test_s5b_workflows"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",

@@ -24,6 +24,7 @@ S5b живёт в общей вычислительной квартире: ег
 
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 
@@ -103,6 +104,34 @@ def completed(directory, *, look: int, science_sha: str) -> dict[str, dict]:
             raise ResumeRefused(f"{tid}: две копии с разным содержимым")
         out[tid] = payload
     return out
+
+
+def origin(directory, *, look: int, science_sha: str) -> dict:
+    """Происхождение переиспользованных частей — для провенанса.
+
+    Без этой записи итоговый артефакт утверждал бы, что весь набор
+    посчитан текущим прогоном. Это неправда: часть пришла из другого
+    прогона, возможно под другим `EXECUTION_SHA`. Допустимость такого
+    переиспользования держится на совпадении `SCIENCE_SHA`, научных
+    координат и отпечатка содержимого — и ровно это должно быть видно в
+    артефакте, а не выводиться задним числом из чужой памяти.
+    """
+    manifest = load_manifest(directory)
+    prov = manifest.get("provenance") or {}
+    parts = completed(directory, look=look, science_sha=science_sha)
+    digest = hashlib.sha256(json.dumps(
+        sorted(recompute_digest(p) for p in parts.values()),
+        sort_keys=True).encode()).hexdigest()[:16]
+    return {
+        "reused": len(parts),
+        "from_science_sha": prov.get("science_sha", ""),
+        "from_execution_sha": prov.get("execution_sha", ""),
+        "from_request_sha": prov.get("request_sha", ""),
+        "parts_digest": digest,
+        "task_ids_digest": hashlib.sha256(
+            json.dumps(sorted(parts), sort_keys=True).encode()
+        ).hexdigest()[:16],
+    }
 
 
 def merge_parts(reused: dict[str, dict], fresh: dict[str, dict]) -> dict[str, dict]:

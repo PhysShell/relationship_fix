@@ -34,13 +34,8 @@ def _ladder():
     return tuple(PRC.LOOKS)
 
 
-def _expected_units(directory, look: int):
-    """Юниты, ОБЪЯВЛЕННЫЕ манифестом ступени.
-
-    Читается манифест, а не приехавшие файлы. Вывести ожидаемое из
-    полученного значило бы сделать проверку полноты тавтологией: она бы
-    проходила всегда, ровно потому что сравнивает набор сам с собой.
-    """
+def _declared_by(directory, look: int):
+    """Юниты, ОБЪЯВЛЕННЫЕ манифестом одного каталога."""
     path = pathlib.Path(directory) / "manifest.json"
     if not path.exists():
         raise SystemExit(f"{directory}: нет manifest.json — объявить нечего")
@@ -51,6 +46,41 @@ def _expected_units(directory, look: int):
     return [S.Unit(arm=u["arm"], look=u["look"],
                    keys=tuple(tuple(k) for k in u["keys"]), weight=0.0)
             for u in manifest["units"]]
+
+
+def _expected_units(directory, look: int, also: str = ""):
+    """Юниты, ОБЪЯВЛЕННЫЕ ступенью — а ступень может идти в несколько прогонов.
+
+    Читается манифест, а не приехавшие файлы. Вывести ожидаемое из
+    полученного значило бы сделать проверку полноты тавтологией: она бы
+    проходила всегда, ровно потому что сравнивает набор сам с собой.
+
+    Прогон-продолжение объявляет ОСТАТОК: `plan --resume` исключает из
+    манифеста то, что уже посчитано. Поэтому после возобновления каталог
+    сведения законно содержит части, которых в его собственном манифесте
+    нет, — и сверка только с ним отвергала полный набор как «лишние
+    руки». Проверено запуском: и двухчастная, и трёхчастная цепочка
+    падали на сведении, то есть `--resume` не доходил до результата ни
+    разу.
+
+    Объявленное ступенью = манифест ЭТОГО прогона плюс манифест цепочки,
+    из которой берутся переиспользованные части. С гейтом: продолжение
+    обязано объявлять ПОДМНОЖЕСТВО — выдумать юнит, которого ступень не
+    объявляла, оно не может.
+    """
+    mine = _declared_by(directory, look)
+    if not also:
+        return mine
+    prior = _declared_by(also, look)
+    by_id = {u.task_id: u for u in prior}
+    stray = sorted(u.task_id for u in mine if u.task_id not in by_id)
+    if stray:
+        raise SystemExit(
+            f"{directory}: продолжение объявило юниты, которых нет в "
+            f"манифесте цепочки {also}: {stray[:3]}")
+    for unit in mine:
+        by_id[unit.task_id] = unit
+    return sorted(by_id.values(), key=lambda u: u.task_id)
 
 
 def _verify_arms(directory, payloads, scheduled: set[str]) -> None:
@@ -84,7 +114,8 @@ def _verify_arms(directory, payloads, scheduled: set[str]) -> None:
             f"{sorted(arrived - scheduled)[:3]}")
 
 
-def _verify_with_frozen_merge(directory, look: int, payloads) -> int:
+def _verify_with_frozen_merge(directory, look: int, payloads,
+                              also: str = "") -> int:
     """Собрать концы КАЖДОЙ руки замороженным `s5b_shard.merge`.
 
     Зовётся на ВСЕХ ступенях, а не только там, где рука дробится. На 4000
@@ -92,7 +123,7 @@ def _verify_with_frozen_merge(directory, look: int, payloads) -> int:
     «тривиальный и потому не исполняемый путь» уронил прогон 35805206374:
     шаг merge был единственным, который до того не отрабатывал ни разу.
     """
-    expected = _expected_units(directory, look)
+    expected = _expected_units(directory, look, also)
     unit_of = {u.task_id: u for u in expected}
     _verify_arms(directory, payloads, {u.arm for u in expected})
     missing = [p["task_id"] for p in payloads if p["task_id"] not in unit_of]
@@ -119,7 +150,8 @@ def _prior_state(args) -> tuple[Ledger | None, dict]:
     return None, {}
 
 
-def _ledger_from(prior_dirs, expected_digest: str = "") -> tuple[Ledger, dict]:
+def _ledger_from(prior_dirs, expected_digest: str = "",
+                 also: str = "") -> tuple[Ledger, dict]:
     """Реестр по каталогам ступеней, впитанным ПО ВОЗРАСТАНИЮ.
 
     `expected_digest` относится к САМОЙ РАННЕЙ ступени набора. `prior_run`
@@ -127,6 +159,10 @@ def _ledger_from(prior_dirs, expected_digest: str = "") -> tuple[Ledger, dict]:
     реализации, поэтому совместимый чужой прогон даст ровно те же имена
     файлов. Отпечаток — единственное, что привязывает вход к конкретному
     вычислению.
+
+    `also` — каталог цепочки возобновления. Относится ТОЛЬКО к последней,
+    текущей ступени: у прошлых ступеней свои полные манифесты, и
+    расширять их объявленный состав нечем и незачем.
     """
     ledger, inputs, loaded = Ledger(), {}, []
     for directory in prior_dirs:
@@ -137,7 +173,9 @@ def _ledger_from(prior_dirs, expected_digest: str = "") -> tuple[Ledger, dict]:
         loaded.append((looks.pop(), payloads, directory))
     for index, (look, payloads, directory) in enumerate(
             sorted(loaded, key=lambda t: t[0])):
-        _verify_with_frozen_merge(directory, look, payloads)
+        last = index == len(loaded) - 1
+        _verify_with_frozen_merge(directory, look, payloads,
+                                  also if last else "")
         got = provenance.digest_of(payloads)
         if index == 0 and expected_digest and got != expected_digest:
             raise SystemExit(
@@ -204,10 +242,29 @@ def main(argv=None) -> int:
         ledger, inputs = _prior_state(args)
         done: set[str] = set()
         if args.resume:
+            # ЦЕПОЧКА ОБЯЗАНА БЫТЬ ПОЛНОЙ, и проверяется это ДО счёта.
+            #
+            # Прогон-продолжение объявляет остаток. Если указать на него
+            # как на цепочку, работа ещё более раннего прогона не видна:
+            # трёхчастная цепочка запланировала 102 юнита вместо 71 и
+            # молча пересчитала то, что уже было. Каталог возобновления
+            # обязан нести ЧАСТИ ВСЕХ прогонов цепочки и манифест того,
+            # который объявил ступень целиком.
+            whole = {u.task_id for u in scheduler.units_for(args.look, ledger)}
+            declared = {u.task_id for u in _declared_by(args.resume, args.look)}
+            short = sorted(whole - declared)
+            if short:
+                raise SystemExit(
+                    f"{args.resume}: манифест цепочки объявляет "
+                    f"{len(declared)} юнитов из {len(whole)} — это "
+                    f"продолжение, а не начало. Нужен манифест прогона, "
+                    f"объявившего ступень целиком; не хватает {short[:3]}")
             got = resume.completed(args.resume, look=args.look,
                                    science_sha=os.environ.get("SCIENCE_SHA", ""))
             done = set(got)
-            checks["reused_task_ids"] = len(done)
+            checks["reused"] = resume.origin(
+                args.resume, look=args.look,
+                science_sha=os.environ.get("SCIENCE_SHA", ""))
         units = scheduler.units_for(args.look, ledger, skip=done)
         if not units:
             raise SystemExit(
@@ -295,6 +352,7 @@ def main(argv=None) -> int:
     # reduce
     if args.science:
         guard.assert_science_comes_from(args.science)
+    reuse_origin: dict = {}
     if args.resume:
         reused = resume.completed(args.resume, look=args.look,
                                   science_sha=os.environ.get("SCIENCE_SHA", ""))
@@ -302,18 +360,21 @@ def main(argv=None) -> int:
         merged = resume.merge_parts(reused, fresh)
         for tid, payload in reused.items():
             (out / f"{tid}.json").write_text(json.dumps(payload, sort_keys=True))
+        reuse_origin = resume.origin(
+            args.resume, look=args.look,
+            science_sha=os.environ.get("SCIENCE_SHA", ""))
         print(f"переиспользовано {len(reused)}, посчитано заново {len(fresh)}, "
               f"всего {len(merged)}")
     if args.checkpoint:
         ledger = Ledger.from_checkpoint(
             json.loads(pathlib.Path(args.checkpoint).read_text()))
         payloads = load_unit_payloads(out)
-        _verify_with_frozen_merge(out, args.look, payloads)
+        _verify_with_frozen_merge(out, args.look, payloads, args.resume)
         ledger.absorb(args.look, payloads)
         inputs = {str(out): provenance.digest_of(payloads)}
     else:
         ledger, inputs = _ledger_from(list(args.prior) + [out],
-                                      args.prior_digest)
+                                      args.prior_digest, args.resume)
     final = ledger.finalise(args.look)
     cells = reduction.cells_from(final)
     evaluable = sum(1 for c in cells if c["evaluable"])
@@ -349,6 +410,9 @@ def main(argv=None) -> int:
         "input_digest": provenance.digest_of(
             load_unit_payloads(out)),
         "output_digest": hashlib.sha256(body.encode()).hexdigest()[:16],
+        # откуда взялись переиспользованные части. Без этого артефакт
+        # утверждал бы, что весь набор посчитан текущим прогоном.
+        "reused": reuse_origin,
     }
     (out / "reduced.json").write_text(json.dumps(
         {"summary": summary, "cells": cells}, sort_keys=True))
