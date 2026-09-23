@@ -53,6 +53,23 @@ def _expected_units(directory, look: int):
             for u in manifest["units"]]
 
 
+def _verify_canonical_arms(directory, payloads) -> set[str]:
+    """Руки сетки берутся из ЗАМОРОЖЕННОЙ науки, а не из манифеста.
+
+    Утверждение, НЕЗАВИСИМОЕ от манифеста. Иначе ошибочный манифест и
+    ошибочный набор частей подтвердили бы друг друга: оба описывали бы
+    одно и то же заблуждение, и согласие выглядело бы как проверка.
+    """
+    canonical = {a["tag"] for a in S.production_arms()}
+    arrived = {p["arm"] for p in payloads}
+    if arrived != canonical:
+        raise SystemExit(
+            f"{directory}: руки не совпали с сеткой замороженной науки; "
+            f"нет {sorted(canonical - arrived)[:3]}, лишние "
+            f"{sorted(arrived - canonical)[:3]}")
+    return canonical
+
+
 def _verify_with_frozen_merge(directory, look: int, payloads) -> int:
     """Собрать концы КАЖДОЙ руки замороженным `s5b_shard.merge`.
 
@@ -89,6 +106,7 @@ def _ledger_from(prior_dirs, expected_digest: str = "") -> tuple[Ledger, dict]:
         loaded.append((looks.pop(), payloads, directory))
     for index, (look, payloads, directory) in enumerate(
             sorted(loaded, key=lambda t: t[0])):
+        _verify_canonical_arms(directory, payloads)
         _verify_with_frozen_merge(directory, look, payloads)
         got = provenance.digest_of(payloads)
         if index == 0 and expected_digest and got != expected_digest:
@@ -119,6 +137,8 @@ def main(argv=None) -> int:
     parser.add_argument("--prior-run", default="")
     parser.add_argument("--repo", default="")
     parser.add_argument("--pin", default="")
+    parser.add_argument("--workflow", default="")
+    parser.add_argument("--workflow-sha256", default="")
     parser.add_argument("--science", default="")
     args = parser.parse_args(argv)
     out = pathlib.Path(args.out)
@@ -129,10 +149,20 @@ def main(argv=None) -> int:
         # Отдельная дымовая проба проверяла бы почти то же самое и
         # добавляла бы ещё один церемониальный труп в историю проекта.
         checks: dict = {}
+        if args.workflow and args.workflow_sha256:
+            checks["workflow_sha256"] = guard.assert_workflow_matches(
+                args.workflow, args.workflow_sha256)
         if args.repo and args.pin:
-            changed = guard.changed_paths(args.repo, args.pin, os.environ.get(
-                "REQUEST_SHA", "HEAD"))
+            head = os.environ.get("REQUEST_SHA", "HEAD")
+            guard.assert_object_exists(args.repo, args.pin)
+            guard.assert_is_ancestor(args.repo, args.pin, head)
+            science = os.environ.get("EXECUTION_SHA", "")
+            if science:
+                guard.assert_object_exists(args.repo, science)
+                guard.assert_pin_descends_from(args.repo, science, args.pin)
+            changed = guard.changed_paths(args.repo, args.pin, head)
             guard.assert_request_is_only_a_signal(changed)
+            checks["pin"] = args.pin
             checks["changed_since_pin"] = changed
         if args.science:
             checks["science_modules"] = guard.assert_science_comes_from(

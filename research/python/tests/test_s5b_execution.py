@@ -35,9 +35,37 @@ def _end(key, fraction, *, achieved, look, point=100.0, width=1.0):
 
 
 def _unit(task_id, arm, look, endpoints, keys=(KEY_LOW,)):
-    return {"task_id": task_id, "arm": arm, "look": look,
-            "keys": [list(k) for k in keys], "endpoints": endpoints,
-            "digest": f"d{task_id}"}
+    """Часть с ЧЕСТНЫМ отпечатком: он теперь пересчитывается из содержимого."""
+    from s5b_execution.identity import recompute_digest
+    payload = {"task_id": task_id, "arm": arm, "look": look,
+               "keys": [list(k) for k in keys], "endpoints": endpoints}
+    payload["digest"] = recompute_digest(payload)
+    return payload
+
+
+def _canonical_parts(where, look=4000, endpoints=None):
+    """156 частей с НАСТОЯЩИМИ тегами рук сетки.
+
+    Выдуманная рука отвергается каноническим гейтом — и правильно
+    делает. Чтобы проверять то, ради чего тест написан, синтетика обязана
+    быть канонической по составу.
+    """
+    from simulation import s5b_shard as S
+    keys = tuple(scheduler.KEYS)
+    where = pathlib.Path(where)
+    rows = []
+    for arm in S.production_arms():
+        unit = S.Unit(arm=arm["tag"], look=look, keys=keys, weight=0.0)
+        payload = _unit(unit.task_id, arm["tag"], look,
+                        list(endpoints or []), keys)
+        (where / f"{unit.task_id}.json").write_text(
+            json.dumps(payload, sort_keys=True))
+        rows.append({"task_id": unit.task_id, "arm": arm["tag"],
+                     "look": look, "shard": 0,
+                     "keys": [list(k) for k in keys]})
+    (where / "manifest.json").write_text(json.dumps(
+        {"look": look, "shards": 1, "units": rows}))
+    return rows
 
 
 class EarliestTauIsKeptTests(unittest.TestCase):
@@ -383,9 +411,7 @@ class ManifestIsTheOnlySourceOfLayoutTests(unittest.TestCase):
                      "shard": 0, "keys": [list(k) for k in keys]}
                     for u in (came, never)]}))
             (where / f"{came.task_id}.json").write_text(json.dumps(
-                {"task_id": came.task_id, "arm": "armA", "look": 4000,
-                 "keys": [list(k) for k in keys], "endpoints": [],
-                 "digest": "d0"}))
+                _unit(came.task_id, "armA", 4000, [], keys)))
             payloads = load_unit_payloads(where)
             self.assertEqual(len(payloads), 1)
             with self.assertRaises(Exception) as caught:
@@ -415,7 +441,10 @@ class BoundariesAreProvenNotDeclaredTests(unittest.TestCase):
         """Пина EXECUTION_SHA мало: YAML воркфлоу GitHub берёт с triggering ref."""
         from s5b_execution import guard
         guard.assert_request_is_only_a_signal([guard.REQUEST_PATH])
-        guard.assert_request_is_only_a_signal([])
+        with self.assertRaises(guard.BoundaryViolated):
+            # пусто — тоже отказ: значит запуск случился не тем
+            # механизмом, которым мы думаем
+            guard.assert_request_is_only_a_signal([])
         with self.assertRaises(guard.BoundaryViolated) as caught:
             guard.assert_request_is_only_a_signal(
                 [guard.REQUEST_PATH, ".github/workflows/s5b-stage1.yml"])
@@ -424,26 +453,13 @@ class BoundariesAreProvenNotDeclaredTests(unittest.TestCase):
     def test_a_prior_set_with_another_digest_is_refused(self):
         """prior_run якорем не является: task_id кодирует координаты, не байты."""
         from s5b_execution import cli, provenance
-        from simulation import s5b_shard as S
-        keys = tuple(scheduler.KEYS)
-        unit = S.Unit(arm="armA", look=4000, keys=keys, weight=0.0)
+        from s5b_execution.identity import load_unit_payloads
         with tempfile.TemporaryDirectory() as tmp:
-            where = pathlib.Path(tmp)
-            (where / "manifest.json").write_text(json.dumps({
-                "look": 4000, "shards": 1, "units": [
-                    {"task_id": unit.task_id, "arm": "armA", "look": 4000,
-                     "shard": 0, "keys": [list(k) for k in keys]}]}))
-            (where / f"{unit.task_id}.json").write_text(json.dumps(
-                {"task_id": unit.task_id, "arm": "armA", "look": 4000,
-                 "keys": [list(k) for k in keys], "endpoints": [],
-                 "digest": "d0"}))
-            honest = provenance.digest_of([json.loads(
-                (where / f"{unit.task_id}.json").read_text())])
-            # верный отпечаток проходит
-            cli._ledger_from([where], honest)
-            # чужой — отказ
+            _canonical_parts(tmp)
+            honest = provenance.digest_of(load_unit_payloads(tmp))
+            cli._ledger_from([tmp], honest)          # верный — проходит
             with self.assertRaises(SystemExit) as caught:
-                cli._ledger_from([where], "deadbeefdeadbeef")
+                cli._ledger_from([tmp], "deadbeefdeadbeef")
             self.assertIn("приехал не тот прогон", str(caught.exception))
 
     def test_the_reduced_artifact_carries_the_whole_chain(self):
@@ -456,31 +472,18 @@ class BoundariesAreProvenNotDeclaredTests(unittest.TestCase):
         """
         import os
         from s5b_execution import cli
-        from simulation import s5b_shard as S
-        keys = tuple(scheduler.KEYS)
-        unit = S.Unit(arm="armA", look=4000, keys=keys, weight=0.0)
         env = {"SCIENCE_SHA": "a" * 40, "EXECUTION_SHA": "b" * 40,
                "REQUEST_SHA": "c" * 40}
         keep = {k: os.environ.get(k) for k in env}
         try:
             os.environ.update(env)
             with tempfile.TemporaryDirectory() as tmp:
-                where = pathlib.Path(tmp)
-                (where / "manifest.json").write_text(json.dumps({
-                    "look": 4000, "shards": 1, "units": [
-                        {"task_id": unit.task_id, "arm": "armA",
-                         "look": 4000, "shard": 0,
-                         "keys": [list(k) for k in keys]}]}))
-                (where / f"{unit.task_id}.json").write_text(json.dumps(
-                    {"task_id": unit.task_id, "arm": "armA", "look": 4000,
-                     "keys": [list(k) for k in keys],
-                     "endpoints": [_end(KEY_LOW, 0.1, achieved=True,
-                                        look=4000)],
-                     "digest": "d0"}))
-                cli.main(["reduce", "--look", "4000", "--out", str(where),
+                _canonical_parts(tmp, endpoints=[
+                    _end(KEY_LOW, 0.1, achieved=True, look=4000)])
+                cli.main(["reduce", "--look", "4000", "--out", tmp,
                           "--prior-run", "35805206374"])
-                got = json.loads(
-                    (where / "reduced.json").read_text())["summary"]["provenance"]
+                got = json.loads((pathlib.Path(tmp) / "reduced.json")
+                                 .read_text())["summary"]["provenance"]
         finally:
             for name, value in keep.items():
                 os.environ.pop(name, None)
@@ -494,3 +497,184 @@ class BoundariesAreProvenNotDeclaredTests(unittest.TestCase):
         self.assertEqual(got["prior_run"], "35805206374")
         self.assertTrue(got["input_digest"])
         self.assertTrue(got["output_digest"])
+
+
+class TheAnchorIsNotSelfReferentialTests(unittest.TestCase):
+    """Отпечаток файла X, лежащий в файле Y, петли не образует."""
+
+    def test_a_workflow_that_does_not_match_the_declaration_is_refused(self):
+        from s5b_execution import guard
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "wf.yml"
+            path.write_text("на: push\n")
+            honest = guard.sha256_of(path)
+            self.assertEqual(guard.assert_workflow_matches(path, honest),
+                             honest)
+            path.write_text("на: push\n# правка после объявления\n")
+            with self.assertRaises(guard.BoundaryViolated) as caught:
+                guard.assert_workflow_matches(path, honest)
+            self.assertIn("исполняется не то", str(caught.exception))
+
+    def test_what_the_checks_catch_is_stated_honestly(self):
+        """Они закрывают снос по невнимательности, а не злой умысел."""
+        from s5b_execution import guard
+        self.assertTrue(guard.CATCHES_DRIFT_MAKES_DELIBERATE_CHANGE_VISIBLE)
+
+
+class TheDigestAnchorsContentNotClaimsTests(unittest.TestCase):
+    """`prior_digest` обязан якорить БАЙТЫ, а не чужое слово о байтах."""
+
+    def _part(self, tmp, tamper=False):
+        from s5b_execution.identity import recompute_digest
+        from simulation import s5b_shard as S
+        keys = tuple(scheduler.KEYS)
+        unit = S.Unit(arm="armA", look=4000, keys=keys, weight=0.0)
+        payload = {"task_id": unit.task_id, "arm": "armA", "look": 4000,
+                   "keys": [list(k) for k in keys],
+                   "endpoints": [_end(KEY_LOW, 0.1, achieved=True, look=4000)]}
+        payload["digest"] = recompute_digest(payload)
+        if tamper:
+            # содержимое другое, отпечаток — старый правильный
+            payload["endpoints"] = [
+                _end(KEY_LOW, 0.1, achieved=True, look=4000, point=999.0)]
+        payload["seconds"] = 1.0
+        payload["peak_rss_mb"] = 1.0
+        (pathlib.Path(tmp) / f"{unit.task_id}.json").write_text(
+            json.dumps(payload, sort_keys=True))
+        return payload
+
+    def test_an_honest_part_recomputes_to_its_stored_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = self._part(tmp)
+            got = load_unit_payloads(tmp)
+            self.assertEqual(got[0]["digest"], payload["digest"])
+
+    def test_tampered_endpoints_with_the_old_digest_are_refused(self):
+        """Тот самый файл, который прошёл бы обе прежние проверки."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._part(tmp, tamper=True)
+            with self.assertRaises(ArtifactRefused) as caught:
+                load_unit_payloads(tmp)
+            self.assertIn("содержимое не то", str(caught.exception))
+
+    def test_runtime_fields_are_outside_the_digest(self):
+        """`seconds` и `peak_rss_mb` зависят от раннера, а не от науки."""
+        from s5b_execution.identity import CANONICAL_DIGEST_FIELDS
+        self.assertNotIn("seconds", CANONICAL_DIGEST_FIELDS)
+        self.assertNotIn("peak_rss_mb", CANONICAL_DIGEST_FIELDS)
+        self.assertNotIn("digest", CANONICAL_DIGEST_FIELDS)
+
+    def test_the_real_stage1_artifacts_recompute_to_the_declared_digest(self):
+        """Заявленный 9e2f5b314e598bb7 проверен ОТ СОДЕРЖИМОГО.
+
+        Прежде и старый CLI, и первая версия `digest_of` складывали
+        сохранённые строки `payload["digest"]`. Два пути были независимы
+        как функции, но опирались на одни и те же утверждения. Этот гейт
+        считает от полей концов.
+        """
+        import hashlib
+        from s5b_execution.identity import recompute_digest
+        where = pathlib.Path(
+            "/tmp/claude-0/-home-user-relationship-fix/"
+            "3a3c202b-1fe4-5131-b65c-c041f8d2cbed/scratchpad/s5b/out")
+        if not where.exists():
+            self.skipTest("артефакты ступени 4000 недоступны локально")
+        parts = load_unit_payloads(where)
+        self.assertEqual(len(parts), 156)
+        rebuilt = sorted(recompute_digest(p) for p in parts)
+        self.assertEqual(
+            hashlib.sha256(json.dumps(rebuilt, sort_keys=True)
+                           .encode()).hexdigest()[:16],
+            "9e2f5b314e598bb7")
+
+
+class TheScienceNamespaceIsCheckedWholeTests(unittest.TestCase):
+    """Две вершины проверять мало: Python соберёт Франкенштейна молча."""
+
+    def test_every_loaded_scientific_module_is_checked(self):
+        from s5b_execution import guard
+        got = guard.assert_science_comes_from(ROOT / "research/python")
+        heads = {name.split(".")[0] for name in got}
+        self.assertEqual(heads, set(guard.SCIENCE_NAMESPACES))
+        self.assertTrue(any(n.startswith("coarsening.") for n in got),
+                        "проверены только simulation.*")
+        self.assertGreater(len(got), len(guard.SCIENCE_ENTRY_POINTS))
+
+    def test_a_sibling_prefix_does_not_pass_as_the_root(self):
+        """`/tmp/science-evil` начинается с `/tmp/science`.
+
+        Поэтому сравнение идёт через resolve() + is_relative_to, а не
+        через строковый префикс.
+        """
+        from s5b_execution import guard
+        src = (ROOT / "execution/s5b_execution/guard.py").read_text()
+        self.assertIn("is_relative_to", src)
+        self.assertNotIn(".startswith(", src)
+        with tempfile.TemporaryDirectory() as tmp:
+            sibling = pathlib.Path(tmp) / "research"
+            sibling.mkdir()
+            with self.assertRaises(guard.BoundaryViolated):
+                guard.assert_science_comes_from(sibling)
+
+
+class TheAncestryIsProvenBeforeTheDiffTests(unittest.TestCase):
+    """«Объекта нет» никогда не должно выглядеть как «различий нет»."""
+
+    def _repo(self, tmp):
+        import subprocess
+        run = lambda *a: subprocess.run(["git", "-C", tmp, *a],
+                                        capture_output=True, text=True,
+                                        check=True)
+        run("init", "-q")
+        run("config", "user.email", "t@t")
+        run("config", "user.name", "t")
+        (pathlib.Path(tmp) / "a.txt").write_text("1")
+        run("add", "-A"); run("commit", "-qm", "first")
+        base = run("rev-parse", "HEAD").stdout.strip()
+        (pathlib.Path(tmp) / ".github").mkdir(parents=True, exist_ok=True)
+        (pathlib.Path(tmp) / "b.txt").write_text("2")
+        run("add", "-A"); run("commit", "-qm", "second")
+        head = run("rev-parse", "HEAD").stdout.strip()
+        return base, head
+
+    def test_a_missing_object_is_refused_not_treated_as_no_difference(self):
+        from s5b_execution import guard
+        with tempfile.TemporaryDirectory() as tmp:
+            self._repo(tmp)
+            with self.assertRaises(guard.BoundaryViolated) as caught:
+                guard.assert_object_exists(tmp, "0" * 40)
+            self.assertIn("история обрезана", str(caught.exception))
+
+    def test_a_non_ancestor_anchor_is_refused(self):
+        from s5b_execution import guard
+        with tempfile.TemporaryDirectory() as tmp:
+            base, head = self._repo(tmp)
+            guard.assert_is_ancestor(tmp, base, head)
+            with self.assertRaises(guard.BoundaryViolated):
+                guard.assert_is_ancestor(tmp, head, base)
+
+    def test_changed_paths_are_read_from_the_real_repository(self):
+        from s5b_execution import guard
+        with tempfile.TemporaryDirectory() as tmp:
+            base, head = self._repo(tmp)
+            self.assertEqual(guard.changed_paths(tmp, base, head), ["b.txt"])
+
+
+class TheCanonicalArmSetComesFromScienceTests(unittest.TestCase):
+    """Манифест и части не должны подтверждать друг друга при общей ошибке."""
+
+    def test_a_missing_arm_is_caught_against_the_frozen_grid(self):
+        from s5b_execution import cli
+        from simulation import s5b_shard as S
+        tags = sorted(a["tag"] for a in S.production_arms())
+        self.assertEqual(len(tags), 156)
+        short = [{"arm": t} for t in tags[:-1]]
+        with self.assertRaises(SystemExit) as caught:
+            cli._verify_canonical_arms("где-то", short)
+        self.assertIn("замороженной науки", str(caught.exception))
+
+    def test_the_full_grid_passes(self):
+        from s5b_execution import cli
+        from simulation import s5b_shard as S
+        whole = [{"arm": a["tag"]} for a in S.production_arms()]
+        self.assertEqual(len(cli._verify_canonical_arms("где-то", whole)), 156)

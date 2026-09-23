@@ -931,6 +931,21 @@ class DiversionProtocolTests(unittest.TestCase):
         path = pathlib.Path(prereg.DIVERSION_PROTOCOL_IS_EXECUTABLE)
         self.assertTrue((pathlib.Path(__file__).resolve().parents[3] / path).exists())
 
+    def test_the_cache_contract_covers_every_module_tree(self):
+        """Harness чистит кэш ТОЛЬКО там, где перечислено.
+
+        Слой исполнения лежит вне `research/python`. Пока он не был
+        назван, уцелевший `.pyc` под `execution/` читался бы молча, и
+        «диверсия поймана» могло бы означать «прочитан вчерашний
+        байт-код» — ровно то, ради чего вся эта машинерия и заведена.
+        """
+        from tools import diversion
+        import pathlib as _p
+        roots = {_p.Path(r).resolve() for r in diversion.CACHE_ROOTS}
+        repo = _p.Path(__file__).resolve().parents[3]
+        self.assertIn((repo / "research/python").resolve(), roots)
+        self.assertIn((repo / "execution").resolve(), roots)
+
     def test_every_declared_diversion_has_a_unique_anchor(self):
         """Иначе протокол падает на якоре, а не на гейте."""
         from tools import diversion

@@ -231,13 +231,13 @@ class ScienceShaIsPinnedNotInheritedTests(unittest.TestCase):
         if not (ROOT / ".github/s5b-stage1-request.txt").exists():
             self.skipTest("заявки нет — закреплять пока нечего")
         env = self._stage1()["env"]
-        for name in ("SCIENCE_SHA", "EXECUTION_SHA", "EXECUTION_PIN_COMMIT"):
+        for name in ("SCIENCE_SHA", "EXECUTION_SHA"):
             self.assertNotEqual(env[name], PLACEHOLDER,
                                 f"заявка есть, а {name} — плейсхолдер")
 
     def test_every_pin_is_a_full_quoted_hex_sha(self):
         env = self._stage1()["env"]
-        for name in ("SCIENCE_SHA", "EXECUTION_SHA", "EXECUTION_PIN_COMMIT"):
+        for name in ("SCIENCE_SHA", "EXECUTION_SHA"):
             value = env[name]
             self.assertIsInstance(value, str, f"{name}: нужны кавычки")
             self.assertRegex(value, r"^[0-9a-f]{40}$", name)
@@ -292,9 +292,37 @@ class RequestIsOnlyASignalTests(unittest.TestCase):
     def test_the_plan_passes_the_pin_and_the_science_checkout(self):
         run = " ".join(s["run"] for s in self._plan()["steps"] if "run" in s)
         self.assertIn("--pin", run)
-        self.assertIn("EXECUTION_PIN_COMMIT", run)
         self.assertIn("--science", run)
         self.assertIn("--prior-digest", run)
+        self.assertIn("--workflow-sha256", run)
+
+    def test_the_anchor_does_not_live_inside_what_it_anchors(self):
+        """Коммит, закрепляющий пин, ПО ОПРЕДЕЛЕНИЮ меняет воркфлоу.
+
+        Держать якорь внутри воркфлоу — самореференция: между объявленным
+        пином и заявкой всегда оказывался бы лишний путь. Якорь и
+        отпечаток живут в ЗАЯВКЕ.
+        """
+        self.assertNotIn("EXECUTION_PIN_COMMIT", STAGE1.read_text(),
+                         "якорь снова внутри того, что он закрепляет")
+        run = " ".join(s["run"] for s in self._plan()["steps"] if "run" in s)
+        self.assertIn("execution_pin", run)
+        self.assertIn("workflow_sha256", run)
+
+    def test_a_request_if_present_declares_the_anchor_and_the_workflow_hash(self):
+        request = ROOT / ".github/s5b-stage1-request.txt"
+        if not request.exists():
+            self.skipTest("заявки нет")
+        text = request.read_text()
+        import re
+        pin = re.search(r"^execution_pin:\s*([0-9a-f]{40})$", text, re.M)
+        digest = re.search(r"^workflow_sha256:\s*([0-9a-f]{64})$", text, re.M)
+        self.assertIsNotNone(pin, "заявка без якоря")
+        self.assertIsNotNone(digest, "заявка без отпечатка воркфлоу")
+        import hashlib
+        self.assertEqual(
+            hashlib.sha256(STAGE1.read_bytes()).hexdigest(), digest.group(1),
+            "объявленный отпечаток не совпадает с текущим воркфлоу")
 
     def test_the_compute_proves_where_science_came_from(self):
         run = " ".join(s["run"] for s in _load(STAGE1)["jobs"]["compute"]["steps"]
@@ -414,7 +442,7 @@ class WorkflowCliContract(unittest.TestCase):
     def _declared_flags(cls, module: str) -> set[str]:
         import re
         src = (ROOT / CLI_SOURCES[module]).read_text()
-        return set(re.findall(r'add_argument\("(--[a-z-]+)"', src))
+        return set(re.findall(r'add_argument\("(--[a-z0-9-]+)"', src))
 
     def test_a_multiline_run_is_always_a_block_scalar(self):
         """Перенос строки в плоском скаляре YAML становится пробелом.

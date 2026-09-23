@@ -22,11 +22,6 @@ permissions:
 env:
   SCIENCE_SHA: "7a62a3911f8bc000cf08ad97f76c0f962b07e615"
   EXECUTION_SHA: "0000000000000000000000000000000000000000"
-  # Коммит, которым закреплён EXECUTION_SHA. Между ним и коммитом-заявкой
-  # разрешено менять ТОЛЬКО файл заявки: сам YAML воркфлоу GitHub берёт с
-  # triggering ref, а не из пина, поэтому без этой проверки закреплённые
-  # SHA врали бы ровно на полшага.
-  EXECUTION_PIN_COMMIT: "0000000000000000000000000000000000000000"
 
 jobs:
   plan:
@@ -63,6 +58,14 @@ jobs:
           PRIOR_LOOK=$(grep -oP '^prior_look:\s*\K[0-9]+' "$FILE" | head -1 || true)
           PRIOR_RUN=$(grep -oP '^prior_run:\s*\K[0-9]+' "$FILE" | head -1 || true)
           PRIOR_DIGEST=$(grep -oP '^prior_digest:\s*\K[0-9a-f]+' "$FILE" | head -1 || true)
+          PIN=$(grep -oP '^execution_pin:\s*\K[0-9a-f]{40}' "$FILE" | head -1)
+          WF=$(grep -oP '^workflow_sha256:\s*\K[0-9a-f]{64}' "$FILE" | head -1)
+          if [ -z "$PIN" ] || [ -z "$WF" ]; then
+            echo "заявка обязана нести execution_pin и workflow_sha256" >&2
+            exit 1
+          fi
+          echo "pin=$PIN" >> "$GITHUB_OUTPUT"
+          echo "workflow_sha256=$WF" >> "$GITHUB_OUTPUT"
           case "$LOOK" in
             4000|16000|64000) ;;
             *) echo "ступень $LOOK не из лестницы" >&2; exit 1 ;;
@@ -107,7 +110,9 @@ jobs:
                   --look ${{ steps.request.outputs.look }} $PRIOR \
                   --prior-run "${{ steps.request.outputs.prior_run }}" \
                   --prior-digest "${{ steps.request.outputs.prior_digest }}" \
-                  --repo request --pin "${{ env.EXECUTION_PIN_COMMIT }}" \
+                  --repo request --pin "${{ steps.request.outputs.pin }}" \
+                  --workflow request/.github/workflows/s5b-stage1.yml \
+                  --workflow-sha256 "${{ steps.request.outputs.workflow_sha256 }}" \
                   --science science/research/python --out out)
           echo "$OUT"
           echo "shards=$(echo "$OUT" | python3 -c \

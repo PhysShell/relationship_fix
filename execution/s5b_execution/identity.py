@@ -25,6 +25,26 @@ LOOK_IS_NOT_PART_OF_IDENTITY = True
 NOT_PART_FILES = ("manifest.json", "reduced.json")
 
 
+#: Поля, из которых part-файл ИСХОДНО считал свой digest. `seconds` и
+#: `peak_rss_mb` дописываются ПОСЛЕ и в отпечаток не входят: они зависят
+#: от раннера, а не от науки.
+CANONICAL_DIGEST_FIELDS = ("task_id", "arm", "look", "keys", "endpoints")
+
+
+def recompute_digest(payload: dict) -> str:
+    """Отпечаток части, пересчитанный ИЗ СОДЕРЖИМОГО.
+
+    Без этого `prior_digest` якорил бы не байты, а чужое слово о байтах:
+    и старый CLI, и первая версия `digest_of` складывали сохранённые
+    строки `payload["digest"]`. Файл с подменёнными `endpoints` и старым
+    правильным `digest` прошёл бы оба.
+    """
+    import hashlib
+    canon = {k: payload[k] for k in CANONICAL_DIGEST_FIELDS}
+    return hashlib.sha256(
+        json.dumps(canon, sort_keys=True).encode()).hexdigest()[:16]
+
+
 class ArtifactRefused(Exception):
     """Артефакт не принят. Частичный или странный вход не чинится молча."""
 
@@ -67,6 +87,11 @@ def load_unit_payloads(directory) -> list[dict]:
             raise ArtifactRefused(
                 f"{path.name}: имя файла не совпадает с task_id "
                 f"{payload['task_id']!r}")
+        got = recompute_digest(payload)
+        if got != payload["digest"]:
+            raise ArtifactRefused(
+                f"{path.name}: отпечаток содержимого {got}, в файле "
+                f"{payload['digest']} — содержимое не то, что заявлено")
         out.append(payload)
     if not out:
         raise ArtifactRefused(f"{directory}: part-файлов нет вовсе")

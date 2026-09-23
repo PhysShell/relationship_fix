@@ -30,9 +30,20 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
+#: Деревья, откуда приходят модули. Слой исполнения лежит ВНЕ
+#: `research/python`, и пока он не был перечислен здесь, контракт
+#: «исполнён именно текущий исходник» на него не распространялся:
+#: уцелевший `.pyc` под `execution/` читался бы молча. Дыра найдена
+#: рассуждением о контракте, а не падением.
+CACHE_ROOTS = (ROOT, ROOT.parent.parent / "execution")
+
+
 def _clear_caches() -> None:
-    for cache in ROOT.rglob("__pycache__"):
-        shutil.rmtree(cache, ignore_errors=True)
+    for root in CACHE_ROOTS:
+        if not root.exists():
+            raise SystemExit(f"дерево модулей {root} не найдено")
+        for cache in root.rglob("__pycache__"):
+            shutil.rmtree(cache, ignore_errors=True)
 
 
 def run_tests(modules: list[str]) -> bool:
@@ -418,6 +429,48 @@ DIVERSIONS = (
      "                      weight=0.0) for p in payloads]\n"
      "    unit_of = {u.task_id: u for u in expected}",
      ["tests.test_s5b_execution"]),
+    ("отпечаток части не пересчитывается из содержимого",
+     "../../execution/s5b_execution/identity.py",
+     "        got = recompute_digest(payload)\n"
+     "        if got != payload[\"digest\"]:",
+     "        got = payload[\"digest\"]\n"
+     "        if got != payload[\"digest\"]:",
+     ["tests.test_s5b_execution"]),
+    ("руки сверяются с манифестом вместо замороженной сетки",
+     "../../execution/s5b_execution/cli.py",
+     "    canonical = {a[\"tag\"] for a in S.production_arms()}\n"
+     "    arrived = {p[\"arm\"] for p in payloads}",
+     "    arrived = {p[\"arm\"] for p in payloads}\n"
+     "    canonical = arrived",
+     ["tests.test_s5b_execution"]),
+    ("родство якоря и заявки не доказывается",
+     "../../execution/s5b_execution/guard.py",
+     "    if done.returncode != 0:\n"
+     "        raise BoundaryViolated(\n"
+     "            f\"якорь {pin} не является предком заявки {head}\")",
+     "    if False:\n"
+     "        raise BoundaryViolated(\n"
+     "            f\"якорь {pin} не является предком заявки {head}\")",
+     ["tests.test_s5b_execution"]),
+    ("пустой diff принимается за отсутствие посторонних правок",
+     "../../execution/s5b_execution/guard.py",
+     "    if paths != [REQUEST_PATH]:",
+     "    if paths not in ([REQUEST_PATH], []):",
+     ["tests.test_s5b_execution"]),
+    ("проверяются только две вершины научного графа",
+     "../../execution/s5b_execution/guard.py",
+     'SCIENCE_NAMESPACES = ("simulation", "coarsening")',
+     'SCIENCE_NAMESPACES = ("simulation",)',
+     ["tests.test_s5b_execution"]),
+    ("отпечаток воркфлоу не сверяется",
+     "../../execution/s5b_execution/guard.py",
+     "    if got != expected:\n"
+     "        raise BoundaryViolated(\n"
+     "            f\"воркфлоу {path}: отпечаток {got}, заявлен {expected} — \"",
+     "    if False:\n"
+     "        raise BoundaryViolated(\n"
+     "            f\"воркфлоу {path}: отпечаток {got}, заявлен {expected} — \"",
+     ["tests.test_s5b_execution"]),
     ("граница импортов науки не проверяется",
      "../../execution/s5b_execution/guard.py",
      "        if not where.is_relative_to(root):",
@@ -425,8 +478,10 @@ DIVERSIONS = (
      ["tests.test_s5b_execution"]),
     ("после пина разрешено менять что угодно",
      "../../execution/s5b_execution/guard.py",
-     "    stray = sorted(p for p in paths if p != REQUEST_PATH)",
-     "    stray = []",
+     "    paths = sorted(paths)\n"
+     "    if paths != [REQUEST_PATH]:",
+     "    paths = sorted(paths)\n"
+     "    if False:",
      ["tests.test_s5b_execution"]),
     ("отпечаток входа не сверяется",
      "../../execution/s5b_execution/cli.py",
