@@ -31,6 +31,8 @@ STAGE1 = ROOT / ".github/workflows/s5b-stage1.yml"
 VERIFIED = {"actions/checkout": "v7", "actions/setup-python": "v7",
             "actions/upload-artifact": "v7", "actions/download-artifact": "v8"}
 
+PLACEHOLDER = "0" * 40
+
 
 def _load(path):
     return yaml.safe_load(path.read_text())
@@ -167,12 +169,19 @@ class TheSmokeResultIsRecordedTests(unittest.TestCase):
         self.assertAlmostEqual(S.SECONDS_PER_PERIOD_AT_REFERENCE, want,
                                places=6)
 
-    def test_the_budget_keeps_real_room_under_the_platform_cap(self):
-        """Запас держит бюджет, а не точность одной точки калибровки."""
-        self.assertLessEqual(16035.7 / 3600, S.GITHUB_JOB_MAX_HOURS)
-        self.assertGreater(16035.7 / 3600, S.SHARD_BUDGET_HOURS,
-                           "проба обязана была пробить бюджет — иначе она "
-                           "ничего не проверила")
+    def test_the_operational_budget_stays_under_the_platform_timeout(self):
+        """Свойство СИСТЕМЫ: бюджет строго ниже платформенного потолка.
+
+        Прежняя редакция этого теста требовала, чтобы измеренное время
+        ПРЕВЫШАЛО бюджет. Это был исторический факт конкретной пробы, а не
+        свойство корректной системы: раннер побыстрее — и «правильная»
+        конфигурация валила бы тест. Тот же класс, что уже ловился трижды:
+        проверять надо требование, а не совпадение.
+
+        Само число 4.454 ч против 4.0 ч осталось в исследовательской
+        записи, где ему и место.
+        """
+        self.assertLess(S.SHARD_BUDGET_HOURS, S.GITHUB_JOB_MAX_HOURS)
 
     def test_the_recalibrated_plan_still_fits_every_documented_limit(self):
         from simulation import s5b_precision as PR
@@ -191,4 +200,85 @@ class TheSmokeResultIsRecordedTests(unittest.TestCase):
         self.assertIn("Бюджет шарда `4.0 ч` пробит фактом", note)
         self.assertIn("b3d80674ae23c419", note)
         self.assertIn("поймано ТОЛЬКО прогоном", note)
+
+
+@needs_yaml
+class ScienceShaIsPinnedNotInheritedTests(unittest.TestCase):
+    """Триггерный коммит — сигнал запуска, а не версия научного кода.
+
+    Заявка меняется чаще кода: ступени 4000/16000/64000 заказываются в
+    разные дни. Если каждая считает тем, что лежало на ветке в момент
+    заказа, вложенность лестницы становится утверждением о репозитории, а
+    не о выборке.
+    """
+
+    def _stage1(self):
+        return _load(STAGE1)
+
+    def test_the_science_sha_is_a_full_quoted_hex_sha(self):
+        value = self._stage1()["env"]["SCIENCE_SHA"]
+        self.assertIsInstance(value, str,
+                              "YAML разобрал SHA как число — нужны кавычки")
+        self.assertRegex(value, r"^[0-9a-f]{40}$")
+
+    def test_a_requested_run_may_not_point_at_the_placeholder(self):
+        """Связка правильная: запрещено ЗАКАЗЫВАТЬ прогон без закрепления.
+
+        Плейсхолдер сам по себе не дефект — он живёт ровно между тем, как
+        научный код закоммичен, и тем, как его SHA вписан. Дефектом он
+        становится в момент, когда появляется заявка.
+        """
+        if not (ROOT / ".github/s5b-stage1-request.txt").exists():
+            self.skipTest("заявки нет — закреплять пока нечего")
+        self.assertNotEqual(self._stage1()["env"]["SCIENCE_SHA"], PLACEHOLDER,
+                            "заявка есть, а закреплён плейсхолдер")
+
+    def test_every_computing_job_checks_out_the_pinned_sha(self):
+        for name in ("compute", "merge"):
+            job = self._stage1()["jobs"][name]
+            refs = [step["with"]["ref"] for step in job["steps"]
+                    if step.get("uses", "").startswith("actions/checkout")]
+            self.assertTrue(refs, name)
+            for ref in refs:
+                self.assertIn("SCIENCE_SHA", ref, (name, ref))
+
+    def test_the_plan_reads_the_request_from_the_branch_and_code_from_the_pin(self):
+        """Два checkout'а, и они РАЗНЫЕ по назначению."""
+        steps = [s for s in self._stage1()["jobs"]["plan"]["steps"]
+                 if s.get("uses", "").startswith("actions/checkout")]
+        self.assertEqual(len(steps), 2)
+        refs = {s["with"]["ref"]: s["with"]["path"] for s in steps}
+        self.assertIn("${{ github.sha }}", refs, "заявка не читается с ветки")
+        pinned = [r for r in refs if "SCIENCE_SHA" in r]
+        self.assertEqual(len(pinned), 1, "научный код не закреплён")
+        self.assertNotEqual(refs["${{ github.sha }}"], refs[pinned[0]],
+                            "оба checkout'а в один каталог — затрут друг друга")
+
+
+@needs_yaml
+class Stage1LaunchesByRequestFileTests(unittest.TestCase):
+    """`workflow_dispatch` на рабочей ветке не срабатывает — documented."""
+
+    def test_stage1_triggers_on_push_to_its_request_file(self):
+        spec = _load(STAGE1)
+        trigger = spec[True] if True in spec else spec["on"]
+        self.assertIn("push", trigger)
+        self.assertEqual(trigger["push"]["paths"],
+                         [".github/s5b-stage1-request.txt"])
+
+    def test_stage1_does_not_pretend_dispatch_works_here(self):
+        spec = _load(STAGE1)
+        trigger = spec[True] if True in spec else spec["on"]
+        self.assertNotIn("workflow_dispatch", trigger)
+
+    def test_a_request_if_present_names_a_ladder_step(self):
+        import re
+        request = ROOT / ".github/s5b-stage1-request.txt"
+        if not request.exists():
+            self.skipTest("заявки нет")
+        found = re.search(r"^look:\s*(\d+)", request.read_text(),
+                          re.MULTILINE)
+        self.assertIsNotNone(found, "заявка не называет ступень")
+        from simulation import s5b_precision as PR
+        self.assertIn(int(found.group(1)), PR.LOOKS)
 

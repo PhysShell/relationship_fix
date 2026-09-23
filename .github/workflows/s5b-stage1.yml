@@ -1,34 +1,45 @@
 # Этап 1: план -> вычисление по шардам -> fail-closed слияние.
 #
-# ФОРМА ЗАДАНА ДОКУМЕНТИРОВАННЫМИ ПРЕДЕЛАМИ, а не вкусом:
+# ЗАПУСК ПО ФАЙЛУ-ЗАЯВКЕ. `workflow_dispatch` здесь не работает, и это
+# documented: «This event will only trigger a workflow run if the workflow
+# file exists on the default branch». Файл лежит на рабочей ветке.
+# У `push` такого ограничения нет — он берёт файл из обновлённого рефа.
+# Заявка `.github/s5b-stage1-request.txt` несёт ступень и причину.
 #
-#   матрица максимум 256 заданий на прогон  -> юниты группируются в шарды,
-#     потому что на третьей ступени их 189, а было бы и больше;
-#   задание максимум 6 часов                -> бюджет шарда 4 часа, и план
-#     ОТКАЗЫВАЕТ до запуска, если раскладка в него не укладывается.
+# ТРИГГЕРНЫЙ КОММИТ — НЕ НАУЧНЫЙ КОММИТ. Заявка лишь СИГНАЛ запуска; код,
+# которым считается наука, закреплён `SCIENCE_SHA` и выбирается явно в
+# КАЖДОМ checkout. Иначе ступени 4000/16000/64000, заказанные в разные
+# дни, посчитались бы разными версиями кода, и вложенность лестницы стала
+# бы утверждением о репозитории, а не о выборке.
 #
-# Результаты шардов идут ТОЛЬКО через артефакты. Поведение `outputs` у
-# матричных заданий в документации не описано, поэтому конструкция на него
-# не опирается вовсе — это дешевле, чем полагаться на неописанное.
+# ФОРМА ЗАДАНА ДОКУМЕНТИРОВАННЫМИ ПРЕДЕЛАМИ: матрица максимум 256 заданий
+# на прогон; задание максимум 6 часов. План ОТКАЗЫВАЕТ до запуска, если
+# раскладка не укладывается в операционный бюджет 4 ч.
 #
-# Имена артефактов несут значение матрицы: начиная с v4 они обязаны быть
-# уникальными в пределах задания, и артефакт неизменяем после создания.
+# Результаты шардов идут ТОЛЬКО через артефакты: поведение `outputs` у
+# матричных заданий не документировано, и опираться на неописанное дешевле
+# не пробовать. Имена артефактов несут значение матрицы — с v4 они обязаны
+# быть уникальными в пределах задания.
 name: S5b stage 1
 
 on:
-  workflow_dispatch:
-    inputs:
-      look:
-        description: ступень лестницы
-        required: true
-        type: choice
-        options: ['4000', '16000', '64000']
+  push:
+    branches:
+      - 'claude/**'
+    paths:
+      - '.github/s5b-stage1-request.txt'
 
 permissions:
   contents: read
 
+env:
+  # Научный код. Полный SHA, а не ветка и не тег: ветка движется.
+  # В КАВЫЧКАХ намеренно: YAML разбирает значение из одних цифр как число,
+  # и такой SHA молча превратился бы в целое.
+  SCIENCE_SHA: "0000000000000000000000000000000000000000"
+
 concurrency:
-  group: s5b-stage1-${{ inputs.look }}
+  group: s5b-stage1
   cancel-in-progress: false
 
 jobs:
@@ -36,26 +47,48 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       shards: ${{ steps.plan.outputs.shards }}
+      look: ${{ steps.look.outputs.look }}
     steps:
+      # заявка читается с ВЕТКИ: это сигнал, он новее научного кода
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: request
+      # наука читается с ЗАКРЕПЛЁННОГО коммита
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
+          path: science
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
+      - id: look
+        run: |
+          set -euo pipefail
+          LOOK=$(grep -oP '^look:\s*\K[0-9]+' \
+                   request/.github/s5b-stage1-request.txt | head -1)
+          case "$LOOK" in
+            4000|16000|64000) ;;
+            *) echo "заявка не называет допустимую ступень: '$LOOK'" >&2
+               exit 1 ;;
+          esac
+          echo "look=$LOOK" >> "$GITHUB_OUTPUT"
+          echo "ступень $LOOK, научный код ${{ env.SCIENCE_SHA }}"
       - id: plan
-        working-directory: research/python
+        working-directory: science/research/python
         env:
           PYTHONPATH: .
         run: |
           set -o pipefail
           PLAN=$(python3 -B -m tools.s5b_stage1_cli plan \
-                   --look ${{ inputs.look }} --out ../../out)
+                   --look ${{ steps.look.outputs.look }} --out ../../../out)
           echo "$PLAN"
           echo "shards=$(echo "$PLAN" | python3 -c \
             'import json,sys; print(json.dumps(json.load(sys.stdin)["shards"]))')" \
             >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
-          name: s5b-manifest-${{ inputs.look }}
+          name: s5b-manifest-${{ steps.look.outputs.look }}
           path: out/manifest.json
 
   compute:
@@ -63,14 +96,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     strategy:
-      # Упавший шард НЕ ДОЛЖЕН отменять остальные: слияние и так
-      # fail-closed и само сообщит, чего не хватает, а посчитанное
-      # переиспользуется по стабильному task_id.
+      # Упавший шард НЕ ДОЛЖЕН отменять остальные: слияние fail-closed и
+      # само скажет, чего не хватает, а посчитанное переиспользуется по
+      # стабильному task_id.
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
@@ -79,11 +114,11 @@ jobs:
           PYTHONPATH: .
         run: |
           python3 -B -m tools.s5b_stage1_cli run \
-            --look ${{ inputs.look }} --shard ${{ matrix.shard }} \
-            --out ../../out
+            --look ${{ needs.plan.outputs.look }} \
+            --shard ${{ matrix.shard }} --out ../../out
       - uses: actions/upload-artifact@v7
         with:
-          name: s5b-shard-${{ inputs.look }}-${{ matrix.shard }}
+          name: s5b-shard-${{ needs.plan.outputs.look }}-${{ matrix.shard }}
           path: out/*.json
 
   merge:
@@ -94,24 +129,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - uses: actions/download-artifact@v8
         with:
           path: out
-          pattern: s5b-shard-${{ inputs.look }}-*
+          pattern: s5b-shard-${{ needs.plan.outputs.look }}-*
           merge-multiple: true
       - uses: actions/download-artifact@v8
         with:
-          name: s5b-manifest-${{ inputs.look }}
+          name: s5b-manifest-${{ needs.plan.outputs.look }}
           path: out
       - working-directory: research/python
         env:
           PYTHONPATH: .
         run: python3 -B -m tools.s5b_stage1_cli merge \
-               --look ${{ inputs.look }} --out ../../out
+               --look ${{ needs.plan.outputs.look }} --out ../../out
       - uses: actions/upload-artifact@v7
         with:
-          name: s5b-stage1-${{ inputs.look }}
+          name: s5b-stage1-${{ needs.plan.outputs.look }}
           path: out
