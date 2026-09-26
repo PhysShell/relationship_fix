@@ -22,7 +22,7 @@ import time
 from simulation import s5b_prereg as P
 from simulation import s5b_shard as S
 
-from . import cost, guard, provenance, reduction, resume, scheduler
+from . import calibrate, cost, guard, provenance, reduction, resume, scheduler
 from .identity import load_unit_payloads
 from .ledger import Ledger
 
@@ -195,9 +195,15 @@ def _encode(results) -> list:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("plan", "run", "reduce"))
+    parser.add_argument("mode",
+                        choices=("plan", "run", "reduce", "calibrate"))
     parser.add_argument("--look", type=int, required=True)
     parser.add_argument("--shard", type=int, default=0)
+    parser.add_argument("--arm", default="",
+                        help="рука для калибровки экономии деления")
+    parser.add_argument("--deadline-minutes", type=float, default=0.0,
+                        help="сколько минут задания ОСТАЛОСЬ; охранник времени "
+                             "не начинает вариант, который не успеет")
     parser.add_argument("--out", default="out")
     parser.add_argument("--prior", action="append", default=[])
     parser.add_argument("--manifest", default="manifest.json")
@@ -347,6 +353,63 @@ def main(argv=None) -> int:
                 json.dumps(payload, sort_keys=True))
             print(f"{unit.task_id} {unit.arm} {payload['seconds']}s "
                   f"{payload['digest']}", flush=True)
+        return 0
+
+    if args.mode == "calibrate":
+        # КАЛИБРОВКА ЭКОНОМИИ ДЕЛЕНИЯ. Один раннер, один просмотр, одна рука.
+        #
+        # Ступень лестницы этим режимом НЕ считается и реестр не трогается:
+        # на выходе исполнительный параметр, а не наука. Поэтому нет ни
+        # пина заявки, ни сверки отпечатка воркфлоу: закреплять нужно
+        # SCIENCE_SHA, потому что от него зависит сравнение делёного с
+        # неделёным, и он закреплён checkout'ом.
+        if args.science:
+            guard.assert_science_comes_from(args.science)
+        if not args.arm:
+            raise SystemExit("калибровке нужна --arm")
+        if args.deadline_minutes <= 0:
+            raise SystemExit(
+                "калибровке нужен --deadline-minutes: без охранника времени "
+                "таймаут задания стал бы суррогатом измерения")
+        out.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + args.deadline_minutes * 60.0
+        try:
+            record = calibrate.run(args.arm, args.look, deadline=deadline)
+        except calibrate.SplitChangedTheScience as exc:
+            (out / "calibration.json").write_text(json.dumps(
+                {"correctness": "KILL", "reason": str(exc)}, sort_keys=True))
+            raise SystemExit(f"КАЛИБРОВКА ОСТАНОВЛЕНА: {exc}")
+        record["provenance"] = {
+            "science_sha": os.environ.get("SCIENCE_SHA", ""),
+            "execution_sha": os.environ.get("EXECUTION_SHA", ""),
+            "request_sha": os.environ.get("REQUEST_SHA", ""),
+            "runner": os.environ.get("RUNNER_NAME", ""),
+            "deadline_minutes": args.deadline_minutes,
+        }
+        # что измерение означает для ступени 64000 — считается здесь же,
+        # чтобы вывод не пришлось толковать задним числом
+        worst = max(cost.seconds_for(a["effective_rate"], 64_000)
+                    for a in S.production_arms())
+        budget = cost.SHARD_BUDGET_HOURS * 3600.0
+        platform = cost.PLATFORM_CAP_HOURS * 3600.0
+        record["worst_unit_64000_hours"] = round(worst / 3600.0, 3)
+        record["implications"] = {
+            name: {"groups_for_budget": calibrate.groups_for_target(
+                       worst, budget, share),
+                   "groups_for_platform": calibrate.groups_for_target(
+                       worst, platform, share)}
+            for name, share in sorted(record.get("shares", {}).items())}
+        (out / "calibration.json").write_text(
+            json.dumps(record, sort_keys=True))
+        print(json.dumps({k: record[k] for k in
+                          ("arm", "look", "correctness", "shares",
+                           "implications", "incomplete",
+                           "worst_unit_64000_hours")}, sort_keys=True))
+        for v in record["variants"]:
+            print(f"g={v['groups']} C={v['C_g_sum_wall']:.1f}s "
+                  f"W={v['W_g_max_wall']:.1f}s разброс={v['spread_max_over_min']} "
+                  f"cpu={v['C_g_sum_cpu']:.1f}s rss={v['rss_high_water_mb']}MB",
+                  flush=True)
         return 0
 
     # reduce

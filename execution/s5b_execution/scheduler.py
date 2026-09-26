@@ -34,6 +34,29 @@ def arms() -> dict[str, dict]:
     return {a["tag"]: a for a in S.production_arms()}
 
 
+def key_slices(groups: int) -> tuple:
+    """Ключи, порезанные на `groups` групп. ОДНА функция на весь слой.
+
+    Ею пользуется и планировщик, и калибровка экономии деления. Вторая
+    реализация того же разреза означала бы, что калибровка измеряет не то,
+    что потом исполняется, — а именно за это расхождение уже был заплачен
+    один отменённый прогон.
+
+    Порядок ключей канонический и задан наукой. Срезы СМЕЖНЫЕ, поэтому при
+    неоднородной стоимости ключа группы окажутся неравными: это свойство
+    раскладки, а не дефект, и калибровка обязана его измерить, а не
+    усреднить.
+    """
+    if groups < 1:
+        raise PlanRefused(f"групп должно быть хотя бы одна, дано {groups}")
+    if groups > len(KEYS):
+        raise PlanRefused(f"групп {groups} больше, чем ключей {len(KEYS)}")
+    if groups == 1:
+        return (KEYS,)
+    size = -(-len(KEYS) // groups)
+    return tuple(KEYS[i:i + size] for i in range(0, len(KEYS), size))
+
+
 def units_for(look: int, ledger: Ledger | None = None,
               skip: set[str] | None = None) -> list:
     """Юниты ступени `look`, отфильтрованные по реестру.
@@ -49,12 +72,7 @@ def units_for(look: int, ledger: Ledger | None = None,
     out = []
     for tag, arm in arms().items():
         groups = cost.groups_needed(arm["effective_rate"], look, len(KEYS))
-        if groups == 1:
-            slices = (KEYS,)
-        else:
-            size = -(-len(KEYS) // groups)
-            slices = tuple(KEYS[i:i + size] for i in range(0, len(KEYS), size))
-        for keys in slices:
+        for keys in key_slices(groups):
             if ledger is not None and not ledger.unit_is_needed(
                     tag, keys, FRACTIONS):
                 continue

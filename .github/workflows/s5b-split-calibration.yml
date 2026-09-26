@@ -1,0 +1,84 @@
+# Калибровка экономии деления ключей. ОДНО задание, ОДИН раннер.
+#
+# Отдельный воркфлоу, а не ступень лестницы: на выходе исполнительный
+# параметр `UNDIVIDED_SHARE`, а не наука. `s5b-stage1.yml` этот файл не
+# трогает, поэтому контракт «заявка это только сигнал» у ступеней остаётся
+# нетронутым.
+#
+# Почему все варианты в одном задании: наблюдённый разброс раннеров 1.96x
+# БОЛЬШЕ разницы, которую ищем. Сравнение делёного с неделёным на разных
+# раннерах не измеряет ничего — ровно на этом сгорело единственное прежнее
+# касание оси деления.
+name: S5b split calibration
+
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/s5b-split-request.txt']
+
+permissions:
+  contents: read
+
+env:
+  SCIENCE_SHA: "7a62a3911f8bc000cf08ad97f76c0f962b07e615"
+  EXECUTION_SHA: "a9cbc942f215d963dcc849bfbbbda9b976002300"
+  # Потолок задания 360 мин; берём 350, как у ступеней. Охранник времени
+  # получает 330: разница есть запас на checkout, выгрузку и постобработку.
+  JOB_TIMEOUT_MINUTES: "350"
+  GUARD_MINUTES: "330"
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: request
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
+          path: science
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXECUTION_SHA }}
+          path: exec
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - id: request
+        run: |
+          set -euo pipefail
+          FILE=request/.github/s5b-split-request.txt
+          LOOK=$(grep -oP '^look:\s*\K[0-9]+' "$FILE" | head -1)
+          ARM=$(grep -oP '^arm:\s*\K\S+' "$FILE" | head -1)
+          if [ -z "$LOOK" ] || [ -z "$ARM" ]; then
+            echo "заявка обязана нести look и arm" >&2
+            exit 1
+          fi
+          # Калибровка идёт на ДЕШЁВОЙ ступени. 16000 и 64000 этим
+          # воркфлоу не запускаются: подтверждение на 16000 требует
+          # отдельного решения, а 64000 не планируется вовсе.
+          if [ "$LOOK" != "4000" ]; then
+            echo "калибровка разрешена только на ступени 4000, дано $LOOK" >&2
+            exit 1
+          fi
+          echo "look=$LOOK" >> "$GITHUB_OUTPUT"
+          echo "arm=$ARM" >> "$GITHUB_OUTPUT"
+      - env:
+          PYTHONPATH: science/research/python:exec/execution
+          SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
+          EXECUTION_SHA: ${{ env.EXECUTION_SHA }}
+          REQUEST_SHA: ${{ github.sha }}
+        run: |
+          python3 -B -m s5b_execution.cli calibrate \
+            --look ${{ steps.request.outputs.look }} \
+            --arm "${{ steps.request.outputs.arm }}" \
+            --deadline-minutes ${{ env.GUARD_MINUTES }} \
+            --science science/research/python --out out
+      - if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: s5b-calibration-${{ steps.request.outputs.look }}
+          path: out/calibration.json

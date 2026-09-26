@@ -26,6 +26,12 @@ except ImportError:                                # pragma: no cover
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 SMOKE = ROOT / ".github/workflows/s5b-smoke.yml"
 STAGE1 = ROOT / ".github/workflows/s5b-stage1.yml"
+CALIBRATION = ROOT / ".github/workflows/s5b-split-calibration.yml"
+
+#: Все воркфлоу S5b, ОБНАРУЖЕННЫЕ, а не перечисленные. Контракт
+#: «воркфлоу -> CLI» перебирался по списку из двух файлов в четырёх местах,
+#: и новый воркфлоу мог не попасть ни в одно. Обход каталога забыть нельзя.
+CONTRACTED = tuple(sorted((ROOT / ".github/workflows").glob("s5b-*.yml")))
 
 #: сверено со страницами релизов, а не по памяти
 VERIFIED = {"actions/checkout": "v7", "actions/setup-python": "v7",
@@ -52,7 +58,7 @@ def _uses(spec):
 class ActionVersionsAreTheVerifiedOnesTests(unittest.TestCase):
 
     def test_every_action_is_pinned_to_the_verified_major(self):
-        for path in (SMOKE, STAGE1):
+        for path in CONTRACTED:
             for used in _uses(_load(path)):
                 name, _, version = used.partition("@")
                 self.assertIn(name, VERIFIED, f"{path.name}: {used}")
@@ -71,7 +77,7 @@ class TimeoutsStayUnderThePlatformCapTests(unittest.TestCase):
     def test_every_computing_job_times_out_before_the_platform_kills_it(self):
         """Упереться в потолок значит потерять ВСЮ работу без диагностики."""
         cap = S.GITHUB_JOB_MAX_HOURS * 60
-        for path in (SMOKE, STAGE1):
+        for path in CONTRACTED:
             for name, job in _load(path)["jobs"].items():
                 if name == "plan":
                     continue
@@ -512,7 +518,7 @@ class WorkflowCliContract(unittest.TestCase):
         Значит `\\` в конце строки перестаёт быть продолжением команды и
         начинает экранировать пробел. Блочный `run: |` переносы сохраняет.
         """
-        for path in (STAGE1, SMOKE):
+        for path in CONTRACTED:
             for indent, text, is_block in _run_blocks(path):
                 if "\n" in text or " \\ " in text:
                     self.assertTrue(
@@ -524,11 +530,11 @@ class WorkflowCliContract(unittest.TestCase):
     def test_every_cli_invocation_tokenises_cleanly(self):
         """Ни одного токена с краевым пробелом и ни одного голого `\\`."""
         import shlex
-        seen = 0
-        for path in (STAGE1, SMOKE):
+        seen = {}
+        for path in CONTRACTED:
             for _, text, _ in _run_blocks(path):
                 for command in _cli_commands(text):
-                    seen += 1
+                    seen[path.name] = seen.get(path.name, 0) + 1
                     for token in shlex.split(command):
                         self.assertEqual(
                             token, token.strip(),
@@ -536,12 +542,18 @@ class WorkflowCliContract(unittest.TestCase):
                             f"краевым пробелом — это свёрнутый YAML-перенос")
                         self.assertNotEqual(token, "\\",
                                             f"{path.name}: голый '\\'")
-        self.assertGreaterEqual(seen, 3, "вызовы CLI не найдены вовсе")
+        # КАЖДЫЙ обнаруженный воркфлоу обязан дать хотя бы один вызов.
+        # Прежний порог «всего не меньше трёх» проходил и тогда, когда
+        # перебор вернулся бы к списку из двух файлов, молча оставив новый
+        # воркфлоу без контракта.
+        silent = [p.name for p in CONTRACTED if not seen.get(p.name)]
+        self.assertEqual(silent, [],
+                         f"воркфлоу не дали ни одного вызова CLI: {silent}")
 
     def test_every_cli_flag_is_one_the_cli_declares(self):
         """Флаг, которого CLI не знает, — отказ с кодом 2 и потерянный прогон."""
         import shlex
-        for path in (STAGE1, SMOKE):
+        for path in CONTRACTED:
             for _, text, _ in _run_blocks(path):
                 for command in _cli_commands(text):
                     module = self._module_of(command)
@@ -557,7 +569,7 @@ class WorkflowCliContract(unittest.TestCase):
         """Режим — позиционный аргумент с закрытым списком значений."""
         import re
         import shlex
-        for path in (STAGE1, SMOKE):
+        for path in CONTRACTED:
             for _, text, _ in _run_blocks(path):
                 for command in _cli_commands(text):
                     module = self._module_of(command)
@@ -663,3 +675,87 @@ class TheResumeChainIsWholeTests(unittest.TestCase):
                                  f"{job}: манифест взят у продолжения")
                 self.assertNotIn("resume_run_3", block,
                                  f"{job}: манифест взят у продолжения")
+
+
+class EveryS5bWorkflowIsUnderContractTests(unittest.TestCase):
+    """Воркфлоу, зовущий CLI, обязан попадать под контракт АВТОМАТИЧЕСКИ.
+
+    Прежде список файлов был перечислен вручную в четырёх местах. Новый
+    воркфлоу калибровки мог не попасть ни в одно из них, и контракт
+    «команда разбирается этим CLI» его бы не покрыл — то есть гейт,
+    написанный после потерянного прогона, снова смотрел бы не туда.
+    """
+
+    def test_the_set_is_discovered_not_listed(self):
+        self.assertGreaterEqual(len(CONTRACTED), 3)
+        for known in (SMOKE, STAGE1, CALIBRATION):
+            self.assertIn(known, CONTRACTED, f"{known.name} вне обхода")
+
+    def test_every_workflow_calling_the_cli_is_contracted(self):
+        called = tuple(sorted(
+            p for p in (ROOT / ".github/workflows").glob("*.yml")
+            if any(m in p.read_text() for m in CLI_SOURCES)))
+        missed = [p.name for p in called if p not in CONTRACTED]
+        self.assertEqual(missed, [], "воркфлоу зовёт CLI и не под контрактом")
+
+
+class CalibrationWorkflowTests(unittest.TestCase):
+    """Калибровка: один раннер, дешёвая ступень, охранник времени."""
+
+    def _text(self):
+        return CALIBRATION.read_text()
+
+    def test_one_job_and_no_matrix(self):
+        """Межраннерный confound исключается тем, что раннер ОДИН."""
+        text = self._text()
+        self.assertNotIn("strategy:", text, "матрица развела бы варианты "
+                                            "по разным раннерам")
+        self.assertNotIn("max-parallel", text)
+        self.assertEqual(text.count("runs-on:"), 1, "заданий больше одного")
+
+    def test_the_guard_is_strictly_below_the_job_timeout(self):
+        """Охранник обязан оставлять запас на выгрузку и постобработку."""
+        import re
+        text = self._text()
+        guard = int(re.search(r'GUARD_MINUTES: "(\d+)"', text).group(1))
+        timeout = int(re.search(r"timeout-minutes: (\d+)", text).group(1))
+        declared = int(re.search(r'JOB_TIMEOUT_MINUTES: "(\d+)"', text).group(1))
+        self.assertEqual(declared, timeout, "объявленный потолок разошёлся "
+                                            "с фактическим timeout-minutes")
+        self.assertLessEqual(timeout, 350, "выше потолка задания GitHub")
+        self.assertLessEqual(guard + 15, timeout,
+                             f"охранник {guard} мин при потолке {timeout}: "
+                             f"запаса на выгрузку не остаётся")
+
+    def test_only_the_cheap_look_is_allowed(self):
+        """16000 и 64000 этим воркфлоу не запускаются.
+
+        Проверяется ИСПОЛНЯЕМАЯ часть, без комментариев: первая версия
+        гейта искала строки во всём файле и падала на собственном
+        пояснении, то есть проверяла прозу вместо логики.
+        """
+        import re
+        code = "\n".join(line for line in self._text().splitlines()
+                          if not line.lstrip().startswith("#"))
+        self.assertIn('if [ "$LOOK" != "4000" ]', code,
+                      "воркфлоу не ограничивает ступень")
+        looks = set(re.findall(r"\b(4000|16000|64000)\b", code))
+        self.assertEqual(looks, {"4000"},
+                         f"в исполняемой части упомянуты ступени {looks}")
+
+    def test_its_trigger_does_not_touch_the_ladder(self):
+        """Своя заявка, чтобы контракт пина у ступеней остался нетронутым."""
+        text = self._text()
+        self.assertIn("paths: ['.github/s5b-split-request.txt']", text)
+        self.assertNotIn("s5b-stage1-request.txt", text)
+
+    def test_the_result_leaves_the_run_even_on_failure(self):
+        """Отчёт об отказе тоже результат: без выгрузки причину не увидеть."""
+        text = self._text()
+        self.assertIn("calibration.json", text)
+        self.assertIn("if: ${{ always() }}", text)
+
+    def test_science_is_pinned_and_proven(self):
+        text = self._text()
+        self.assertIn("ref: ${{ env.SCIENCE_SHA }}", text)
+        self.assertIn("--science science/research/python", text)
