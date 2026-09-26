@@ -493,6 +493,18 @@ def _source_at(sha: str, repo_path: str) -> str:
     не гейтом, — теперь гейтом.
     """
     import subprocess
+    have = subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e",
+                           f"{sha}^{{commit}}"], capture_output=True)
+    if have.returncode != 0:
+        shallow = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--is-shallow-repository"],
+            capture_output=True, text=True).stdout.strip()
+        raise AssertionError(
+            f"закреплённого коммита {sha[:8]} нет в этом клоне"
+            + (" — клон МЕЛКИЙ: заданию, которое гоняет эти тесты, нужен "
+               "checkout с fetch-depth: 0" if shallow == "true" else "")
+            + ". Отсутствие истории — не дефект слоя, но и не повод "
+              "пропускать гейт: пропущенный гейт не ловит ничего")
     done = subprocess.run(["git", "-C", str(ROOT), "show",
                            f"{sha}:{repo_path}"],
                           capture_output=True, text=True)
@@ -842,3 +854,44 @@ class ThePinnedLayerActuallyHasTheCodeTests(unittest.TestCase):
         with self.assertRaises(AssertionError) as caught:
             _source_at(head, "execution/s5b_execution/такого_модуля_нет.py")
         self.assertIn("не содержит", str(caught.exception))
+
+
+class TheCiThatRunsTheseGatesHasTheHistoryTests(unittest.TestCase):
+    """Гейты закреплённого слоя требуют историю — CI обязан её дать.
+
+    Локально история всегда полная, поэтому регрессия «checkout снова
+    мелкий» локально НЕ видна: гейты зелёные, а CI красный. Так и было на
+    950364d и afda427. Проверяется конфигурация задания, которое гоняет
+    `research/python/tests`, — без PyYAML, чтобы гейт не мог пропуститься.
+    """
+
+    WEB = ROOT / ".github/workflows/annotation-web.yml"
+
+    def _job(self, name: str) -> str:
+        lines = self.WEB.read_text().splitlines()
+        out, taking = [], False
+        for line in lines:
+            if line.startswith("  ") and not line.startswith("   ") \
+                    and line.strip().endswith(":"):
+                taking = line.strip() == f"{name}:"
+                continue
+            if taking:
+                out.append(line)
+        self.assertTrue(out, f"в annotation-web нет задания {name}")
+        return "\n".join(out)
+
+    def test_the_research_job_runs_these_tests(self):
+        job = self._job("research-python")
+        self.assertIn("working-directory: research/python", job)
+        self.assertIn("unittest discover -s tests", job)
+
+    def test_its_checkout_fetches_full_history(self):
+        job = self._job("research-python")
+        steps = job.split("- uses: ")
+        checkout = [s for s in steps if s.startswith("actions/checkout@")]
+        self.assertEqual(len(checkout), 1, "checkout не найден или не один")
+        code = "\n".join(l for l in checkout[0].splitlines()
+                         if not l.lstrip().startswith("#"))
+        self.assertRegex(code, r"fetch-depth:\s*0\b",
+                         "мелкий checkout: закреплённых коммитов в клоне не "
+                         "будет, и гейты слоя упадут на отсутствии истории")

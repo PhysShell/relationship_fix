@@ -746,6 +746,11 @@ DIVERSIONS = (
      "from .ledger import Ledger\n",
      "from .ledger import Ledger\nfrom . import keycost  # noqa: F401\n",
      ["tests.test_s5b_keycost"]),
+    ("CI снова берёт мелкий клон без закреплённых коммитов",
+     "../../.github/workflows/annotation-web.yml",
+     "          fetch-depth: 0\n",
+     "          fetch-depth: 1\n",
+     ["tests.test_s5b_workflows"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
