@@ -714,6 +714,11 @@ DIVERSIONS = (
      '          if [ "$LOOK" != "4000" ]; then\n',
      '          if [ "$LOOK" = "0" ]; then\n',
      ["tests.test_s5b_workflows"]),
+    ("воркфлоу закреплён на слое, где нужного кода ещё нет",
+     "../../.github/workflows/s5b-split-calibration.yml",
+     '  EXECUTION_SHA: "068e13ffc8e4505c54ee25c8362a9e991462fcbc"',
+     '  EXECUTION_SHA: "a9cbc942f215d963dcc849bfbbbda9b976002300"',
+     ["tests.test_s5b_workflows"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",

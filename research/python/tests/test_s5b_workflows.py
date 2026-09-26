@@ -475,6 +475,34 @@ CLI_SOURCES = {
 }
 
 
+def _pinned_execution_sha(path: pathlib.Path) -> str:
+    """`EXECUTION_SHA`, объявленный воркфлоу. Пусто — слой не закреплён."""
+    import re
+    m = re.search(r'^\s*EXECUTION_SHA:\s*"([0-9a-f]{40})"', path.read_text(),
+                  re.M)
+    return m.group(1) if m else ""
+
+
+def _source_at(sha: str, repo_path: str) -> str:
+    """Исходник ПО ЗАКРЕПЛЁННОМУ КОММИТУ, а не из рабочего дерева.
+
+    Воркфлоу исполняет слой с `EXECUTION_SHA`, а контракт до сих пор читал
+    CLI из рабочего дерева. Зазор между ними не гипотетический: воркфлоу
+    калибровки был написан с пином на слой, в котором модуля калибровки ещё
+    не существовало, и прогон упал бы на импорте. Поймано рассуждением, а
+    не гейтом, — теперь гейтом.
+    """
+    import subprocess
+    done = subprocess.run(["git", "-C", str(ROOT), "show",
+                           f"{sha}:{repo_path}"],
+                          capture_output=True, text=True)
+    if done.returncode != 0:
+        raise AssertionError(
+            f"закреплённый слой {sha[:8]} не содержит {repo_path}: "
+            f"{done.stderr.strip()}")
+    return done.stdout
+
+
 def _cli_commands(text: str):
     """Вызовы CLI из текста `run:` так, как их увидит оболочка."""
     joined = text.replace("\\\n", " ")
@@ -507,9 +535,17 @@ class WorkflowCliContract(unittest.TestCase):
         raise AssertionError(f"неизвестный CLI в {command!r}")
 
     @classmethod
-    def _declared_flags(cls, module: str) -> set[str]:
+    def _source(cls, module: str, path: pathlib.Path) -> str:
+        """Исходник CLI ТОГО слоя, который исполнит этот воркфлоу."""
+        sha = _pinned_execution_sha(path)
+        if sha and module.startswith("s5b_execution"):
+            return _source_at(sha, CLI_SOURCES[module])
+        return (ROOT / CLI_SOURCES[module]).read_text()
+
+    @classmethod
+    def _declared_flags(cls, module: str, path: pathlib.Path) -> set[str]:
         import re
-        src = (ROOT / CLI_SOURCES[module]).read_text()
+        src = cls._source(module, path)
         return set(re.findall(r'add_argument\("(--[a-z0-9-]+)"', src))
 
     def test_a_multiline_run_is_always_a_block_scalar(self):
@@ -557,7 +593,7 @@ class WorkflowCliContract(unittest.TestCase):
             for _, text, _ in _run_blocks(path):
                 for command in _cli_commands(text):
                     module = self._module_of(command)
-                    declared = self._declared_flags(module)
+                    declared = self._declared_flags(module, path)
                     self.assertIn("--look", declared, module)
                     for token in shlex.split(command):
                         if token.startswith("--"):
@@ -573,7 +609,7 @@ class WorkflowCliContract(unittest.TestCase):
             for _, text, _ in _run_blocks(path):
                 for command in _cli_commands(text):
                     module = self._module_of(command)
-                    src = (ROOT / CLI_SOURCES[module]).read_text()
+                    src = self._source(module, path)
                     line = re.search(r'add_argument\("mode",\s*choices=\(([^)]*)\)',
                                      src, re.S)
                     self.assertIsNotNone(line, module)
@@ -759,3 +795,50 @@ class CalibrationWorkflowTests(unittest.TestCase):
         text = self._text()
         self.assertIn("ref: ${{ env.SCIENCE_SHA }}", text)
         self.assertIn("--science science/research/python", text)
+
+
+class ThePinnedLayerActuallyHasTheCodeTests(unittest.TestCase):
+    """Закреплённый `EXECUTION_SHA` обязан СОДЕРЖАТЬ то, что зовут.
+
+    Воркфлоу калибровки был написан с пином на слой, где модуля калибровки
+    ещё не существовало: прогон упал бы на импорте, а контракт «режим
+    известен CLI» этого не видел, потому что читал рабочее дерево. Ошибка
+    поймана рассуждением; гейт делает её ловимой.
+    """
+
+    def test_every_pinned_layer_carries_its_cli(self):
+        for path in CONTRACTED:
+            sha = _pinned_execution_sha(path)
+            if not sha:
+                continue
+            src = _source_at(sha, "execution/s5b_execution/cli.py")
+            self.assertIn("add_argument", src, f"{path.name}: {sha[:8]}")
+
+    def test_every_module_the_pinned_cli_imports_exists_at_that_sha(self):
+        """Импорт пакета проверяется ПО ТОМУ ЖЕ коммиту, а не по дереву."""
+        import re
+        for path in CONTRACTED:
+            sha = _pinned_execution_sha(path)
+            if not sha:
+                continue
+            src = _source_at(sha, "execution/s5b_execution/cli.py")
+            imported = set()
+            for line in re.findall(r"^from \. import (.+)$", src, re.M):
+                imported.update(n.strip() for n in line.split(","))
+            self.assertTrue(imported, f"{path.name}: импорты не разобраны")
+            for name in sorted(imported):
+                _source_at(sha, f"execution/s5b_execution/{name}.py")
+
+    def test_the_gate_catches_a_pin_without_the_module(self):
+        """Гейт ловит РОВНО ту ошибку: пин на слой без нужного модуля.
+
+        Проверяется МЕХАНИЗМ, на отсутствующем пути. Привязываться к
+        тому, какой коммит чего не содержит, значило бы сломать гейт при
+        следующем законном сдвиге пина.
+        """
+        import subprocess
+        head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+        with self.assertRaises(AssertionError) as caught:
+            _source_at(head, "execution/s5b_execution/такого_модуля_нет.py")
+        self.assertIn("не содержит", str(caught.exception))
