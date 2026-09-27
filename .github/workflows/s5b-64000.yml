@@ -1,0 +1,339 @@
+# Ступень 64000 в несколько прогонов. Наука и исполнение — разными checkout'ами.
+#
+# Потолок 256 — это матрица ОДНОГО прогона. Полный план 64000 — 495 заданий
+# при бюджете 2.5 ч, поэтому ступень идёт партиями (execution/s5b_execution/
+# multirun.py, гейт docs/research/s5b-multirun-gate.md):
+#
+#   прогон 1             план — ОДИН полный манифест, партия 1 (<= 165)
+#   прогон 2 и 3         resume_run: прошлые прогоны; тот же манифест,
+#                        следующие <= 165 невыполненных, упавшее — первым
+#   прогон 4             восстановительный; не закрыл ступень — STOP
+#
+# Промежуточный прогон кончается итогом `progress`: PARTIAL — зелёный,
+# упавшее выбранное задание — красный. Научное сведение — ТОЛЬКО когда
+# остаток пуст. Реестр прошлой ступени — чекпойнт 16000, привязанный к
+# своему прогону отпечатком `ledger_digest` (prior_digest заявки).
+name: S5b 64000 multi-run
+
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/s5b-64000-request.txt']
+
+permissions:
+  contents: read
+  # нужно, чтобы скачать чекпойнт 16000 и части прошлых прогонов
+  actions: read
+
+env:
+  SCIENCE_SHA: "7a62a3911f8bc000cf08ad97f76c0f962b07e615"
+  EXECUTION_SHA: "ed00d4fb1d482d92cb6db8c7fb1349b40f500fff"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      run: ${{ steps.request.outputs.run }}
+      prior_run: ${{ steps.request.outputs.prior_run }}
+      prior_digest: ${{ steps.request.outputs.prior_digest }}
+      resume_run: ${{ steps.request.outputs.resume_run }}
+      resume_run_2: ${{ steps.request.outputs.resume_run_2 }}
+      resume_run_3: ${{ steps.request.outputs.resume_run_3 }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          # нужна история, иначе diff пин..заявка не построить
+          fetch-depth: 0
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
+          path: science
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXECUTION_SHA }}
+          path: exec
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - id: request
+        run: |
+          set -euo pipefail
+          FILE=request/.github/s5b-64000-request.txt
+          # `|| true`: без него отсутствующее поле гасит шаг под pipefail ДО
+          # проверки ниже, и отказ был бы немым
+          LOOK=$(grep -oP '^look:\s*\K[0-9]+' "$FILE" | head -1 || true)
+          PRIOR_RUN=$(grep -oP '^prior_run:\s*\K[0-9]+' "$FILE" | head -1 || true)
+          PRIOR_DIGEST=$(grep -oP '^prior_digest:\s*\K[0-9a-f]{16}\b' "$FILE" | head -1 || true)
+          PIN=$(grep -oP '^execution_pin:\s*\K[0-9a-f]{40}\b' "$FILE" | head -1 || true)
+          WF=$(grep -oP '^workflow_sha256:\s*\K[0-9a-f]{64}\b' "$FILE" | head -1 || true)
+          if [ -z "$LOOK" ] || [ -z "$PRIOR_RUN" ] || [ -z "$PRIOR_DIGEST" ] \
+               || [ -z "$PIN" ] || [ -z "$WF" ]; then
+            echo "заявка обязана нести look, prior_run, prior_digest," \
+                 "execution_pin и workflow_sha256" >&2
+            exit 1
+          fi
+          if [ "$LOOK" != "64000" ]; then
+            echo "этот воркфлоу считает только ступень 64000, дано $LOOK" >&2
+            exit 1
+          fi
+          # ЦЕПОЧКА: все прошлые прогоны ступени, первым — объявивший
+          # манифест. Три слота: номинальные 1-3 и один восстановительный.
+          RESUME_RUNS=$(grep -oP '^resume_run:\s*\K[0-9 ]+' "$FILE" | head -1 | xargs || true)
+          set -- $RESUME_RUNS
+          if [ "$#" -gt 3 ]; then
+            echo "resume_run: не больше трёх прошлых прогонов, получено $#" >&2
+            exit 1
+          fi
+          echo "look=$LOOK" >> "$GITHUB_OUTPUT"
+          echo "run=$(( $# + 1 ))" >> "$GITHUB_OUTPUT"
+          echo "prior_run=$PRIOR_RUN" >> "$GITHUB_OUTPUT"
+          echo "prior_digest=$PRIOR_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "pin=$PIN" >> "$GITHUB_OUTPUT"
+          echo "workflow_sha256=$WF" >> "$GITHUB_OUTPUT"
+          echo "resume_run=${1:-}" >> "$GITHUB_OUTPUT"
+          echo "resume_run_2=${2:-}" >> "$GITHUB_OUTPUT"
+          echo "resume_run_3=${3:-}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v8
+        with:
+          path: prior
+          name: s5b-reduced-16000
+          run-id: ${{ steps.request.outputs.prior_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.request.outputs.resume_run != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-64000-*
+          merge-multiple: true
+          run-id: ${{ steps.request.outputs.resume_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.request.outputs.resume_run_2 != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-64000-*
+          merge-multiple: true
+          run-id: ${{ steps.request.outputs.resume_run_2 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.request.outputs.resume_run_3 != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-64000-*
+          merge-multiple: true
+          run-id: ${{ steps.request.outputs.resume_run_3 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # манифест — ТОЛЬКО от первого прогона: продолжения несут его копию
+      - if: ${{ steps.request.outputs.resume_run != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          name: s5b-manifest-64000
+          run-id: ${{ steps.request.outputs.resume_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - id: plan
+        env:
+          PYTHONPATH: science/research/python:exec/execution
+          SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
+          EXECUTION_SHA: ${{ env.EXECUTION_SHA }}
+          REQUEST_SHA: ${{ github.sha }}
+        run: |
+          set -o pipefail
+          RESUME=""
+          if [ -n "${{ steps.request.outputs.resume_run }}" ]; then
+            RESUME="--resume resumed"
+          fi
+          # продолжение планирует ступень ЗАНОВО и обязано получить тот же
+          # манифест, иначе отказ до счёта
+          python3 -B -m s5b_execution.cli plan --multirun \
+            --look 64000 --checkpoint prior/checkpoint.json $RESUME \
+            --prior-run "${{ steps.request.outputs.prior_run }}" \
+            --prior-digest "${{ steps.request.outputs.prior_digest }}" \
+            --repo request --pin "${{ steps.request.outputs.pin }}" \
+            --request-path .github/s5b-64000-request.txt \
+            --workflow request/.github/workflows/s5b-64000.yml \
+            --workflow-sha256 "${{ steps.request.outputs.workflow_sha256 }}" \
+            --science science/research/python --out plan
+          OUT=$(python3 -B -m s5b_execution.cli select \
+                  --look 64000 --manifest plan/manifest.json \
+                  --run ${{ steps.request.outputs.run }} $RESUME --out batch)
+          echo "$OUT"
+          echo "shards=$(echo "$OUT" | python3 -c \
+            'import json,sys; print(json.dumps(json.load(sys.stdin)["shards"]))')" \
+            >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: s5b-manifest-64000
+          path: plan/manifest.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: s5b-batch-64000
+          path: batch/batch.json
+
+  compute:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      # Совпадение с cost.MAX_PARALLEL держит гейт. Литерал, а не выражение.
+      max-parallel: 6
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
+          path: science
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXECUTION_SHA }}
+          path: exec
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v8
+        with:
+          name: s5b-batch-64000
+          path: batch
+      - env:
+          PYTHONPATH: science/research/python:exec/execution
+        run: |
+          echo "раннер: $RUNNER_NAME"
+          python3 -B -c "import sys; sys.path[:0] = \
+            'science/research/python:exec/execution'.split(':'); \
+            from s5b_execution.guard import assert_science_comes_from as g; \
+            print(g('science/research/python'))"
+          python3 -B -m s5b_execution.cli run \
+            --look 64000 --manifest batch/batch.json \
+            --shard ${{ matrix.shard }} --out out
+      # выгрузка только при успехе: упавшее задание остаётся невыполненным
+      # целиком и идёт первым в следующем прогоне
+      - uses: actions/upload-artifact@v7
+        with:
+          name: s5b-shard-64000-${{ matrix.shard }}
+          path: out
+
+  progress:
+    needs: [plan, compute]
+    # Даже если задания упали: итог обязан СКАЗАТЬ, что упало и что осталось
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
+          path: science
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXECUTION_SHA }}
+          path: exec
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      # частей этого прогона может не быть вовсе, если упали все задания
+      - continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          path: out
+          pattern: s5b-shard-64000-*
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: s5b-manifest-64000
+          path: out
+      - uses: actions/download-artifact@v8
+        with:
+          name: s5b-batch-64000
+          path: batch
+      - uses: actions/download-artifact@v8
+        with:
+          path: prior
+          name: s5b-reduced-16000
+          run-id: ${{ needs.plan.outputs.prior_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ needs.plan.outputs.resume_run != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-64000-*
+          merge-multiple: true
+          run-id: ${{ needs.plan.outputs.resume_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ needs.plan.outputs.resume_run_2 != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-64000-*
+          merge-multiple: true
+          run-id: ${{ needs.plan.outputs.resume_run_2 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ needs.plan.outputs.resume_run_3 != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          pattern: s5b-shard-64000-*
+          merge-multiple: true
+          run-id: ${{ needs.plan.outputs.resume_run_3 }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ needs.plan.outputs.resume_run != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          path: resumed
+          name: s5b-manifest-64000
+          run-id: ${{ needs.plan.outputs.resume_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - id: progress
+        env:
+          PYTHONPATH: science/research/python:exec/execution
+          SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
+          EXECUTION_SHA: ${{ env.EXECUTION_SHA }}
+          REQUEST_SHA: ${{ github.sha }}
+        run: |
+          RESUME=""
+          if [ -n "${{ needs.plan.outputs.resume_run }}" ]; then
+            RESUME="--resume resumed"
+          fi
+          set +e
+          python3 -B -m s5b_execution.cli progress \
+            --look 64000 --parts out --batch batch/batch.json $RESUME \
+            --out report
+          CODE=$?
+          set -e
+          STATUS=$(python3 -c 'import json; print(json.load(open("report/progress.json"))["status"])' || echo NONE)
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          exit $CODE
+      # НАСТОЯЩЕЕ сведение — только когда остаток пуст
+      - if: ${{ steps.progress.outputs.status == 'COMPLETE' }}
+        env:
+          PYTHONPATH: science/research/python:exec/execution
+          SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
+          EXECUTION_SHA: ${{ env.EXECUTION_SHA }}
+          REQUEST_SHA: ${{ github.sha }}
+        run: |
+          RESUME=""
+          if [ -n "${{ needs.plan.outputs.resume_run }}" ]; then
+            RESUME="--resume resumed"
+          fi
+          python3 -B -m s5b_execution.cli reduce \
+            --look 64000 --checkpoint prior/checkpoint.json $RESUME \
+            --prior-run "${{ needs.plan.outputs.prior_run }}" \
+            --prior-digest "${{ needs.plan.outputs.prior_digest }}" \
+            --science science/research/python --out out
+      - if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: s5b-progress-64000
+          path: report/progress.json
+      - if: ${{ steps.progress.outputs.status == 'COMPLETE' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: s5b-reduced-64000
+          path: |
+            out/reduced.json
+            out/checkpoint.json

@@ -28,6 +28,7 @@ SMOKE = ROOT / ".github/workflows/s5b-smoke.yml"
 STAGE1 = ROOT / ".github/workflows/s5b-stage1.yml"
 CALIBRATION = ROOT / ".github/workflows/s5b-split-calibration.yml"
 PILOT = ROOT / ".github/workflows/s5b-pilot.yml"
+MULTIRUN = ROOT / ".github/workflows/s5b-64000.yml"
 
 #: Все воркфлоу S5b, ОБНАРУЖЕННЫЕ, а не перечисленные. Контракт
 #: «воркфлоу -> CLI» перебирался по списку из двух файлов в четырёх местах,
@@ -516,6 +517,22 @@ def _source_at(sha: str, repo_path: str) -> str:
     return done.stdout
 
 
+def _package_imports(src: str) -> set[str]:
+    """Модули пакета, импортируемые на верхнем уровне: `from . import ...`,
+    и в строку, и в скобках на несколько строк."""
+    import re
+    names = set()
+    for group in re.findall(r"^from \. import \(([^)]*)\)", src, re.M):
+        names.update(group.split(","))
+    for line in re.findall(r"^from \. import ([^(\n]+)$", src, re.M):
+        names.update(line.split(","))
+    names = {n.strip() for n in names if n.strip()}
+    bad = sorted(n for n in names if not n.isidentifier())
+    if bad:
+        raise AssertionError(f"импорт не разобран: {bad}")
+    return names
+
+
 def _cli_commands(text: str):
     """Вызовы CLI из текста `run:` так, как их увидит оболочка."""
     joined = text.replace("\\\n", " ")
@@ -955,6 +972,274 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertEqual(float(field("block")), 60.0)
 
 
+class MultiRunWorkflowTests(unittest.TestCase):
+    """64000 партиями: свой запуск, ОДИН манифест, промежуточный итог — не наука.
+
+    Гейты текстовые и без PyYAML: пропуститься им нельзя. Шаги, в которых
+    уже однажды ломалась сама оболочка, исполняются настоящим bash.
+    """
+
+    REQUEST = ".github/s5b-64000-request.txt"
+
+    def _code(self):
+        return "\n".join(line for line in MULTIRUN.read_text().splitlines()
+                         if not line.lstrip().startswith("#"))
+
+    @staticmethod
+    def _steps(job_text):
+        return job_text.split("\n      - ")
+
+    def test_its_trigger_is_its_own_request(self):
+        text = MULTIRUN.read_text()
+        self.assertIn(f"paths: ['{self.REQUEST}']", text)
+        for other in ("s5b-stage1-request.txt", "s5b-pilot-request.txt",
+                      "s5b-split-request.txt"):
+            self.assertNotIn(other, text)
+
+    def test_only_64000_from_the_16000_checkpoint(self):
+        import re
+        code = self._code()
+        self.assertIn('if [ "$LOOK" != "64000" ]', code)
+        self.assertEqual(set(re.findall(r"s5b-[a-z]+-16000", code)),
+                         {"s5b-reduced-16000"},
+                         "от 16000 берётся что-то кроме чекпойнта")
+        self.assertNotRegex(code, r"\b4000\b")
+        for job in ("plan", "progress"):
+            text = _job_text(MULTIRUN, job)
+            self.assertIn("--checkpoint prior/checkpoint.json", text, job)
+            self.assertIn("--prior-digest", text, job)
+
+    def test_the_plan_is_one_manifest_then_a_selection(self):
+        plan = _job_text(MULTIRUN, "plan")
+        self.assertIn("s5b_execution.cli plan --multirun", plan)
+        self.assertIn("s5b_execution.cli select", plan)
+        self.assertIn("--run ${{ steps.request.outputs.run }}", plan)
+        self.assertIn(f"--request-path {self.REQUEST}", plan)
+        self.assertIn("--workflow request/.github/workflows/s5b-64000.yml",
+                      plan)
+        self.assertIn("name: s5b-manifest-64000", plan)
+        self.assertIn("name: s5b-batch-64000", plan)
+        self.assertIn('"shards"', plan, "матрица не из выбора")
+
+    def test_the_chain_cap_is_the_recovery_budget(self):
+        """Потолок цепочки = прошлые прогоны, которые вправе быть: три."""
+        import re
+        import sys as _s
+        if str(ROOT / "execution") not in _s.path:
+            _s.path.insert(0, str(ROOT / "execution"))
+        from s5b_execution import multirun
+        plan = _job_text(MULTIRUN, "plan")
+        caps = re.findall(r'if \[ "\$#" -gt ([0-9]+) \]', plan)
+        self.assertEqual(caps, [str(multirun.MAX_PREVIOUS_RUNS)])
+        slots = set(re.findall(r'echo "(resume_run(?:_[0-9]+)?)=', plan))
+        self.assertEqual(len(slots), multirun.MAX_PREVIOUS_RUNS)
+
+    def test_both_jobs_download_every_run_of_the_chain(self):
+        for job in ("plan", "progress"):
+            blocks = _job_text(MULTIRUN, job).split("- if:")
+            for slot in ("resume_run", "resume_run_2", "resume_run_3"):
+                fit = [b for b in blocks
+                       if (f"outputs.{slot} != ''" in b.split("\n")[0])
+                       and f"run-id: ${{{{ " in b
+                       and f"outputs.{slot} }}}}" in b
+                       and "pattern: s5b-shard-64000-*" in b]
+                self.assertEqual(len(fit), 1, f"{job}: слот {slot}")
+
+    def test_only_the_first_run_gives_the_manifest(self):
+        for job in ("plan", "progress"):
+            blocks = [b for b in _job_text(MULTIRUN, job).split("- if:")
+                      if "name: s5b-manifest-64000" in b and "resumed" in b]
+            self.assertEqual(len(blocks), 1, job)
+            self.assertIn("outputs.resume_run }}", blocks[0])
+            self.assertNotIn("resume_run_2", blocks[0])
+            self.assertNotIn("resume_run_3", blocks[0])
+
+    def test_compute_runs_the_selection_and_uploads_only_on_success(self):
+        import sys as _s
+        if str(ROOT / "execution") not in _s.path:
+            _s.path.insert(0, str(ROOT / "execution"))
+        from s5b_execution import cost
+        compute = _job_text(MULTIRUN, "compute")
+        self.assertIn("fail-fast: false", compute)
+        self.assertIn("fromJSON(needs.plan.outputs.shards)", compute)
+        self.assertIn(f"max-parallel: {cost.MAX_PARALLEL}\n", compute)
+        self.assertIn("--manifest batch/batch.json", compute)
+        self.assertIn("name: s5b-shard-64000-${{ matrix.shard }}", compute)
+        self.assertIn("assert_science_comes_from", compute)
+        self.assertNotIn("always()", compute,
+                         "частичная выгрузка упавшего задания")
+
+    def test_every_computing_job_checks_out_both_pins(self):
+        for name in ("compute", "progress"):
+            job = _job_text(MULTIRUN, name)
+            self.assertIn("ref: ${{ env.SCIENCE_SHA }}", job, name)
+            self.assertIn("ref: ${{ env.EXECUTION_SHA }}", job, name)
+            self.assertNotIn("github.sha }}\n          path: exec", job, name)
+
+    def test_the_science_reduce_runs_only_on_an_empty_remainder(self):
+        progress = _job_text(MULTIRUN, "progress")
+        self.assertIn("if: ${{ !cancelled() }}", progress)
+        steps = self._steps(progress)
+        complete = "if: ${{ steps.progress.outputs.status == 'COMPLETE' }}"
+        reduce = [s for s in steps if "s5b_execution.cli reduce" in s]
+        self.assertEqual(len(reduce), 1)
+        self.assertTrue(reduce[0].startswith(complete), reduce[0][:80])
+        reduced = [s for s in steps if "name: s5b-reduced-64000" in s]
+        self.assertEqual(len(reduced), 1)
+        self.assertTrue(reduced[0].startswith(complete))
+        kept = [s for s in steps if "name: s5b-progress-64000" in s]
+        self.assertEqual(len(kept), 1)
+        self.assertTrue(kept[0].startswith("if: ${{ always() }}"))
+        own = [s for s in steps if "pattern: s5b-shard-64000-*" in s
+               and "run-id" not in s]
+        self.assertEqual(len(own), 1)
+        self.assertTrue(own[0].startswith("continue-on-error: true"),
+                        "все задания упали — итог обязан всё равно сказаться")
+
+    # -- настоящим bash ----------------------------------------------------
+
+    def _bash(self, block, files=None, env=None, path_first=None):
+        import os
+        import re
+        import subprocess
+        import tempfile
+        block = re.sub(r"\$\{\{[^}]*\}\}", "", block)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            for rel, text in (files or {}).items():
+                (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+                (tmp / rel).write_text(text)
+            out = tmp / "github_output"
+            out.write_text("")
+            full = {**os.environ, "GITHUB_OUTPUT": str(out), **(env or {})}
+            if path_first:
+                bindir = tmp / "bin"
+                bindir.mkdir()
+                for name, text in path_first.items():
+                    (bindir / name).write_text(text)
+                    (bindir / name).chmod(0o755)
+                full["PATH"] = f"{bindir}:{full['PATH']}"
+            done = subprocess.run(["bash", "-e", "-c", block], cwd=tmp,
+                                  env=full, capture_output=True, text=True)
+            got = dict(line.split("=", 1) for line in out.read_text().splitlines()
+                       if "=" in line)
+        return done, got
+
+    def _request_block(self):
+        blocks = [t for _, t, _ in _run_blocks(MULTIRUN)
+                  if "s5b-64000-request.txt" in t and "grep" in t]
+        self.assertEqual(len(blocks), 1)
+        return blocks[0]
+
+    def _request(self, resume="", drop=""):
+        fields = {"look": "64000", "prior_run": "35904117457",
+                  "prior_digest": "7ef59277bf6acc6b",
+                  "execution_pin": "a" * 40, "workflow_sha256": "b" * 64}
+        text = "".join(f"{k}: {v}\n" for k, v in fields.items() if k != drop)
+        if resume:
+            text += f"resume_run: {resume}\n"
+        return {f"request/{self.REQUEST}": text}
+
+    def test_the_request_step_counts_the_run(self):
+        for resume, run in (("", "1"), ("11", "2"), ("11 22", "3"),
+                            ("11 22 33", "4")):
+            done, got = self._bash(self._request_block(), self._request(resume))
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(got["run"], run, resume)
+            ids = resume.split()
+            self.assertEqual([got["resume_run"], got["resume_run_2"],
+                              got["resume_run_3"]],
+                             ids + [""] * (3 - len(ids)))
+            self.assertEqual(got["prior_digest"], "7ef59277bf6acc6b")
+
+    def test_a_fifth_run_is_refused_at_the_request(self):
+        done, _ = self._bash(self._request_block(), self._request("1 2 3 4"))
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("не больше трёх", done.stderr)
+
+    def test_a_missing_field_is_named_not_swallowed(self):
+        for field in ("look", "prior_run", "prior_digest", "execution_pin",
+                      "workflow_sha256"):
+            done, _ = self._bash(self._request_block(),
+                                 self._request(drop=field))
+            self.assertNotEqual(done.returncode, 0, field)
+            self.assertIn("обязана нести", done.stderr, field)
+
+    def test_another_look_is_refused(self):
+        files = self._request()
+        key = next(iter(files))
+        files[key] = files[key].replace("look: 64000", "look: 16000")
+        done, _ = self._bash(self._request_block(), files)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("только ступень 64000", done.stderr)
+
+    def _progress_block(self):
+        blocks = [t for _, t, _ in _run_blocks(MULTIRUN)
+                  if "s5b_execution.cli progress" in t]
+        self.assertEqual(len(blocks), 1)
+        return blocks[0]
+
+    def test_the_progress_step_passes_the_code_and_the_status_through(self):
+        """Незаконченная ступень — зелёная; упавшее и STOP — красные.
+
+        Шаг исполняется настоящим bash, CLI подменён: проверяется именно
+        оболочка — `set +e`, код и статус, отданный следующему шагу.
+        """
+        import shutil
+        import sys as _s
+        fake = ("#!/bin/bash\n"
+                'if [ "$1" = "-B" ]; then\n'
+                '  mkdir -p report\n'
+                '  if [ -n "$FAKE_STATUS" ]; then\n'
+                '    echo "{\\"status\\": \\"$FAKE_STATUS\\"}" > report/progress.json\n'
+                '  fi\n'
+                '  exit "$FAKE_CODE"\n'
+                "fi\n"
+                f'exec {shutil.which("python3") or _s.executable} "$@"\n')
+        for code, status in ((0, "PARTIAL"), (1, "PARTIAL"), (0, "COMPLETE"),
+                             (1, "STOP"), (1, "")):
+            done, got = self._bash(self._progress_block(),
+                                   env={"FAKE_CODE": str(code),
+                                        "FAKE_STATUS": status},
+                                   path_first={"python3": fake})
+            self.assertEqual(done.returncode, code, (code, status, done.stderr))
+            self.assertEqual(got.get("status"), status or "NONE",
+                             (code, status))
+
+    def test_the_committed_request_if_present_passes_and_anchors(self):
+        import hashlib
+        import re
+        request = ROOT / self.REQUEST
+        if not request.exists():
+            self.skipTest("заявки нет")
+        text = request.read_text()
+        done, got = self._bash(self._request_block(),
+                               {f"request/{self.REQUEST}": text})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        digest = re.search(r"^workflow_sha256:\s*([0-9a-f]{64})$", text, re.M)
+        self.assertEqual(hashlib.sha256(MULTIRUN.read_bytes()).hexdigest(),
+                         digest.group(1),
+                         "объявленный отпечаток не совпадает с воркфлоу")
+
+    def test_the_pinned_layer_carries_the_multirun(self):
+        sha = _pinned_execution_sha(MULTIRUN)
+        self.assertTrue(sha, "воркфлоу 64000 не закреплён")
+        src = _source_at(sha, "execution/s5b_execution/multirun.py")
+        self.assertIn("BATCH_CAP = 165", src)
+        self.assertIn("def select(", src)
+        self.assertIn("def progress(", src)
+        self.assertIn("if look == dryplan.LOOK:", src)
+        cli = _source_at(sha, "execution/s5b_execution/cli.py")
+        self.assertIn('"select", "progress"', cli)
+        self.assertIn("_anchor_checkpoint(args, data)", cli)
+        guard = _source_at(sha, "execution/s5b_execution/guard.py")
+        self.assertIn("if paths != [request_path]:", guard)
+        dry = _source_at(sha, "execution/s5b_execution/dryplan.py")
+        self.assertIn("ANCHOR_SECONDS = 8835.4", dry)
+        self.assertIn("return (d + h + x) % 3",
+                      _source_at(sha, "execution/s5b_execution/layout.py"))
+
+
 class ThePinnedLayerActuallyHasTheCodeTests(unittest.TestCase):
     """Закреплённый `EXECUTION_SHA` обязан СОДЕРЖАТЬ то, что зовут.
 
@@ -974,18 +1259,29 @@ class ThePinnedLayerActuallyHasTheCodeTests(unittest.TestCase):
 
     def test_every_module_the_pinned_cli_imports_exists_at_that_sha(self):
         """Импорт пакета проверяется ПО ТОМУ ЖЕ коммиту, а не по дереву."""
-        import re
         for path in CONTRACTED:
             sha = _pinned_execution_sha(path)
             if not sha:
                 continue
             src = _source_at(sha, "execution/s5b_execution/cli.py")
-            imported = set()
-            for line in re.findall(r"^from \. import (.+)$", src, re.M):
-                imported.update(n.strip() for n in line.split(","))
+            imported = _package_imports(src)
             self.assertTrue(imported, f"{path.name}: импорты не разобраны")
             for name in sorted(imported):
                 _source_at(sha, f"execution/s5b_execution/{name}.py")
+
+    def test_a_parenthesised_import_is_read_whole(self):
+        """Разбор построчным шаблоном видел `(calibrate` и пустое имя.
+
+        Скобочный импорт в несколько строк прятал модули от гейта: пин на
+        слой без одного из них прошёл бы. Имя, не являющееся
+        идентификатором, — отказ разбора, а не пропуск."""
+        src = ("from . import (calibrate, cost,\n"
+               "               resume)\nfrom . import guard\n"
+               "    from . import pilot\n")
+        self.assertEqual(_package_imports(src),
+                         {"calibrate", "cost", "resume", "guard"})
+        with self.assertRaises(AssertionError):
+            _package_imports("from . import (a,\n  b c)\n")
 
     def test_the_gate_catches_a_pin_without_the_module(self):
         """Гейт ловит РОВНО ту ошибку: пин на слой без нужного модуля.
