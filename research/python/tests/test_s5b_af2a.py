@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -20,6 +21,8 @@ if str(ROOT / "execution") not in sys.path:
 from s5b_execution import af2a as F, calibrate, cost                # noqa: E402
 
 KEYS = F.KEYS
+AF2A_RECORD = json.loads(
+    (ROOT / "docs/research/s5b-gate-a-f2a.json").read_text())
 HORIZONS = sorted({k[2] for k in KEYS})
 
 #: Истина в долях неделёного 60 с, как в Gate A / A-F1.
@@ -346,6 +349,30 @@ class TheGateIsNotWiredTests(unittest.TestCase):
     def test_the_share_is_still_unset(self):
         self.assertIsNone(cost.UNDIVIDED_SHARE)
         self.assertTrue(F.COEFFICIENTS_DO_NOT_TRANSFER_TO_PRODUCTION)
+
+
+class TheRecordedAF2aTests(unittest.TestCase):
+    """Записанный A-F2a: агрегатная модель PASS, равномерность — шум контроля.
+
+    Поднять порог контроля или переставить старшинство задним числом, чтобы
+    та же запись дала другой вердикт, молча не выйдет.
+    """
+
+    def test_the_recorded_verdict_is_reproduced(self):
+        got = F.verdict(AF2A_RECORD)
+        self.assertEqual(got, AF2A_RECORD["verdict"])
+        self.assertEqual((got["status"], got["model_status"],
+                          got["uniformity_status"]),
+                         ("UNRESOLVED", "PASS", "UNRESOLVED_NOISE"))
+
+    def test_it_was_complete_and_did_not_change_the_science(self):
+        self.assertIsNone(AF2A_RECORD["incomplete"])
+        self.assertIsNone(AF2A_RECORD["stopped_at_step0"])
+        self.assertEqual(len(AF2A_RECORD["comparisons"]), 20)
+        self.assertTrue(all(c["identical"] for c in AF2A_RECORD["comparisons"]))
+
+    def test_it_ran_on_the_preregistered_thresholds(self):
+        self.assertEqual(AF2A_RECORD["thresholds"], F.thresholds())
 
 
 if __name__ == "__main__":

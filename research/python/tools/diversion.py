@@ -919,6 +919,11 @@ DIVERSIONS = (
      'from .ledger import Ledger\n',
      'from .ledger import Ledger\nfrom . import af2a  # noqa: F401\n',
      ["tests.test_s5b_af2a"]),
+    ("A-F2a: порог контроля равномерности поднят после замера",
+     "../../execution/s5b_execution/af2a.py",
+     "UNIFORM_CONTROL_SPREAD = 1.05\n",
+     "UNIFORM_CONTROL_SPREAD = 1.08\n",
+     ["tests.test_s5b_af2a"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
