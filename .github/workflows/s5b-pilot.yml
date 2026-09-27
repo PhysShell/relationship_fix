@@ -1,0 +1,189 @@
+# Пилот ступени 64000: блок δ = 60 худшей руки на НАСТОЯЩЕМ просмотре.
+#
+# Отдельный воркфлоу, а не ступень лестницы: реестр не трогается, сведения
+# нет, манифест объявляет только юниты одного блока. `s5b-stage1.yml` этот
+# файл не трогает, и контракт ступеней остаётся нетронутым.
+#
+# Юниты — те же, что исполнит полная ступень при смежной раскладке g групп
+# (`key_slices`), и считаются тем же `cli run`. Каждый юнит — отдельное
+# задание: одна длинная группа не съедает шестичасовое задание целиком.
+# Гейт — `cli judge`: каждый юнит <= 2.5 ч; падение, таймаут, неверный
+# научный результат — FAIL, и прогон краснеет.
+name: S5b pilot 64000
+
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/s5b-pilot-request.txt']
+
+permissions:
+  contents: read
+
+env:
+  SCIENCE_SHA: "7a62a3911f8bc000cf08ad97f76c0f962b07e615"
+  # Слой исполнения со своим модулем пилота. У ступеней EXECUTION_SHA не
+  # трогается: им закреплён слой, которым посчитано 16000.
+  EXECUTION_SHA: "4abc64101b71dbe98a532b5d2f7510444f6dedd8"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      look: ${{ steps.request.outputs.look }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: request
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
+          path: science
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXECUTION_SHA }}
+          path: exec
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - id: request
+        run: |
+          set -euo pipefail
+          FILE=request/.github/s5b-pilot-request.txt
+          LOOK=$(grep -oP '^look:\s*\K[0-9]+' "$FILE" | head -1)
+          ARM=$(grep -oP '^arm:\s*\K\S+' "$FILE" | head -1)
+          GROUPS=$(grep -oP '^groups:\s*\K[0-9]+' "$FILE" | head -1)
+          BLOCK=$(grep -oP '^block:\s*\K[0-9.]+' "$FILE" | head -1)
+          if [ -z "$LOOK" ] || [ -z "$ARM" ] || [ -z "$GROUPS" ] || [ -z "$BLOCK" ]; then
+            echo "заявка обязана нести look, arm, groups и block" >&2
+            exit 1
+          fi
+          # Пилот — только настоящий просмотр и только два размера: g = 12
+          # и запасной g = 24. Больше исследований стоимости он не заказывает.
+          if [ "$LOOK" != "64000" ]; then
+            echo "пилот разрешён только на ступени 64000, дано $LOOK" >&2
+            exit 1
+          fi
+          case "$GROUPS" in
+            12|24) ;;
+            *) echo "g = $GROUPS не разрешён; только 12 и 24" >&2; exit 1 ;;
+          esac
+          echo "look=$LOOK" >> "$GITHUB_OUTPUT"
+          echo "arm=$ARM" >> "$GITHUB_OUTPUT"
+          echo "groups=$GROUPS" >> "$GITHUB_OUTPUT"
+          echo "block=$BLOCK" >> "$GITHUB_OUTPUT"
+      - id: plan
+        env:
+          PYTHONPATH: science/research/python:exec/execution
+          SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
+          EXECUTION_SHA: ${{ env.EXECUTION_SHA }}
+          REQUEST_SHA: ${{ github.sha }}
+        run: |
+          set -o pipefail
+          OUT=$(python3 -B -m s5b_execution.cli pilot \
+                  --look ${{ steps.request.outputs.look }} \
+                  --arm "${{ steps.request.outputs.arm }}" \
+                  --groups ${{ steps.request.outputs.groups }} \
+                  --block ${{ steps.request.outputs.block }} \
+                  --science science/research/python --out out)
+          echo "$OUT"
+          echo "shards=$(echo "$OUT" | python3 -c \
+            'import json,sys; print(json.dumps(json.load(sys.stdin)["shards"]))')" \
+            >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: s5b-pilot-manifest-64000
+          path: out/manifest.json
+
+  compute:
+    needs: plan
+    runs-on: ubuntu-latest
+    # Как у ступеней. Юнит дольше 2.5 ч — FAIL при любом таймауте, но его
+    # фактическое время и научный результат остаются в артефакте.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
+          path: science
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXECUTION_SHA }}
+          path: exec
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v8
+        with:
+          name: s5b-pilot-manifest-64000
+          path: plan
+      - env:
+          PYTHONPATH: science/research/python:exec/execution
+        run: |
+          echo "раннер: $RUNNER_NAME"
+          python3 -B -c "import sys; sys.path[:0] = \
+            'science/research/python:exec/execution'.split(':'); \
+            from s5b_execution.guard import assert_science_comes_from as g; \
+            print(g('science/research/python'))"
+          python3 -B -m s5b_execution.cli run \
+            --look ${{ needs.plan.outputs.look }} \
+            --manifest plan/manifest.json \
+            --shard ${{ matrix.shard }} --out out
+      - if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: s5b-pilot-64000-${{ matrix.shard }}
+          path: out
+
+  judge:
+    needs: [plan, compute]
+    # Даже если юнит упал или не уложился: вердикт обязан СКАЗАТЬ, чего не
+    # хватает, а не молча не запуститься.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SCIENCE_SHA }}
+          path: science
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXECUTION_SHA }}
+          path: exec
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      # частей может не быть вовсе, если упали все юниты: тогда вердикт
+      # FAIL с причиной, а не пропущенное задание
+      - continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          path: parts
+          pattern: s5b-pilot-64000-*
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: s5b-pilot-manifest-64000
+          path: parts
+      - env:
+          PYTHONPATH: science/research/python:exec/execution
+          SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
+          EXECUTION_SHA: ${{ env.EXECUTION_SHA }}
+          REQUEST_SHA: ${{ github.sha }}
+        run: |
+          python3 -B -m s5b_execution.cli judge \
+            --look ${{ needs.plan.outputs.look }} \
+            --parts parts --out verdict
+      - if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: s5b-pilot-verdict-64000
+          path: verdict/pilot-verdict.json

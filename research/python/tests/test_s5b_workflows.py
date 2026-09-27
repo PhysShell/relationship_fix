@@ -27,6 +27,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 SMOKE = ROOT / ".github/workflows/s5b-smoke.yml"
 STAGE1 = ROOT / ".github/workflows/s5b-stage1.yml"
 CALIBRATION = ROOT / ".github/workflows/s5b-split-calibration.yml"
+PILOT = ROOT / ".github/workflows/s5b-pilot.yml"
 
 #: Все воркфлоу S5b, ОБНАРУЖЕННЫЕ, а не перечисленные. Контракт
 #: «воркфлоу -> CLI» перебирался по списку из двух файлов в четырёх местах,
@@ -807,6 +808,85 @@ class CalibrationWorkflowTests(unittest.TestCase):
         text = self._text()
         self.assertIn("ref: ${{ env.SCIENCE_SHA }}", text)
         self.assertIn("--science science/research/python", text)
+
+
+class PilotWorkflowTests(unittest.TestCase):
+    """Пилот 64000: свой запуск, настоящий просмотр, юнит — отдельное задание.
+
+    Гейты текстовые и без PyYAML: пропуститься им нельзя.
+    """
+
+    def _code(self):
+        return "\n".join(line for line in PILOT.read_text().splitlines()
+                         if not line.lstrip().startswith("#"))
+
+    def test_its_trigger_does_not_touch_the_ladder_or_the_calibration(self):
+        text = PILOT.read_text()
+        self.assertIn("paths: ['.github/s5b-pilot-request.txt']", text)
+        self.assertNotIn("s5b-stage1-request.txt", text)
+        self.assertNotIn("s5b-split-request.txt", text)
+
+    def test_only_the_real_look_and_the_two_sizes_are_allowed(self):
+        import re
+        code = self._code()
+        self.assertIn('if [ "$LOOK" != "64000" ]', code)
+        self.assertIn("12|24) ;;", code, "размеры не ограничены 12 и 24")
+        looks = set(re.findall(r"\b(4000|16000|64000)\b", code))
+        self.assertEqual(looks, {"64000"}, f"упомянуты ступени {looks}")
+
+    def test_each_unit_is_its_own_job_and_a_failure_cancels_nothing(self):
+        compute = _job_text(PILOT, "compute")
+        self.assertIn("fail-fast: false", compute)
+        self.assertIn("fromJSON(needs.plan.outputs.shards)", compute)
+        self.assertIn("max-parallel:", compute)
+        self.assertIn("s5b_execution.cli run", compute,
+                      "юнит считается не тем же cli run, что у ступеней")
+
+    def test_the_verdict_runs_and_leaves_even_when_a_unit_failed(self):
+        judge = _job_text(PILOT, "judge")
+        self.assertIn("if: ${{ !cancelled() }}", judge)
+        self.assertIn("continue-on-error: true", judge,
+                      "без частей упавших заданий вердикт не запустится")
+        self.assertIn("merge-multiple: true", judge)
+        self.assertIn("s5b_execution.cli judge", judge)
+        self.assertIn("if: ${{ always() }}", judge)
+        self.assertIn("pilot-verdict.json", judge)
+
+    def test_a_unit_result_leaves_its_job_even_on_failure(self):
+        self.assertIn("if: ${{ always() }}", _job_text(PILOT, "compute"))
+
+    def test_science_is_pinned_and_proven_in_every_computing_job(self):
+        self.assertIn("--science science/research/python",
+                      _job_text(PILOT, "plan"))
+        self.assertIn("assert_science_comes_from", _job_text(PILOT, "compute"))
+        for name in ("compute", "judge"):
+            job = _job_text(PILOT, name)
+            self.assertIn("ref: ${{ env.SCIENCE_SHA }}", job, name)
+            self.assertIn("ref: ${{ env.EXECUTION_SHA }}", job, name)
+            self.assertNotIn("github.sha }}\n          path: exec", job, name)
+
+    def test_the_pinned_layer_carries_the_pilot(self):
+        sha = _pinned_execution_sha(PILOT)
+        self.assertTrue(sha, "воркфлоу пилота не закреплён")
+        src = _source_at(sha, "execution/s5b_execution/pilot.py")
+        self.assertIn("ALLOWED_GROUPS = (12, 24)", src)
+        self.assertIn("def judge(", src)
+
+    def test_a_request_if_present_orders_only_the_declared_pilot(self):
+        import re
+        request = ROOT / ".github/s5b-pilot-request.txt"
+        if not request.exists():
+            self.skipTest("заявки нет")
+        text = request.read_text()
+
+        def field(name):
+            m = re.search(rf"^{name}:\s*(\S+)", text, re.M)
+            self.assertIsNotNone(m, f"заявка без {name}")
+            return m.group(1)
+        self.assertEqual(field("look"), "64000")
+        self.assertIn(field("groups"), ("12", "24"))
+        self.assertEqual(field("arm"), "r96.0:c1.25:R0:m1.0")
+        self.assertEqual(float(field("block")), 60.0)
 
 
 class ThePinnedLayerActuallyHasTheCodeTests(unittest.TestCase):
