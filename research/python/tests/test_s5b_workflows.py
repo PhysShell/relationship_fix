@@ -871,6 +871,11 @@ class PilotWorkflowTests(unittest.TestCase):
         src = _source_at(sha, "execution/s5b_execution/pilot.py")
         self.assertIn("ALLOWED_GROUPS = (12, 24)", src)
         self.assertIn("def judge(", src)
+        self.assertIn("slices = balanced_slices(groups)", src,
+                      "закреплённый пилот режет смежно — поправка не в силе")
+        layout = _source_at(sha, "execution/s5b_execution/layout.py")
+        self.assertIn("return (d + h + x) % 3", layout)
+        self.assertIn("b = x ^ (d % 2)", layout)
 
     def test_a_request_if_present_orders_only_the_declared_pilot(self):
         import re

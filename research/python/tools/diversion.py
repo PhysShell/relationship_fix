@@ -1024,6 +1024,11 @@ DIVERSIONS = (
      '        b = x ^ (d % 2)\n',
      '        b = x\n',
      ["tests.test_s5b_pilot"]),
+    ("пилот: воркфлоу закреплён на слое со смежной раскладкой",
+     "../../.github/workflows/s5b-pilot.yml",
+     '  EXECUTION_SHA: "433284a14865f6b21cdabe7ca3a5845c3a92ca48"',
+     '  EXECUTION_SHA: "4abc64101b71dbe98a532b5d2f7510444f6dedd8"',
+     ["tests.test_s5b_workflows"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
