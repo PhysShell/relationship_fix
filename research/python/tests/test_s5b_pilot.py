@@ -331,5 +331,37 @@ class ThePilotIsNotWiredIntoThePlannerTests(unittest.TestCase):
         self.assertIsNone(cost.UNDIVIDED_SHARE)
 
 
+class TheRecordedPilotG12Tests(unittest.TestCase):
+    """Записанный пилот g = 12 (прогон 36332456884): PASS по гейту.
+
+    Вердикт пересчитывается из сохранённых частей тем же судьёй. Сжать
+    бюджет или ослабить проверку задним числом, чтобы та же запись дала
+    другой вердикт, молча не выйдет.
+    """
+
+    EVIDENCE = ROOT / "docs/research/s5b-pilot-64000-g12"
+
+    def test_the_recorded_verdict_is_reproduced_from_the_parts(self):
+        recorded = json.loads((self.EVIDENCE / "pilot-verdict.json").read_text())
+        recorded.pop("provenance")
+        got = P.judge(self.EVIDENCE / "parts", look=64000, science_sha=SCIENCE)
+        self.assertEqual(got, recorded)
+        self.assertEqual(got["status"], "PASS")
+
+    def test_the_worst_unit_and_its_margin_are_what_was_reported(self):
+        got = P.judge(self.EVIDENCE / "parts", look=64000, science_sha=SCIENCE)
+        self.assertEqual(got["worst_hours"], 2.454)
+        worst = max(u["seconds"] for u in got["units"])
+        self.assertAlmostEqual(BUDGET - worst, 164.6, places=1)
+
+    def test_it_ran_the_balanced_layout_on_the_pinned_layer(self):
+        m = json.loads((self.EVIDENCE / "parts/manifest.json").read_text())
+        self.assertEqual(m["pilot"]["groups"], 12)
+        self.assertEqual(m["provenance"]["execution_sha"],
+                         "433284a14865f6b21cdabe7ca3a5845c3a92ca48")
+        want = [u.task_id for u in P.units(P.PILOT_ARM, 64000, 12, 60.0)]
+        self.assertEqual([u["task_id"] for u in m["units"]], want)
+
+
 if __name__ == "__main__":
     unittest.main()

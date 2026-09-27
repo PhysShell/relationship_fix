@@ -1039,6 +1039,11 @@ DIVERSIONS = (
      "          BLOCK=$(grep -oP '^block:\\s*\\K[0-9.]+' \"$FILE\" | head -1 || true)\n",
      "          BLOCK=$(grep -oP '^block:\\s*\\K[0-9.]+' \"$FILE\" | head -1)\n",
      ["tests.test_s5b_workflows"]),
+    ("пилот: бюджет сжат после замера",
+     "../../execution/s5b_execution/pilot.py",
+     "    budget = cost.SHARD_BUDGET_HOURS * 3600.0\n",
+     "    budget = 2.4 * 3600.0\n",
+     ["tests.test_s5b_pilot"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
