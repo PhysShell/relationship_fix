@@ -877,6 +877,67 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertIn("return (d + h + x) % 3", layout)
         self.assertIn("b = x ^ (d % 2)", layout)
 
+    def _run_request_step(self, request_text):
+        """Шаг разбора заявки, исполненный НАСТОЯЩИМ bash, как на раннере."""
+        import os
+        import subprocess
+        import tempfile
+        blocks = [text for _, text, _ in _run_blocks(PILOT)
+                  if "s5b-pilot-request.txt" in text]
+        self.assertEqual(len(blocks), 1, "шаг разбора заявки не найден")
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            (tmp / "request/.github").mkdir(parents=True)
+            (tmp / "request/.github/s5b-pilot-request.txt").write_text(request_text)
+            out = tmp / "github_output"
+            out.write_text("")
+            done = subprocess.run(["bash", "-e", "-c", blocks[0]], cwd=tmp,
+                                  env={**os.environ, "GITHUB_OUTPUT": str(out)},
+                                  capture_output=True, text=True)
+            got = dict(line.split("=", 1) for line in out.read_text().splitlines()
+                       if "=" in line)
+        return done, got
+
+    def test_the_request_step_runs_on_a_real_request(self):
+        """Первый запуск пилота упал за 26 с без диагностики.
+
+        `GROUPS` в bash — зарезервированный массив: присваивание ему под
+        `set -e` валит шаг молча. Токены и флаги были в порядке, не работала
+        сама команда. Этот гейт её исполняет.
+        """
+        text = ("look: 64000\narm: r96.0:c1.25:R0:m1.0\ngroups: 24\n"
+                "block: 60\n")
+        done, got = self._run_request_step(text)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(got, {"look": "64000", "arm": "r96.0:c1.25:R0:m1.0",
+                               "groups": "24", "block": "60"})
+
+    def test_the_committed_request_passes_its_own_step(self):
+        request = ROOT / ".github/s5b-pilot-request.txt"
+        if not request.exists():
+            self.skipTest("заявки нет")
+        done, got = self._run_request_step(request.read_text())
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(got.get("look"), "64000")
+
+    def test_the_request_step_refuses_what_it_must(self):
+        for text, why in (
+                ("look: 64000\narm: a\ngroups: 6\nblock: 60\n", "не разрешён"),
+                ("look: 16000\narm: a\ngroups: 12\nblock: 60\n", "64000")):
+            done, _ = self._run_request_step(text)
+            self.assertNotEqual(done.returncode, 0, text)
+            self.assertIn(why, done.stderr, text)
+
+    def test_a_missing_field_is_named_not_swallowed(self):
+        """Любое отсутствующее поле — отказ С ПРИЧИНОЙ, а не немой код 1."""
+        full = {"look": "64000", "arm": "r96.0:c1.25:R0:m1.0",
+                "groups": "12", "block": "60"}
+        for missing in full:
+            text = "".join(f"{k}: {v}\n" for k, v in full.items() if k != missing)
+            done, _ = self._run_request_step(text)
+            self.assertNotEqual(done.returncode, 0, missing)
+            self.assertIn("обязана нести", done.stderr, missing)
+
     def test_a_request_if_present_orders_only_the_declared_pilot(self):
         import re
         request = ROOT / ".github/s5b-pilot-request.txt"

@@ -54,11 +54,15 @@ jobs:
         run: |
           set -euo pipefail
           FILE=request/.github/s5b-pilot-request.txt
-          LOOK=$(grep -oP '^look:\s*\K[0-9]+' "$FILE" | head -1)
-          ARM=$(grep -oP '^arm:\s*\K\S+' "$FILE" | head -1)
-          GROUPS=$(grep -oP '^groups:\s*\K[0-9]+' "$FILE" | head -1)
-          BLOCK=$(grep -oP '^block:\s*\K[0-9.]+' "$FILE" | head -1)
-          if [ -z "$LOOK" ] || [ -z "$ARM" ] || [ -z "$GROUPS" ] || [ -z "$BLOCK" ]; then
+          # `|| true`: без него отсутствующее поле гасит шаг под pipefail ДО
+          # проверки ниже, и отказ снова был бы немым
+          LOOK=$(grep -oP '^look:\s*\K[0-9]+' "$FILE" | head -1 || true)
+          ARM=$(grep -oP '^arm:\s*\K\S+' "$FILE" | head -1 || true)
+          # НЕ GROUPS: это зарезервированный массив bash, и присваивание ему
+          # под set -e молча валит шаг — так упал первый запуск пилота.
+          NGROUPS=$(grep -oP '^groups:\s*\K[0-9]+' "$FILE" | head -1 || true)
+          BLOCK=$(grep -oP '^block:\s*\K[0-9.]+' "$FILE" | head -1 || true)
+          if [ -z "$LOOK" ] || [ -z "$ARM" ] || [ -z "$NGROUPS" ] || [ -z "$BLOCK" ]; then
             echo "заявка обязана нести look, arm, groups и block" >&2
             exit 1
           fi
@@ -68,13 +72,13 @@ jobs:
             echo "пилот разрешён только на ступени 64000, дано $LOOK" >&2
             exit 1
           fi
-          case "$GROUPS" in
+          case "$NGROUPS" in
             12|24) ;;
-            *) echo "g = $GROUPS не разрешён; только 12 и 24" >&2; exit 1 ;;
+            *) echo "g = $NGROUPS не разрешён; только 12 и 24" >&2; exit 1 ;;
           esac
           echo "look=$LOOK" >> "$GITHUB_OUTPUT"
           echo "arm=$ARM" >> "$GITHUB_OUTPUT"
-          echo "groups=$GROUPS" >> "$GITHUB_OUTPUT"
+          echo "groups=$NGROUPS" >> "$GITHUB_OUTPUT"
           echo "block=$BLOCK" >> "$GITHUB_OUTPUT"
       - id: plan
         env:
