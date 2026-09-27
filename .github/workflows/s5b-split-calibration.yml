@@ -25,7 +25,7 @@ env:
   # на a9cbc94 просто нет, и прогон упал бы на импорте. У ступеней
   # EXECUTION_SHA не трогается намеренно — им закреплён тот слой, которым
   # посчитано 16000, и калибровка науку не определяет.
-  EXECUTION_SHA: "068e13ffc8e4505c54ee25c8362a9e991462fcbc"
+  EXECUTION_SHA: "2f36713ab66ac91d50b64a96dd7e8054c23ac9f4"
   # Потолок задания 360 мин; берём 350, как у ступеней. Охранник времени
   # получает 330: разница есть запас на checkout, выгрузку и постобработку.
   JOB_TIMEOUT_MINUTES: "350"
@@ -57,6 +57,9 @@ jobs:
           FILE=request/.github/s5b-split-request.txt
           LOOK=$(grep -oP '^look:\s*\K[0-9]+' "$FILE" | head -1)
           ARM=$(grep -oP '^arm:\s*\K\S+' "$FILE" | head -1)
+          # Варианты по умолчанию — прежние 1,2,4. Gate A заказывает свои.
+          VARIANTS=$(grep -oP '^variants:\s*\K[0-9a-z,]+' "$FILE" | head -1 || true)
+          VARIANTS=${VARIANTS:-1,2,4}
           if [ -z "$LOOK" ] || [ -z "$ARM" ]; then
             echo "заявка обязана нести look и arm" >&2
             exit 1
@@ -70,6 +73,7 @@ jobs:
           fi
           echo "look=$LOOK" >> "$GITHUB_OUTPUT"
           echo "arm=$ARM" >> "$GITHUB_OUTPUT"
+          echo "variants=$VARIANTS" >> "$GITHUB_OUTPUT"
       - env:
           PYTHONPATH: science/research/python:exec/execution
           SCIENCE_SHA: ${{ env.SCIENCE_SHA }}
@@ -79,6 +83,7 @@ jobs:
           python3 -B -m s5b_execution.cli calibrate \
             --look ${{ steps.request.outputs.look }} \
             --arm "${{ steps.request.outputs.arm }}" \
+            --variants "${{ steps.request.outputs.variants }}" \
             --deadline-minutes ${{ env.GUARD_MINUTES }} \
             --science science/research/python --out out
       - if: ${{ always() }}
