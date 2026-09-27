@@ -22,6 +22,8 @@ from s5b_execution import cost, keycost as K                  # noqa: E402
 
 RECORD = json.loads(
     (ROOT / "docs/research/s5b-calibration-4000.json").read_text())
+GATE_A_RECORD = json.loads(
+    (ROOT / "docs/research/s5b-calibration-4000-gate-a.json").read_text())
 
 
 class TheCheckIsOnDataNotUsedForFittingTests(unittest.TestCase):
@@ -233,6 +235,52 @@ class GateAVerdictTests(unittest.TestCase):
         self.assertLess(K.CELLS_NO_EFFECT_SPREAD, K.CELLS_EFFECT_SPREAD)
         self.assertLessEqual(K.GATE_A_RATIO_TOLERANCE, 0.15)
         self.assertLessEqual(K.GATE_A_SHARE_AGREEMENT, 0.02)
+
+
+def _block_pairs(variant) -> int:
+    """Пары (группа, первая координата): столько раз группа платит за блок."""
+    return sum(len({k[0] for k in g["keys"]}) for g in variant["groups_detail"])
+
+
+class TheRecordedGateAIsAKillTests(unittest.TestCase):
+    """Записанный Gate A — KILL по согласию s внутри прогона, и только по нему.
+
+    Вердикт закреплён на ДАННЫХ: выкинуть чек или распустить порог задним
+    числом, чтобы та же запись стала PASS, не выйдет молча.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.got = K.gate_a(RECORD, GATE_A_RECORD)
+
+    def test_the_second_run_is_another_runner_on_the_pinned_layer(self):
+        prov = GATE_A_RECORD["provenance"]
+        self.assertNotEqual(prov["runner"], RECORD["provenance"]["runner"])
+        self.assertEqual(prov["execution_sha"],
+                         "2f36713ab66ac91d50b64a96dd7e8054c23ac9f4")
+        self.assertEqual(prov["science_sha"], RECORD["provenance"]["science_sha"])
+
+    def test_the_recorded_run_is_a_kill(self):
+        self.assertTrue(self.got["verdict"].startswith("KILL: статическая"),
+                        self.got["verdict"])
+
+    def test_only_the_share_agreement_within_the_run_failed(self):
+        c = self.got["checks"]
+        failed = [k for k in ("correctness", "complete", "order_preserved",
+                              "profile_transported", "s_within_run",
+                              "s_across_runs", "decision_unchanged") if not c[k]]
+        self.assertEqual(failed, ["s_within_run"])
+
+    def test_the_probe_is_not_a_uniformity_pass(self):
+        self.assertEqual(self.got["checks"]["uniformity_status"],
+                         "NOT_DETECTED_DAYS_UNMEASURED")
+
+    def test_no_earlier_variant_split_a_block(self):
+        """Почему отложенная проверка на g=2 против этого провала была слепа."""
+        self.assertEqual({_block_pairs(v) for v in RECORD["variants"]}, {4})
+        by = {v["label"]: v for v in GATE_A_RECORD["variants"]}
+        self.assertEqual(_block_pairs(by["4"]), 4)
+        self.assertEqual(_block_pairs(by["cells6"]), 24)
 
 
 if __name__ == "__main__":

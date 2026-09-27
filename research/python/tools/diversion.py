@@ -776,6 +776,11 @@ DIVERSIONS = (
      "    elif spread > CELLS_EFFECT_SPREAD:",
      "    elif False:",
      ["tests.test_s5b_keycost"]),
+    ("расхождение s внутри прогона выкинуто из вердикта Gate A",
+     "../../execution/s5b_execution/keycost.py",
+     '                                    "s_within_run", "s_across_runs",\n',
+     '                                    "s_across_runs",\n',
+     ["tests.test_s5b_keycost"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
