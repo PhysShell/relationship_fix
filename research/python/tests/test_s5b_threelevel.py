@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -21,6 +22,8 @@ if str(ROOT / "execution") not in sys.path:
 from s5b_execution import calibrate, cost, threelevel as T       # noqa: E402
 
 KEYS = T.KEYS
+AF1_RECORD = json.loads(
+    (ROOT / "docs/research/s5b-gate-a-f1.json").read_text())
 HORIZONS = sorted({k[2] for k in KEYS})
 
 #: Масштаб как у Gate A на 4000 (секунды ЦП): A — группа, B — пара
@@ -303,6 +306,35 @@ class TheGateIsNotWiredTests(unittest.TestCase):
     def test_the_share_is_still_unset(self):
         self.assertIsNone(cost.UNDIVIDED_SHARE)
         self.assertTrue(T.COEFFICIENTS_DO_NOT_TRANSFER_TO_PRODUCTION)
+
+
+class TheRecordedAF1IsInconclusiveTests(unittest.TestCase):
+    """Записанный A-F1 — INCONCLUSIVE по шуму. Пересчёт обязан дать то же.
+
+    Поднять потолок шума или переставить старшинство проверок задним
+    числом, чтобы та же запись дала вердикт, молча не выйдет.
+    """
+
+    def test_the_recorded_run_is_inconclusive_on_noise(self):
+        got = T.verdict(AF1_RECORD)
+        self.assertEqual(got["status"], "INCONCLUSIVE_NOISE")
+        self.assertEqual(got, AF1_RECORD["verdict"])
+
+    def test_it_was_complete_and_did_not_change_the_science(self):
+        c = T.verdict(AF1_RECORD)["checks"]
+        self.assertTrue(c["complete"])
+        self.assertTrue(c["correctness"])
+        self.assertIsNone(AF1_RECORD["incomplete"])
+
+    def test_it_ran_on_the_preregistered_thresholds(self):
+        self.assertEqual(AF1_RECORD["thresholds"], {
+            "budget_seconds": T.BUDGET_SECONDS, "repeats": T.REPEATS,
+            "noise_ceiling": T.NOISE_CEILING,
+            "negative_noise_multiple": T.NEGATIVE_NOISE_MULTIPLE,
+            "group_cost_tolerance": T.GROUP_COST_TOLERANCE,
+            "heldout_tolerance": T.HELDOUT_TOLERANCE,
+            "uniform_not_detected": T.UNIFORM_NOT_DETECTED,
+            "uniform_kill": T.UNIFORM_KILL})
 
 
 if __name__ == "__main__":

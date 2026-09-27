@@ -839,6 +839,11 @@ DIVERSIONS = (
      '    elif c["uniformity_status"] == "KILL_UNIFORM_WITHIN_BLOCK":\n',
      "    elif False:\n",
      ["tests.test_s5b_threelevel"]),
+    ("A-F1: потолок шума поднят после замера",
+     "../../execution/s5b_execution/threelevel.py",
+     "NOISE_CEILING = 0.02\n",
+     "NOISE_CEILING = 0.12\n",
+     ["tests.test_s5b_threelevel"]),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",
