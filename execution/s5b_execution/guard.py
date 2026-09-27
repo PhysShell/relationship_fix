@@ -107,7 +107,8 @@ def assert_is_ancestor(repo, pin: str, head: str) -> None:
             f"якорь {pin} не является предком заявки {head}")
 
 
-def assert_request_is_only_a_signal(paths) -> None:
+def assert_request_is_only_a_signal(paths, request_path: str = REQUEST_PATH
+                                     ) -> None:
     """Между пином исполнения и заявкой меняется ТОЛЬКО файл заявки.
 
     Закрепить `EXECUTION_SHA` — мало. Сам YAML воркфлоу GitHub берёт из
@@ -116,10 +117,10 @@ def assert_request_is_only_a_signal(paths) -> None:
     честно при подменённом воркфлоу. Тройка врала бы ровно на полшага.
     """
     paths = sorted(paths)
-    if paths != [REQUEST_PATH]:
+    if paths != [request_path]:
         raise BoundaryViolated(
             f"между якорем и заявкой должен меняться РОВНО один путь "
-            f"{REQUEST_PATH}, а изменены {paths or 'ничего'}. Пустой список "
+            f"{request_path}, а изменены {paths or 'ничего'}. Пустой список "
             f"тоже отказ: значит запуск случился не тем механизмом, "
             f"которым мы думаем")
 

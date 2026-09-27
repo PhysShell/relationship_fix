@@ -120,17 +120,43 @@ class TheGatesDecideWhatTheyMustTests(unittest.TestCase):
         self.assertTrue(any("не покрыт" in p for p in problems))
 
 
-class TheDryPlanIsNotWiredTests(unittest.TestCase):
+class TheDryPlanIsWiredOnlyIntoMultiRunTests(unittest.TestCase):
+    """Его юниты берёт многопрогонный план 64000 — и только он."""
 
-    def test_the_planner_does_not_import_it_and_nothing_changed(self):
+    def test_the_single_run_planner_still_refuses_64000(self):
+        with self.assertRaises(cost.SplitEconomyUnmeasured):
+            scheduler.units_for(64000)
+        self.assertIsNone(cost.UNDIVIDED_SHARE)
+
+    def test_the_multirun_units_are_exactly_the_dry_plan_units(self):
+        from s5b_execution import multirun
+        led = _Ledger(_close({next(iter(scheduler.arms()))}))
+        want, _ = D.units(led)
+        got = multirun.units(64000, led)
+        self.assertEqual([(u.task_id, u.weight) for u in got],
+                         [(u.task_id, u.weight) for u in want])
+        self.assertEqual(len(got), 1872 - 12)
+
+    def test_the_third_stop_is_a_refusal_there(self):
+        from s5b_execution import multirun
+        with mock.patch.object(D, "identity_problems",
+                               lambda needed, ledger: ["сломано"]):
+            with self.assertRaises(multirun.MultiRunRefused):
+                multirun.units(64000, _Ledger())
+
+    def test_64000_is_not_planned_without_the_prior_ledger(self):
+        from s5b_execution import multirun
+        with self.assertRaises(multirun.MultiRunRefused):
+            multirun.units(64000, None)
+
+    def test_keycost_stays_unwired(self):
         import subprocess
         code = ("import sys; sys.path[:0] = ['research/python', 'execution'];"
-                "import s5b_execution.cli, s5b_execution.scheduler;"
-                "print('s5b_execution.dryplan' in sys.modules)")
+                "import s5b_execution.cli, s5b_execution.multirun;"
+                "print('s5b_execution.keycost' in sys.modules)")
         done = subprocess.run([sys.executable, "-B", "-c", code], cwd=ROOT,
                               capture_output=True, text=True)
         self.assertEqual(done.stdout.strip(), "False", done.stderr)
-        self.assertIsNone(cost.UNDIVIDED_SHARE)
 
 
 if __name__ == "__main__":

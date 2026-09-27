@@ -6,6 +6,14 @@
     pilot   --look 64000 --groups G    манифест пилота: блок δ при раскладке G
     judge   --look 64000 --parts D     вердикт пилота по его частям
 
+Ступень в несколько прогонов (`multirun`):
+
+    plan --multirun [--resume D]       ОДИН полный манифест; продолжение
+                                       обязано спланировать тот же
+    select --run R [--resume D]        задания этого прогона, <= потолка
+    progress --parts D --batch F       итог прогона: PARTIAL / COMPLETE /
+                                       STOP; наука не сводится
+
 `reduce` — не «слияние ради полноты». Он строит реестр по ВОСХОДЯЩИМ
 ступеням и отдаёт каждый конец на его собственном `tau`.
 """
@@ -24,8 +32,9 @@ import time
 from simulation import s5b_prereg as P
 from simulation import s5b_shard as S
 
-from . import calibrate, cost, guard, provenance, reduction, resume, scheduler
-from .identity import load_unit_payloads
+from . import (calibrate, cost, guard, multirun, provenance, reduction,
+               resume, scheduler)
+from .identity import NOT_PART_FILES, load_unit_payloads
 from .ledger import Ledger
 
 LOOKS = tuple(P.LOOKS) if hasattr(P, "LOOKS") else None
@@ -146,10 +155,26 @@ def _prior_state(args) -> tuple[Ledger | None, dict]:
     if args.checkpoint:
         data = json.loads(pathlib.Path(args.checkpoint).read_text())
         led = Ledger.from_checkpoint(data)
+        _anchor_checkpoint(args, data)
         return led, {args.checkpoint: data.get("ledger_digest", "")}
     if args.prior:
         return _ledger_from(args.prior, args.prior_digest)
     return None, {}
+
+
+def _anchor_checkpoint(args, data: dict) -> None:
+    """Чекпойнт привязан к КОНКРЕТНОЙ ступени отпечатком её реестра.
+
+    `from_checkpoint` доказывает лишь, что файл согласован сам с собой.
+    Какой именно прогон он описывает, говорит `--prior-digest`: у сырых
+    частей это отпечаток частей, у чекпойнта — `ledger_digest`. Совместимый
+    чекпойнт другого прогона без этой сверки прошёл бы молча.
+    """
+    got = data.get("ledger_digest", "")
+    if args.prior_digest and got != args.prior_digest:
+        raise SystemExit(
+            f"{args.checkpoint}: реестр {got}, заявлен {args.prior_digest} — "
+            f"приехал не тот прогон")
 
 
 def _ledger_from(prior_dirs, expected_digest: str = "",
@@ -188,6 +213,144 @@ def _ledger_from(prior_dirs, expected_digest: str = "",
     return ledger, inputs
 
 
+def _plan_multirun(args, out, checks, ledger, inputs) -> int:
+    """План многопрогонной ступени: ОДИН полный манифест на все прогоны.
+
+    Упаковка — наименьшее число заданий в бюджете шарда, без потолка
+    матрицы: его держит партия. Продолжение планирует ступень заново из
+    тех же входов и обязано получить ТОТ ЖЕ манифест; тогда в каталог
+    ложится манифест первого прогона байт в байт, с его провенансом.
+    Расхождение — отказ до счёта: ступень, спланированная иначе, уже не
+    та ступень, части которой собраны.
+    """
+    try:
+        units = multirun.units(args.look, ledger)
+        buckets = multirun.pack(units, cost.SHARD_BUDGET_HOURS * 3600.0)
+        multirun.check_jobs(buckets)
+    except multirun.MultiRunRefused as exc:
+        raise SystemExit(f"ПЛАН НЕ СОБРАН: {exc}")
+    rows = []
+    for shard, bucket in enumerate(buckets):
+        for unit in bucket:
+            rows.append({"task_id": unit.task_id, "arm": unit.arm,
+                         "look": unit.look, "shard": shard,
+                         "keys": [list(k) for k in unit.keys]})
+    rows.sort(key=lambda r: r["task_id"])
+    manifest = {"look": args.look, "shards": len(buckets), "units": rows,
+                "shard_seconds": [round(sum(u.weight for u in b), 1)
+                                  for b in buckets]}
+    try:
+        multirun.check(manifest)
+    except multirun.MultiRunRefused as exc:
+        raise SystemExit(f"ПЛАН НЕ СОБРАН: {exc}")
+    digest = multirun.body_digest(manifest)
+    out.mkdir(parents=True, exist_ok=True)
+    if args.resume:
+        chain = resume.load_manifest(args.resume)
+        if multirun.body(chain) != multirun.body(manifest):
+            raise SystemExit(
+                f"{args.resume}: манифест цепочки {multirun.body_digest(chain)} "
+                f"не совпадает с планом этого прогона {digest} — ступень "
+                f"спланирована иначе, продолжать её нельзя")
+        (out / "manifest.json").write_bytes(
+            (pathlib.Path(args.resume) / "manifest.json").read_bytes())
+    else:
+        record = provenance.collect(inputs=inputs, manifest_digest=digest)
+        record["look"] = args.look
+        record["prior_run"] = args.prior_run
+        record["prior_digest"] = args.prior_digest
+        record["preflight"] = checks
+        manifest["provenance"] = record
+        (out / "manifest.json").write_text(json.dumps(manifest, sort_keys=True))
+    print(json.dumps({"count": len(buckets), "units": len(rows),
+                      "manifest_digest": digest,
+                      "continued": bool(args.resume),
+                      "preflight": checks,
+                      "carried": 0 if ledger is None
+                      else ledger.settled_count()}, sort_keys=True))
+    return 0
+
+
+def _chain_done(args, manifest: dict) -> set[str]:
+    """Выполненные юниты цепочки. Манифест цепочки — тот же, что у прогона."""
+    science = os.environ.get("SCIENCE_SHA", "")
+    was = (manifest.get("provenance") or {}).get("science_sha", "")
+    if was != science:
+        raise SystemExit(
+            f"манифест ступени под SCIENCE_SHA {was!r}, прогон под "
+            f"{science!r} — это разные вычисления")
+    if not args.resume:
+        return set()
+    chain = resume.load_manifest(args.resume)
+    if multirun.body(chain) != multirun.body(manifest):
+        raise SystemExit(
+            f"{args.resume}: манифест цепочки не тот, что у этого прогона")
+    return set(resume.completed(args.resume, look=args.look,
+                                science_sha=science))
+
+
+def _select(args, out) -> int:
+    """Задания этого прогона: не больше потолка, упавшее раньше — первым."""
+    manifest = json.loads(pathlib.Path(args.manifest).read_text())
+    if manifest["look"] != args.look:
+        raise SystemExit(f"манифест на ступень {manifest['look']}, "
+                         f"запрошена {args.look}")
+    done = _chain_done(args, manifest)
+    try:
+        selection = multirun.select(manifest, done, run=args.run,
+                                    cap=args.batch_cap or multirun.BATCH_CAP)
+        batch = multirun.batch_manifest(manifest, selection)
+    except multirun.MultiRunRefused as exc:
+        raise SystemExit(f"ВЫБОР НЕ СДЕЛАН: {exc}")
+    batch["provenance"] = provenance.collect(
+        inputs={}, manifest_digest=selection["manifest_digest"])
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "batch.json").write_text(json.dumps(batch, sort_keys=True))
+    print(json.dumps({"shards": selection["shards"], "run": selection["run"],
+                      "units": len(selection["units"]),
+                      "retries": selection["retries"],
+                      "pending_shards_before":
+                          selection["pending_shards_before"]},
+                     sort_keys=True))
+    return 0
+
+
+def _progress(args, out) -> int:
+    """Итог прогона. Наука не сводится: только сделано, упало, осталось.
+
+    Незаконченная ступень — PARTIAL и зелёный прогон. Красный — упавшее
+    выбранное задание или STOP: восстановительный прогон не закрыл ступень.
+    """
+    if not args.parts or not args.batch:
+        raise SystemExit("итогу прогона нужны --parts и --batch")
+    parts = pathlib.Path(args.parts)
+    manifest = resume.load_manifest(parts)
+    if manifest["look"] != args.look:
+        raise SystemExit(f"манифест на ступень {manifest['look']}, "
+                         f"запрошена {args.look}")
+    batch = json.loads(pathlib.Path(args.batch).read_text())
+    done = _chain_done(args, manifest)
+    names = [p for p in parts.glob("*.json")
+             if p.name not in NOT_PART_FILES]
+    arrived = set(resume.completed(
+        parts, look=args.look,
+        science_sha=os.environ.get("SCIENCE_SHA", ""))) if names else set()
+    try:
+        report = multirun.progress(manifest, batch["selection"], done, arrived)
+    except multirun.MultiRunRefused as exc:
+        raise SystemExit(f"ИТОГ ПРОГОНА НЕ ПРИНЯТ: {exc}")
+    report["provenance"] = provenance.collect(
+        inputs={}, manifest_digest=report["manifest_digest"])
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "progress.json").write_text(
+        json.dumps(report, sort_keys=True, ensure_ascii=False))
+    print(json.dumps({k: report[k] for k in
+                      ("run", "status", "ok", "selected_units",
+                       "arrived_units", "failed_shards", "done_units",
+                       "remaining_units")}, sort_keys=True))
+    return 0 if report["ok"] else 1
+
+
 def _encode(results) -> list:
     return [{"key": list(name[0]), "fraction": name[1],
              "point": e.point, "low": e.low, "high": e.high,
@@ -199,7 +362,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode",
                         choices=("plan", "run", "reduce", "calibrate",
-                                 "pilot", "judge"))
+                                 "pilot", "judge", "select", "progress"))
     parser.add_argument("--look", type=int, required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--arm", default="",
@@ -214,12 +377,17 @@ def main(argv=None) -> int:
     parser.add_argument("--out", default="out")
     parser.add_argument("--prior", action="append", default=[])
     parser.add_argument("--manifest", default="manifest.json")
-    parser.add_argument("--prior-digest", default="")
+    parser.add_argument("--prior-digest", default="",
+                        help="отпечаток входа: у сырых частей — их digest, у "
+                             "чекпойнта — его ledger_digest")
     parser.add_argument("--prior-run", default="")
     parser.add_argument("--repo", default="")
     parser.add_argument("--pin", default="")
     parser.add_argument("--workflow", default="")
     parser.add_argument("--workflow-sha256", default="")
+    parser.add_argument("--request-path", default=guard.REQUEST_PATH,
+                        help="файл заявки: единственный путь, который вправе "
+                             "меняться между якорем и заявкой")
     parser.add_argument("--science", default="")
     parser.add_argument("--resume", default="",
                         help="каталог частей прерванного прогона ЭТОЙ ступени")
@@ -230,7 +398,18 @@ def main(argv=None) -> int:
     parser.add_argument("--block", type=float, default=0.0,
                         help="пилот: первая координата блока, например 60")
     parser.add_argument("--parts", default="",
-                        help="пилот: каталог манифеста и частей для вердикта")
+                        help="пилот: каталог манифеста и частей для вердикта; "
+                             "progress: каталог полного манифеста и частей "
+                             "этого прогона")
+    parser.add_argument("--multirun", action="store_true",
+                        help="plan: один полный манифест ступени на все прогоны")
+    parser.add_argument("--run", type=int, default=0,
+                        help="select: номер прогона ступени, 1 + число прошлых")
+    parser.add_argument("--batch-cap", type=int, default=0,
+                        help="select: потолок заданий прогона; по умолчанию "
+                             "multirun.BATCH_CAP")
+    parser.add_argument("--batch", default="",
+                        help="progress: файл выбора этого прогона")
     args = parser.parse_args(argv)
     out = pathlib.Path(args.out)
 
@@ -296,13 +475,15 @@ def main(argv=None) -> int:
                 guard.assert_object_exists(args.repo, science)
                 guard.assert_pin_descends_from(args.repo, science, args.pin)
             changed = guard.changed_paths(args.repo, args.pin, head)
-            guard.assert_request_is_only_a_signal(changed)
+            guard.assert_request_is_only_a_signal(changed, args.request_path)
             checks["pin"] = args.pin
             checks["changed_since_pin"] = changed
         if args.science:
             checks["science_modules"] = guard.assert_science_comes_from(
                 args.science)
         ledger, inputs = _prior_state(args)
+        if args.multirun:
+            return _plan_multirun(args, out, checks, ledger, inputs)
         done: set[str] = set()
         if args.resume:
             # ЦЕПОЧКА ОБЯЗАНА БЫТЬ ПОЛНОЙ, и проверяется это ДО счёта.
@@ -372,6 +553,12 @@ def main(argv=None) -> int:
                           "carried": 0 if ledger is None
                           else ledger.settled_count()}))
         return 0
+
+    if args.mode == "select":
+        return _select(args, out)
+
+    if args.mode == "progress":
+        return _progress(args, out)
 
     if args.mode == "run":
         manifest = json.loads(
@@ -495,8 +682,9 @@ def main(argv=None) -> int:
         print(f"переиспользовано {len(reused)}, посчитано заново {len(fresh)}, "
               f"всего {len(merged)}")
     if args.checkpoint:
-        ledger = Ledger.from_checkpoint(
-            json.loads(pathlib.Path(args.checkpoint).read_text()))
+        data = json.loads(pathlib.Path(args.checkpoint).read_text())
+        ledger = Ledger.from_checkpoint(data)
+        _anchor_checkpoint(args, data)
         payloads = load_unit_payloads(out)
         _verify_with_frozen_merge(out, args.look, payloads, args.resume)
         ledger.absorb(args.look, payloads)

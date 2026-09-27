@@ -460,6 +460,16 @@ class BoundariesAreProvenNotDeclaredTests(unittest.TestCase):
                 [guard.REQUEST_PATH, ".github/workflows/s5b-stage1.yml"])
         self.assertIn("s5b-stage1.yml", str(caught.exception))
 
+    def test_another_request_file_is_declared_not_assumed(self):
+        """У ступени 64000 своя заявка; чужая ей не сигнал, и наоборот."""
+        from s5b_execution import guard
+        own = ".github/s5b-64000-request.txt"
+        guard.assert_request_is_only_a_signal([own], own)
+        with self.assertRaises(guard.BoundaryViolated):
+            guard.assert_request_is_only_a_signal([guard.REQUEST_PATH], own)
+        with self.assertRaises(guard.BoundaryViolated):
+            guard.assert_request_is_only_a_signal([own])
+
     def test_a_prior_set_with_another_digest_is_refused(self):
         """prior_run якорем не является: task_id кодирует координаты, не байты."""
         from s5b_execution import cli, provenance
