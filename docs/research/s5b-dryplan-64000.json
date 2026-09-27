@@ -1,0 +1,29 @@
+{
+ "look": 64000,
+ "groups": 12,
+ "anchor_seconds": 8835.4,
+ "anchor_rate": 120.0,
+ "stress": 1.96,
+ "units_possible": 1872,
+ "units_needed": 1872,
+ "matrix_max_jobs": 256,
+ "max_parallel": 6,
+ "budget_hours": 2.5,
+ "hard_timeout_hours": 5.833333333333333,
+ "unit_hours_min": 0.051,
+ "unit_hours_max": 2.454,
+ "total_cpu_hours": 1225.7,
+ "units_heavier_than_half_budget": 420,
+ "jobs_lower_bound": 491,
+ "jobs_lpt": 495,
+ "heaviest_job_hours": 2.497,
+ "heaviest_job_stress_hours": 4.894,
+ "makespan_hours": 206.2,
+ "makespan_stress_hours": 404.2,
+ "identity_problems": [],
+ "stops": [
+  "495 заданий при бюджете 2.5 ч против потолка матрицы 256"
+ ],
+ "status": "STOP",
+ "ledger_digest": "7ef59277bf6acc6b"
+}
