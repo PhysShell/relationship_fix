@@ -30,6 +30,8 @@
 
 from __future__ import annotations
 
+import json
+import pathlib
 import resource
 import time
 
@@ -37,13 +39,34 @@ from simulation import s5b_shard as S
 
 from .scheduler import FRACTIONS, KEYS, arms, key_slices
 
-#: варианты деления, в этом порядке: сперва база, потом дробления
+#: Варианты деления, в этом порядке: сперва база, потом дробления. Целое g —
+#: смежная раскладка планировщика; "cells6" — зонд по неизмеренным осям.
 VARIANTS = (1, 2, 4)
 
-#: Худший случай экономии: деление не экономит ничего (s = 1), и вариант
-#: из g групп стоит g * T1. Охранник времени считает по нему, а не по
-#: надежде: иначе таймаут задания стал бы суррогатом измерения.
-WORST_CASE_COST_IS_G_TIMES_BASELINE = True
+#: Зонд: шесть групп, каждая — ровно одна клетка (horizon, maximise). По
+#: составу первой координаты группы одинаковы (по 3 ключа каждого блока),
+#: поэтому при равномерности внутри блока их стоимости ОБЯЗАНЫ совпасть.
+#: Разброс между ними — прямое измерение вклада horizon и maximise. Ось
+#: days внутри каждой группы остаётся смешанной: её зонд НЕ видит.
+CELLS_PROBE = "cells6"
+
+#: ОХРАННИК ВРЕМЕНИ. Вариант из g групп оценивается как
+#: `T1 * (1 + (g - 1) * s_guard) * GUARD_SAFETY`.
+#:
+#: Прежнее правило брало s = 1 («деление не экономит ничего») и требовало
+#: g * T1. Для последовательности 1 -> 4 -> 6 оно отказало бы в g = 6 уже
+#: на ОБЫЧНОМ раннере (нужно 4.14 ч, осталось 3.98 ч), а на медленном — в
+#: g = 4: Gate A вернулся бы INCOMPLETE без зонда.
+#:
+#: Худший случай берётся на пороге KILL: при s >= 0.2462 цель 2.5 ч для
+#: 64000 недостижима даже при 72 группах, так что охраннику незачем
+#: защищать режим за этой границей. Затянувшийся вариант сам по себе был
+#: бы сигналом KILL, а записи прежних вариантов к тому моменту уже на
+#: диске. После первого измеренного деления берётся удвоенная измеренная
+#: доля, но не меньше GUARD_SHARE_FLOOR.
+GUARD_SHARE_UNKNOWN = 0.25
+GUARD_SHARE_FLOOR = 0.10
+GUARD_SAFETY = 1.25
 
 #: запас на выгрузку артефакта и постобработку задания
 TAIL_SECONDS = 240.0
@@ -55,6 +78,38 @@ class CalibrationIncomplete(Exception):
 
 class SplitChangedTheScience(Exception):
     """Делёный прогон дал другой научный результат. Останов немедленный."""
+
+
+def cells_partition() -> tuple:
+    """Шесть групп по клеткам (horizon, maximise), без модели и весов.
+
+    Совпадает с тем, что LPT по модели равных внутри блока ключей выдаёт
+    при g = 6, но задан ЯВНО: зонд не должен зависеть от правила разрыва
+    ничьих в чужой эвристике.
+    """
+    cells = {}
+    for key in KEYS:
+        cells.setdefault((key[2], key[3]), []).append(key)
+    return tuple(tuple(v) for _, v in sorted(cells.items(), key=repr))
+
+
+def partition_for(spec) -> tuple[str, tuple]:
+    """Вариант -> (метка, срезы). Целое — смежная раскладка планировщика."""
+    if spec == CELLS_PROBE:
+        return CELLS_PROBE, cells_partition()
+    groups = int(spec)
+    return str(groups), key_slices(groups)
+
+
+def guard_estimate(baseline: float, groups: int, shares: dict) -> float:
+    """Сколько секунд охранник закладывает на вариант из `groups` групп."""
+    measured = [v for v in shares.values() if v is not None]
+    if measured:
+        s = min(GUARD_SHARE_UNKNOWN,
+                max(GUARD_SHARE_FLOOR, 2.0 * max(measured)))
+    else:
+        s = GUARD_SHARE_UNKNOWN
+    return baseline * (1.0 + (groups - 1) * s) * GUARD_SAFETY
 
 
 def _usage() -> tuple[float, float]:
@@ -133,8 +188,14 @@ def groups_for_target(full_seconds: float, budget_seconds: float,
     return None
 
 
+def _checkpoint(path, record: dict) -> None:
+    """Запись после КАЖДОГО варианта: сбой позже не стирает измеренное."""
+    if path is not None:
+        pathlib.Path(path).write_text(json.dumps(record, sort_keys=True))
+
+
 def run(arm_tag: str, look: int, *, deadline: float,
-        variants=VARIANTS) -> dict:
+        variants=VARIANTS, checkpoint=None, provenance=None) -> dict:
     """Провести калибровку. Любое расхождение науки — немедленный отказ."""
     known = arms()
     if arm_tag not in known:
@@ -143,20 +204,31 @@ def run(arm_tag: str, look: int, *, deadline: float,
     record = {"arm": arm_tag, "look": look,
               "effective_rate": arm["effective_rate"],
               "keys_total": len(KEYS), "fractions": list(FRACTIONS),
-              "variants": [], "comparisons": [], "incomplete": None}
+              "variants": [], "comparisons": [], "incomplete": None,
+              "requested_variants": [str(v) for v in variants],
+              "provenance": dict(provenance or {})}
     baseline, totals = None, {}
+    specs = [partition_for(v) for v in variants]
+    if len(specs[0][1]) != 1:
+        raise SplitChangedTheScience("первым вариантом обязана быть база g=1")
+    counts = [len(sl) for _, sl in specs]
+    if len(set(counts)) != len(counts):
+        raise SplitChangedTheScience(
+            f"два варианта с одинаковым числом групп {counts}: доли s_g "
+            f"перепутались бы")
 
-    for groups in variants:
+    for label, slices in specs:
+        groups = len(slices)
         left = deadline - time.monotonic() - TAIL_SECONDS
-        need = (totals[1] * groups if 1 in totals
-                else 0.0)                     # для базы оценки ещё нет
+        # для базы оценки ещё нет; дальше — по измеренным долям, если есть
+        need = (guard_estimate(totals[1], groups, amdahl(totals))
+                if 1 in totals else 0.0)
         if 1 in totals and left < need:
             record["incomplete"] = (
-                f"вариант {groups} не начат: осталось {left/3600:.2f} ч, "
-                f"худший случай требует {need/3600:.2f} ч "
-                f"(= {groups} x база, s = 1)")
+                f"вариант {label} не начат: осталось {left/3600:.2f} ч, "
+                f"охранник закладывает {need/3600:.2f} ч")
+            _checkpoint(checkpoint, record)
             break
-        slices = key_slices(groups)
         rows, merged_parts, spent = [], [], 0.0
         for keys in slices:
             unit = S.Unit(arm=arm_tag, look=look, keys=keys, weight=0.0)
@@ -168,6 +240,7 @@ def run(arm_tag: str, look: int, *, deadline: float,
         merged = S.merge(arm_tag, look, merged_parts, expected=expected)
         walls = [r["wall_seconds"] for r in rows]
         record["variants"].append({
+            "label": label,
             "groups": groups, "groups_actual": len(slices),
             "C_g_sum_wall": round(spent, 3),
             "W_g_max_wall": round(max(walls), 3),
@@ -181,13 +254,16 @@ def run(arm_tag: str, look: int, *, deadline: float,
             baseline = merged
         else:
             verdict = compare(baseline, merged, groups)
+            verdict["label"] = label
             record["comparisons"].append(verdict)
             if not verdict["identical"]:
                 record["shares"] = amdahl(totals)
                 record["correctness"] = "KILL"
+                _checkpoint(checkpoint, record)
                 raise SplitChangedTheScience(
-                    f"деление на {groups} групп изменило результат: "
-                    f"{verdict}")
+                    f"деление {label} изменило результат: {verdict}")
+        record["shares"] = amdahl(totals) if len(totals) > 1 else {}
+        _checkpoint(checkpoint, record)
     record["shares"] = amdahl(totals) if len(totals) > 1 else {}
     record["correctness"] = ("PASS" if record["comparisons"]
                              and all(c["identical"] for c in record["comparisons"])

@@ -201,6 +201,10 @@ def main(argv=None) -> int:
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--arm", default="",
                         help="рука для калибровки экономии деления")
+    parser.add_argument("--variants", default="1,2,4",
+                        help="варианты калибровки через запятую: целое g — "
+                             "смежная раскладка, cells6 — зонд по клеткам "
+                             "(horizon, maximise)")
     parser.add_argument("--deadline-minutes", type=float, default=0.0,
                         help="сколько минут задания ОСТАЛОСЬ; охранник времени "
                              "не начинает вариант, который не успеет")
@@ -373,19 +377,28 @@ def main(argv=None) -> int:
                 "таймаут задания стал бы суррогатом измерения")
         out.mkdir(parents=True, exist_ok=True)
         deadline = time.monotonic() + args.deadline_minutes * 60.0
-        try:
-            record = calibrate.run(args.arm, args.look, deadline=deadline)
-        except calibrate.SplitChangedTheScience as exc:
-            (out / "calibration.json").write_text(json.dumps(
-                {"correctness": "KILL", "reason": str(exc)}, sort_keys=True))
-            raise SystemExit(f"КАЛИБРОВКА ОСТАНОВЛЕНА: {exc}")
-        record["provenance"] = {
+        target = out / "calibration.json"
+        prov = {
             "science_sha": os.environ.get("SCIENCE_SHA", ""),
             "execution_sha": os.environ.get("EXECUTION_SHA", ""),
             "request_sha": os.environ.get("REQUEST_SHA", ""),
             "runner": os.environ.get("RUNNER_NAME", ""),
             "deadline_minutes": args.deadline_minutes,
         }
+        variants = [v.strip() for v in args.variants.split(",") if v.strip()]
+        try:
+            record = calibrate.run(args.arm, args.look, deadline=deadline,
+                                   variants=variants, checkpoint=target,
+                                   provenance=prov)
+        except calibrate.SplitChangedTheScience as exc:
+            # запись промежуточных вариантов уже на диске: ДОПОЛНЯЕТСЯ,
+            # а не затирается одной строкой причины
+            kept = (json.loads(target.read_text()) if target.exists()
+                    else {"provenance": prov})
+            kept["correctness"] = "KILL"
+            kept["reason"] = str(exc)
+            target.write_text(json.dumps(kept, sort_keys=True))
+            raise SystemExit(f"КАЛИБРОВКА ОСТАНОВЛЕНА: {exc}")
         # что измерение означает для ступени 64000 — считается здесь же,
         # чтобы вывод не пришлось толковать задним числом
         worst = max(cost.seconds_for(a["effective_rate"], 64_000)
@@ -406,7 +419,7 @@ def main(argv=None) -> int:
                            "implications", "incomplete",
                            "worst_unit_64000_hours")}, sort_keys=True))
         for v in record["variants"]:
-            print(f"g={v['groups']} C={v['C_g_sum_wall']:.1f}s "
+            print(f"{v['label']:>6s} g={v['groups']} C={v['C_g_sum_wall']:.1f}s "
                   f"W={v['W_g_max_wall']:.1f}s разброс={v['spread_max_over_min']} "
                   f"cpu={v['C_g_sum_cpu']:.1f}s rss={v['rss_high_water_mb']}MB",
                   flush=True)

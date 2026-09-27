@@ -205,8 +205,45 @@ class TheTimeGuardRefusesInsteadOfGuessingTests(unittest.TestCase):
                          "доля посчитана по одному варианту")
         self.assertEqual(rec["correctness"], "NOT_MEASURED")
 
-    def test_the_guard_uses_the_worst_case_not_the_hoped_case(self):
-        self.assertTrue(calibrate.WORST_CASE_COST_IS_G_TIMES_BASELINE)
+    def test_before_any_split_the_guard_assumes_the_kill_threshold(self):
+        """Пока доля не измерена, закладывается порог KILL, а не надежда."""
+        self.assertAlmostEqual(
+            calibrate.guard_estimate(1000.0, 4, {}),
+            1000.0 * (1 + 3 * calibrate.GUARD_SHARE_UNKNOWN)
+            * calibrate.GUARD_SAFETY)
+        self.assertGreaterEqual(calibrate.GUARD_SHARE_UNKNOWN, 0.2462,
+                                "охранник ниже порога KILL — это надежда")
+
+    def test_after_a_split_the_guard_uses_the_measured_share_with_margin(self):
+        got = calibrate.guard_estimate(1000.0, 6, {"s_4": 0.0383})
+        self.assertAlmostEqual(
+            got, 1000.0 * (1 + 5 * calibrate.GUARD_SHARE_FLOOR)
+            * calibrate.GUARD_SAFETY)
+        big = calibrate.guard_estimate(1000.0, 6, {"s_4": 0.9})
+        self.assertAlmostEqual(
+            big, 1000.0 * (1 + 5 * calibrate.GUARD_SHARE_UNKNOWN)
+            * calibrate.GUARD_SAFETY, msg="потолок охранника не держится")
+
+    def test_the_gate_a_sequence_fits_on_a_normal_and_a_slow_runner(self):
+        """Регрессия: прежнее правило g*T1 отказало бы в g=6 на ОБЫЧНОМ раннере.
+
+        Тайминги — первого прогона калибровки; медленный раннер — худший
+        наблюдённый разброс 1.96x.
+        """
+        t1, s = 2481.7, 95.0
+        c4 = 4 * s + (t1 - s)
+        available = 330 * 60 - calibrate.TAIL_SECONDS
+        for k in (1.0, 1.96):
+            left4 = available - t1 * k
+            left6 = left4 - c4 * k
+            self.assertLessEqual(calibrate.guard_estimate(t1 * k, 4, {}), left4,
+                                 f"x{k}: охранник не пускает g=4")
+            self.assertLessEqual(
+                calibrate.guard_estimate(t1 * k, 6, {"s_4": 0.0383}), left6,
+                f"x{k}: охранник не пускает зонд g=6")
+        self.assertGreater(6 * t1, available - t1 - c4,
+                           "прежнее правило g*T1 перестало отказывать — "
+                           "регрессионная проверка потеряла смысл")
 
 
 class TheCliRefusesWithoutAGuardTests(unittest.TestCase):
@@ -261,6 +298,108 @@ class TheCliRefusesWithoutAGuardTests(unittest.TestCase):
         for v in got["variants"]:
             self.assertIn("spread_max_over_min", v)
             self.assertIn("W_g_max_wall", v)
+
+
+class CellsProbeTests(unittest.TestCase):
+    """Зонд cells6 изолирует (horizon, maximise) и НЕ видит days."""
+
+    def test_it_is_a_partition_into_pure_cells(self):
+        cells = calibrate.cells_partition()
+        self.assertEqual(len(cells), 6)
+        self.assertEqual(sorted(k for c in cells for k in c),
+                         sorted(scheduler.KEYS))
+        for c in cells:
+            self.assertEqual(len({(k[2], k[3]) for k in c}), 1,
+                             "клетка смешивает horizon или maximise")
+
+    def test_cells_are_identical_in_the_first_coordinate(self):
+        """Иначе разброс клеток мерил бы первую координату, а не horizon."""
+        for c in calibrate.cells_partition():
+            counts = sorted(sum(1 for k in c if k[0] == t)
+                            for t in {k[0] for k in scheduler.KEYS})
+            self.assertEqual(counts, [3, 3, 3, 3])
+
+    def test_days_stay_mixed_inside_every_cell(self):
+        """Поэтому PASS зонда НЕ означает равномерности по days."""
+        for c in calibrate.cells_partition():
+            self.assertEqual(len({k[1] for k in c}), 3)
+
+    def test_it_equals_what_lpt_produces_at_six(self):
+        import json
+        from s5b_execution import keycost
+        rec = json.loads((ROOT / "docs/research/s5b-calibration-4000.json")
+                         .read_text())
+        lpt = keycost.balanced_partition(keycost.fit(rec), 6)
+        self.assertEqual({frozenset(c) for c in calibrate.cells_partition()},
+                         {frozenset(b) for b in lpt})
+
+    def test_the_probe_runs_and_preserves_the_science(self):
+        rec = calibrate.run(LIGHT, TOY, deadline=time.monotonic() + 600,
+                            variants=[1, 4, calibrate.CELLS_PROBE])
+        self.assertEqual([v["label"] for v in rec["variants"]],
+                         ["1", "4", "cells6"])
+        self.assertEqual(rec["correctness"], "PASS")
+        self.assertIn("s_6", rec["shares"])
+
+
+class VariantsAreValidatedTests(unittest.TestCase):
+
+    def test_the_first_variant_must_be_the_baseline(self):
+        with self.assertRaises(calibrate.SplitChangedTheScience):
+            calibrate.run(LIGHT, TOY, deadline=time.monotonic() + 60,
+                          variants=[4, 1])
+
+    def test_two_variants_with_the_same_group_count_are_refused(self):
+        with self.assertRaises(calibrate.SplitChangedTheScience):
+            calibrate.run(LIGHT, TOY, deadline=time.monotonic() + 60,
+                          variants=[1, 6, calibrate.CELLS_PROBE])
+
+
+class EveryVariantIsWrittenAsItFinishesTests(unittest.TestCase):
+    """Сбой позднего варианта не стирает уже измеренное."""
+
+    def test_the_checkpoint_holds_every_finished_variant(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "calibration.json"
+            calibrate.run(LIGHT, TOY, deadline=time.monotonic() + 600,
+                          variants=[1, 4], checkpoint=path,
+                          provenance={"runner": "проба"})
+            got = json.loads(path.read_text())
+        self.assertEqual([v["label"] for v in got["variants"]], ["1", "4"])
+        self.assertEqual(got["provenance"]["runner"], "проба")
+
+    def test_a_failure_later_keeps_what_was_measured_before(self):
+        from simulation import s5b_shard as S
+        real_merge = S.merge
+
+        def tamper(arm, look, parts, *, expected):
+            merged = real_merge(arm, look, parts, expected=expected)
+            if len(parts) == 6:                     # портим только зонд
+                name = sorted(merged, key=repr)[0]
+                e = merged[name]
+                merged[name] = e.__class__(
+                    key=e.key, delta_fraction=e.delta_fraction,
+                    point=e.point + 1.0, low=e.low, high=e.high,
+                    radius=e.radius, status=e.status, look=e.look)
+            return merged
+
+        S.merge = tamper
+        calibrate.S.merge = tamper
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = pathlib.Path(tmp) / "calibration.json"
+                with self.assertRaises(calibrate.SplitChangedTheScience):
+                    calibrate.run(LIGHT, TOY, deadline=time.monotonic() + 600,
+                                  variants=[1, 4, calibrate.CELLS_PROBE],
+                                  checkpoint=path)
+                got = json.loads(path.read_text())
+        finally:
+            S.merge = real_merge
+            calibrate.S.merge = real_merge
+        self.assertEqual(got["correctness"], "KILL")
+        self.assertEqual([v["label"] for v in got["variants"]],
+                         ["1", "4", "cells6"],
+                         "измеренные до сбоя варианты потеряны")
 
 
 if __name__ == "__main__":

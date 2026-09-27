@@ -208,3 +208,106 @@ def minimum_groups(model: dict, budget: float, how) -> int | None:
         if how(model, g) <= budget:
             return g
     return None
+
+
+# --- GATE A: переносимость профиля на ДРУГОЙ прогон -----------------------
+#
+# Пороги объявлены ДО второго прогона и сравнивают НОРМИРОВАННЫЕ величины:
+# абсолютные секунды между раннерами совпадать не обязаны и не будут.
+
+#: Стоимость ключа каждого блока, отнесённая к блоку 1.0, обязана остаться
+#: в пределах ±15% от первого прогона. Порядка 1.0 < 5.0 < 15.0 < 60.0 это
+#: не заменяет: он проверяется отдельно.
+GATE_A_RATIO_TOLERANCE = 0.15
+
+#: s_4 и s_6 одного прогона, и s_4 двух прогонов, обязаны сходиться до
+#: 0.02 абсолютно. В первом прогоне четыре оценки легли в полосу шириной
+#: 0.013; вдвое шире — уже расхождение модели, а не шум.
+GATE_A_SHARE_AGREEMENT = 0.02
+
+#: Зонд cells6. По первой координате клетки одинаковы, поэтому модель
+#: «равные ключи внутри блока» предсказывает им ОДИНАКОВУЮ стоимость.
+#: max/min <= 1.05 — эффект horizon/maximise не обнаружен (days при этом
+#: НЕ ИЗМЕРЕНА, это не PASS равномерности); > 1.10 — равномерность убита;
+#: между — не решено. 5% — втрое выше невязки модели на отложенных данных
+#: первого прогона (1.8%); 10% — дисбаланс, меняющий число групп.
+CELLS_NO_EFFECT_SPREAD = 1.05
+CELLS_EFFECT_SPREAD = 1.10
+
+
+def _profile(model: dict) -> dict:
+    base = model["per_key"][1.0]
+    return {t: v / base for t, v in sorted(model["per_key"].items())}
+
+
+def _decision(model: dict, full_seconds: float) -> dict:
+    """Число групп для 64000 в масштабе огибающей: от раннера не зависит."""
+    from . import cost
+    unit = group_seconds(model, KEYS)
+    scaled_model = scaled(model, full_seconds / unit)
+    budget = cost.SHARD_BUDGET_HOURS * 3600
+    return {"contiguous": minimum_groups(scaled_model, budget, worst_contiguous),
+            "balanced": minimum_groups(scaled_model, budget, worst_balanced)}
+
+
+def gate_a(first: dict, second: dict) -> dict:
+    """Вердикт Gate A. Ничего не подгоняет под второй прогон."""
+    from . import cost
+    out = {"checks": {}, "verdict": None}
+    c = out["checks"]
+    by = {v["label"] if "label" in v else str(v["groups"]): v
+          for v in second["variants"]}
+
+    c["correctness"] = bool(second["comparisons"]) and all(
+        x["identical"] for x in second["comparisons"])
+    c["complete"] = (second.get("incomplete") is None
+                     and {"1", "4", "cells6"} <= set(by))
+    if not (c["correctness"] and c["complete"]):
+        out["verdict"] = ("KILL: наука изменилась" if not c["correctness"]
+                          else "INCOMPLETE: выводов о профиле нет")
+        return out
+
+    m1, m2 = fit(first), fit(second)
+    p1, p2 = _profile(m1), _profile(m2)
+    order = [m2["per_key"][t] for t in sorted(m2["per_key"])]
+    c["order_preserved"] = order == sorted(order)
+    c["profile_first"] = {t: round(v, 4) for t, v in p1.items()}
+    c["profile_second"] = {t: round(v, 4) for t, v in p2.items()}
+    c["profile_drift"] = {t: round(p2[t] / p1[t] - 1.0, 4) for t in p1}
+    c["profile_transported"] = all(abs(d) <= GATE_A_RATIO_TOLERANCE
+                                   for d in c["profile_drift"].values())
+
+    s1 = first.get("shares", {}).get("s_4")
+    s2 = second["shares"]
+    c["s4_first"], c["s4_second"], c["s6_second"] = s1, s2.get("s_4"), s2.get("s_6")
+    c["s_within_run"] = abs(s2["s_4"] - s2["s_6"]) <= GATE_A_SHARE_AGREEMENT
+    c["s_across_runs"] = abs(s2["s_4"] - s1) <= GATE_A_SHARE_AGREEMENT
+
+    full = cost.seconds_for(120.0, 64_000)
+    c["decision_first"], c["decision_second"] = _decision(m1, full), _decision(m2, full)
+    c["decision_unchanged"] = c["decision_first"] == c["decision_second"]
+
+    cells = [r["wall_seconds"] for r in by["cells6"]["groups_detail"]]
+    spread = max(cells) / min(cells)
+    c["cells_spread"] = round(spread, 4)
+    c["cells_heldout_worst_error"] = check_heldout(
+        m2, second, 6, tolerance=CELLS_NO_EFFECT_SPREAD - 1.0)["worst_relative_error"]
+    # Статус машиночитаемый: гейт на прозе перепутал бы «это не PASS» с PASS.
+    if spread <= CELLS_NO_EFFECT_SPREAD:
+        c["uniformity_status"] = "NOT_DETECTED_DAYS_UNMEASURED"
+        c["uniformity"] = ("эффект horizon/maximise не обнаружен; "
+                           "days НЕ ИЗМЕРЕНА — это не PASS равномерности")
+    elif spread > CELLS_EFFECT_SPREAD:
+        c["uniformity_status"] = "KILL"
+        c["uniformity"] = "KILL: ключи внутри блока неравны по horizon/maximise"
+    else:
+        c["uniformity_status"] = "UNDECIDED"
+        c["uniformity"] = "НЕ РЕШЕНО: разброс между порогами"
+
+    profile_ok = all(c[k] for k in ("order_preserved", "profile_transported",
+                                    "s_within_run", "s_across_runs",
+                                    "decision_unchanged"))
+    out["verdict"] = ("PASS: профиль первой координаты переносим"
+                      if profile_ok else
+                      "KILL: статическая модель cost(key) не переносима")
+    return out

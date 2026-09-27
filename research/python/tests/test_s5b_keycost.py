@@ -140,5 +140,100 @@ class WhatTheModelSaysAbout64000Tests(unittest.TestCase):
                            "хвост оказался не тяжелее оценки планировщика")
 
 
+def _second_run(scale=1.3, per_tier=None, cell_bump=None, drop_cells=False,
+                identical=True, incomplete=None):
+    """Синтетический второй прогон из первого: нормированный профиль задан."""
+    import copy
+    from s5b_execution import calibrate
+    m = K.fit(RECORD)
+    und = m["undivided"]
+    per = dict(m["per_key"]) if per_tier is None else per_tier
+    rec = {"arm": RECORD["arm"], "look": 4000, "variants": [],
+           "comparisons": [{"identical": identical}, {"identical": identical}],
+           "incomplete": incomplete}
+
+    def group(keys):
+        return (und + sum(per[k[0]] for k in keys)) * scale
+
+    for label, slices in (("1", (K.KEYS,)),
+                          ("4", __import__("s5b_execution.scheduler",
+                                           fromlist=["x"]).key_slices(4)),
+                          ("cells6", calibrate.cells_partition())):
+        if drop_cells and label == "cells6":
+            continue
+        rows = [{"keys": [list(k) for k in sl], "key_count": len(sl),
+                 "wall_seconds": group(sl)} for sl in slices]
+        if label == "cells6" and cell_bump:
+            rows[0]["wall_seconds"] *= cell_bump
+        rec["variants"].append({
+            "label": label, "groups": len(slices), "groups_detail": rows,
+            "C_g_sum_wall": sum(r["wall_seconds"] for r in rows),
+            "W_g_max_wall": max(r["wall_seconds"] for r in rows)})
+    by = {v["label"]: v for v in rec["variants"]}
+    c1 = by["1"]["C_g_sum_wall"]
+    rec["shares"] = {"s_4": (by["4"]["C_g_sum_wall"] / c1 - 1) / 3}
+    if "cells6" in by:
+        rec["shares"]["s_6"] = (by["cells6"]["C_g_sum_wall"] / c1 - 1) / 5
+    return rec
+
+
+class GateAVerdictTests(unittest.TestCase):
+    """Пороги Gate A объявлены до прогона; вердикт по нормированным величинам."""
+
+    def test_the_same_profile_on_a_slower_runner_passes(self):
+        got = K.gate_a(RECORD, _second_run(scale=1.3))
+        self.assertTrue(got["verdict"].startswith("PASS"), got)
+
+    def test_absolute_seconds_are_not_what_is_compared(self):
+        """Вдвое медленный раннер при том же профиле — всё ещё PASS."""
+        got = K.gate_a(RECORD, _second_run(scale=1.96))
+        self.assertTrue(got["verdict"].startswith("PASS"), got)
+
+    def test_a_swapped_block_order_is_a_kill(self):
+        m = K.fit(RECORD)
+        per = dict(m["per_key"])
+        per[15.0], per[60.0] = per[60.0], per[15.0]
+        got = K.gate_a(RECORD, _second_run(per_tier=per))
+        self.assertTrue(got["verdict"].startswith("KILL"))
+        self.assertFalse(got["checks"]["order_preserved"])
+
+    def test_a_drifted_profile_is_a_kill(self):
+        m = K.fit(RECORD)
+        per = dict(m["per_key"])
+        per[60.0] *= 1.0 + 2 * K.GATE_A_RATIO_TOLERANCE
+        got = K.gate_a(RECORD, _second_run(per_tier=per))
+        self.assertFalse(got["checks"]["profile_transported"])
+        self.assertTrue(got["verdict"].startswith("KILL"))
+
+    def test_equal_cells_say_days_is_not_measured(self):
+        got = K.gate_a(RECORD, _second_run())
+        self.assertEqual(got["checks"]["uniformity_status"],
+                         "NOT_DETECTED_DAYS_UNMEASURED",
+                         "равные клетки выданы за PASS равномерности")
+
+    def test_an_uneven_cell_kills_uniformity(self):
+        got = K.gate_a(RECORD, _second_run(
+            cell_bump=K.CELLS_EFFECT_SPREAD + 0.05))
+        self.assertEqual(got["checks"]["uniformity_status"], "KILL")
+
+    def test_the_band_between_thresholds_is_not_decided(self):
+        mid = (K.CELLS_NO_EFFECT_SPREAD + K.CELLS_EFFECT_SPREAD) / 2
+        got = K.gate_a(RECORD, _second_run(cell_bump=mid))
+        self.assertEqual(got["checks"]["uniformity_status"], "UNDECIDED")
+
+    def test_a_missing_probe_is_incomplete_not_a_pass(self):
+        got = K.gate_a(RECORD, _second_run(drop_cells=True))
+        self.assertTrue(got["verdict"].startswith("INCOMPLETE"))
+
+    def test_changed_science_is_a_kill_before_anything_else(self):
+        got = K.gate_a(RECORD, _second_run(identical=False))
+        self.assertTrue(got["verdict"].startswith("KILL: наука"))
+
+    def test_thresholds_are_declared_and_ordered(self):
+        self.assertLess(K.CELLS_NO_EFFECT_SPREAD, K.CELLS_EFFECT_SPREAD)
+        self.assertLessEqual(K.GATE_A_RATIO_TOLERANCE, 0.15)
+        self.assertLessEqual(K.GATE_A_SHARE_AGREEMENT, 0.02)
+
+
 if __name__ == "__main__":
     unittest.main()
