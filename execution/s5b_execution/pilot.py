@@ -7,9 +7,12 @@
 которые исполнит полная ступень при смежной раскладке g групп, но только
 для блока δ = 60, самого дорогого по всем прежним замерам.
 
-Юниты строятся той же `key_slices`, что у планировщика, и исполняются тем
-же `cli run`: `task_id` совпадает с будущим явным планом g = 12 (или 24),
-научный результат пишется в формате ступеней.
+Раскладка — СБАЛАНСИРОВАННАЯ внутри блока (`layout.balanced_slices`), а не
+смежная `key_slices`: та режет блок ровно по уровням days и конфаундит
+ось, которая сильно влияет на стоимость (поправка к предрегистрации в
+`docs/research/s5b-pilot-64000.md`). Число групп и пар (группа, δ) то же.
+Юниты исполняются тем же `cli run`: `task_id` совпадает с будущим явным
+планом этой раскладки, научный результат пишется в формате ступеней.
 
 Разрешены РОВНО два размера: 12 и 24 (запасной). Больше исследований
 стоимости этим модулем не заказывается.
@@ -24,7 +27,8 @@ from simulation import s5b_shard as S
 
 from . import cost, resume
 from .identity import ACHIEVED, ArtifactRefused, KNOWN_STATUSES
-from .scheduler import FRACTIONS, KEYS, arms, key_slices
+from .layout import balanced_slices, counts
+from .scheduler import FRACTIONS, KEYS, arms
 
 PILOT_LOOK = 64000
 ALLOWED_GROUPS = (12, 24)
@@ -39,12 +43,31 @@ class PilotRefused(Exception):
     """Пилот не собирается: состав не тот, что объявлен."""
 
 
-def units(arm: str, look: int, groups: int, block: float) -> tuple:
-    """Юниты блока `block` при смежной раскладке `groups` групп.
+#: Баланс, который обязана нести каждая группа блока: (days, horizon,
+#: maximise) — сколько ключей на каждый уровень. Проверяется на входе, а
+#: не принимается на веру у раскладки.
+REQUIRED_BALANCE = {12: ([2, 2, 2], [2, 2, 2], ([3, 3],)),
+                    24: ([1, 1, 1], [1, 1, 1], ([1, 2], [2, 1]))}
 
-    Порядок KEYS на честном слове не принимается: каждая группа блока
-    обязана содержать ТОЛЬКО этот δ, группы не пересекаются и вместе
-    покрывают блок ровно целиком.
+
+def _imbalance(group, groups: int) -> str:
+    c = counts(group)
+    days, horizon, maximise = REQUIRED_BALANCE[groups]
+    if c["days"] != days:
+        return f"days {c['days']} вместо {days}"
+    if c["horizon"] != horizon:
+        return f"horizon {c['horizon']} вместо {horizon}"
+    if c["maximise"] not in [list(m) for m in maximise]:
+        return f"maximise {c['maximise']}"
+    return ""
+
+
+def units(arm: str, look: int, groups: int, block: float) -> tuple:
+    """Юниты блока `block` при сбалансированной раскладке `groups` групп.
+
+    Раскладка на честном слове не принимается: каждая группа блока обязана
+    содержать ТОЛЬКО этот δ, группы не пересекаются, вместе покрывают блок
+    ровно целиком, и каждая сбалансирована по days, horizon и maximise.
     """
     if look != PILOT_LOOK:
         raise PilotRefused(f"пилот только на ступени {PILOT_LOOK}, дано {look}")
@@ -55,7 +78,7 @@ def units(arm: str, look: int, groups: int, block: float) -> tuple:
     whole = tuple(k for k in KEYS if k[0] == block)
     if not whole:
         raise PilotRefused(f"блока δ = {block} в сетке нет")
-    slices = key_slices(groups)
+    slices = balanced_slices(groups)
     size = len(KEYS) // groups
     if len(KEYS) % groups or len(slices) != groups:
         raise PilotRefused(f"72 ключа не режутся на {groups} равных групп")
@@ -66,6 +89,9 @@ def units(arm: str, look: int, groups: int, block: float) -> tuple:
         others = sorted({k[0] for k in s} - {block})
         if others:
             raise PilotRefused(f"группа блока δ = {block} содержит и δ {others}")
+        problem = _imbalance(s, groups)
+        if problem:
+            raise PilotRefused(f"группа блока не сбалансирована: {problem}")
     flat = [k for s in touching for k in s]
     if len(flat) != len(set(flat)):
         raise PilotRefused("группы блока пересекаются")

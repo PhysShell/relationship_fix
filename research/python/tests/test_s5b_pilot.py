@@ -25,7 +25,7 @@ if str(ROOT / "execution") not in sys.path:
 
 from simulation import s5b_shard as S                           # noqa: E402
 
-from s5b_execution import cli, cost, pilot as P                  # noqa: E402
+from s5b_execution import cli, cost, layout as L, pilot as P     # noqa: E402
 from s5b_execution.identity import (ACHIEVED, INSUFFICIENT,      # noqa: E402
                                     recompute_digest)
 from s5b_execution.scheduler import FRACTIONS, KEYS, key_slices  # noqa: E402
@@ -38,14 +38,23 @@ BUDGET = cost.SHARD_BUDGET_HOURS * 3600.0
 
 class ThePilotUnitsAreTheProductionUnitsTests(unittest.TestCase):
 
-    def test_g12_is_the_three_production_slices_of_the_heaviest_block(self):
+    def test_g12_is_the_three_balanced_groups_of_the_heaviest_block(self):
         got = P.units(P.PILOT_ARM, 64000, 12, 60.0)
         want = [S.Unit(arm=P.PILOT_ARM, look=64000, keys=tuple(s), weight=0.0)
-                for s in key_slices(12)[9:12]]
+                for s in L.balanced_slices(12)[9:12]]
         self.assertEqual([u.task_id for u in got], [u.task_id for u in want])
         for u in got:
             self.assertEqual(len(u.keys), 6)
             self.assertEqual({k[0] for k in u.keys}, {60.0})
+            self.assertEqual(L.counts(u.keys), {"days": [2, 2, 2],
+                                                "horizon": [2, 2, 2],
+                                                "maximise": [3, 3]})
+
+    def test_the_contiguous_layout_is_refused_as_confounded(self):
+        """Смежные группы блока — чистые уровни days: пилот их не примет."""
+        with mock.patch.object(P, "balanced_slices", key_slices):
+            with self.assertRaisesRegex(P.PilotRefused, "не сбалансирована"):
+                P.units(P.PILOT_ARM, 64000, 12, 60.0)
 
     def test_the_fallback_g24_is_six_slices_of_three(self):
         got = P.units(P.PILOT_ARM, 64000, 24, 60.0)
@@ -76,18 +85,93 @@ class ThePilotUnitsAreTheProductionUnitsTests(unittest.TestCase):
             size = len(KEYS) // groups
             return tuple(tuple(order[i:i + size])
                          for i in range(0, len(order), size))
-        with mock.patch.object(P, "key_slices", shifted):
+        with mock.patch.object(P, "balanced_slices", shifted):
             with self.assertRaisesRegex(P.PilotRefused, "содержит и δ"):
                 P.units(P.PILOT_ARM, 64000, 12, 60.0)
 
     def test_overlapping_slices_are_refused(self):
         def overlapping(groups):
-            s = list(key_slices(groups))
+            s = list(L.balanced_slices(groups))
             s[10] = s[9]
             return tuple(s)
-        with mock.patch.object(P, "key_slices", overlapping):
+        with mock.patch.object(P, "balanced_slices", overlapping):
             with self.assertRaisesRegex(P.PilotRefused, "пересекаются"):
                 P.units(P.PILOT_ARM, 64000, 12, 60.0)
+
+
+class TheBalancedLayoutIsFrozenTests(unittest.TestCase):
+    """Комбинаторика раскладок закреплена тестом, а не устным mod 3."""
+
+    DAYS = sorted({k[1] for k in KEYS})
+    HORIZONS = sorted({k[2] for k in KEYS})
+
+    def _index(self, key):
+        return (self.DAYS.index(key[1]), self.HORIZONS.index(key[2]),
+                int(key[3]))
+
+    def test_g12_is_d_plus_h_plus_x_mod_3_inside_each_block(self):
+        slices = L.balanced_slices(12)
+        for b, delta in enumerate(sorted({k[0] for k in KEYS})):
+            for local in range(3):
+                got = set(slices[3 * b + local])
+                want = {k for k in KEYS if k[0] == delta
+                        and sum(self._index(k)) % 3 == local}
+                self.assertEqual(got, want, (delta, local))
+
+    def test_g24_is_the_frozen_fallback_formula(self):
+        slices = L.balanced_slices(24)
+        for b, delta in enumerate(sorted({k[0] for k in KEYS})):
+            for local in range(6):
+                r, bit = divmod(local, 2)
+                want = set()
+                for k in KEYS:
+                    if k[0] != delta:
+                        continue
+                    d, h, x = self._index(k)
+                    if (h - d) % 3 == r and (x ^ (d % 2)) == bit:
+                        want.add(k)
+                self.assertEqual(set(slices[6 * b + local]), want, (delta, local))
+
+    def test_every_group_is_balanced_and_inside_one_delta(self):
+        for groups, size in ((12, 6), (24, 3)):
+            slices = L.balanced_slices(groups)
+            self.assertEqual(len(slices), groups)
+            flat = [k for s in slices for k in s]
+            self.assertEqual(sorted(flat), sorted(KEYS))
+            for s in slices:
+                self.assertEqual(len(s), size)
+                self.assertEqual(len({k[0] for k in s}), 1)
+                self.assertEqual(P._imbalance(s, groups), "", s)
+
+    def test_the_fallback_splits_maximise_three_one_way_three_the_other(self):
+        slices = L.balanced_slices(24)
+        for b in range(4):
+            got = sorted(tuple(L.counts(s)["maximise"]) for s in slices[6 * b:6 * b + 6])
+            self.assertEqual(got, [(1, 2)] * 3 + [(2, 1)] * 3)
+
+    def test_the_pair_count_is_that_of_the_contiguous_layout(self):
+        """Лишнего to_bins нет: пар (группа, δ) столько же, сколько групп."""
+        for groups in (12, 24):
+            slices = L.balanced_slices(groups)
+            self.assertEqual(sum(len({k[0] for k in s}) for s in slices), groups)
+
+    def test_each_axis_of_the_balance_is_checked_on_its_own(self):
+        block = [k for k in KEYS if k[0] == 60.0]
+        idx = {k: self._index(k) for k in block}
+        # days 2/2/2, но все шесть — один горизонт
+        one_horizon = [k for k in block if idx[k][1] == 0]
+        self.assertIn("horizon", P._imbalance(one_horizon, 12))
+        # days и horizon 2/2/2, но maximise 6/0
+        one_side = [k for k in block if idx[k][2] == 0
+                    and (idx[k][0] + idx[k][1]) % 3 in (0, 1)]
+        self.assertEqual(L.counts(one_side)["days"], [2, 2, 2])
+        self.assertEqual(L.counts(one_side)["horizon"], [2, 2, 2])
+        self.assertIn("maximise", P._imbalance(one_side, 12))
+
+    def test_no_other_size_exists(self):
+        for groups in (4, 6, 36):
+            with self.assertRaises(ValueError):
+                L.balanced_slices(groups)
 
 
 # --- части в формате `cli run` --------------------------------------------
