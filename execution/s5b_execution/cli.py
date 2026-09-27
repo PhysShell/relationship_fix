@@ -3,6 +3,8 @@
     plan    --look L [--prior D ...]   манифест ступени с учётом реестра
     run     --look L --shard N         посчитать свой мешок замороженным run_unit
     reduce  --look L --prior D ...     свести концы, каждый на своём tau
+    pilot   --look 64000 --groups G    манифест пилота: блок δ при раскладке G
+    judge   --look 64000 --parts D     вердикт пилота по его частям
 
 `reduce` — не «слияние ради полноты». Он строит реестр по ВОСХОДЯЩИМ
 ступеням и отдаёт каждый конец на его собственном `tau`.
@@ -196,7 +198,8 @@ def _encode(results) -> list:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode",
-                        choices=("plan", "run", "reduce", "calibrate"))
+                        choices=("plan", "run", "reduce", "calibrate",
+                                 "pilot", "judge"))
     parser.add_argument("--look", type=int, required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--arm", default="",
@@ -222,8 +225,58 @@ def main(argv=None) -> int:
                         help="каталог частей прерванного прогона ЭТОЙ ступени")
     parser.add_argument("--checkpoint", default="",
                         help="чекпойнт реестра предыдущей ступени")
+    parser.add_argument("--groups", type=int, default=0,
+                        help="пилот: число групп смежной раскладки (12 или 24)")
+    parser.add_argument("--block", type=float, default=0.0,
+                        help="пилот: первая координата блока, например 60")
+    parser.add_argument("--parts", default="",
+                        help="пилот: каталог манифеста и частей для вердикта")
     args = parser.parse_args(argv)
     out = pathlib.Path(args.out)
+
+    if args.mode == "pilot":
+        # ПИЛОТ 64000. Ступень лестницы этим режимом НЕ считается: реестр
+        # не трогается, манифест объявляет только юниты одного блока.
+        from . import pilot
+        checks = {}
+        if args.science:
+            checks["science_modules"] = guard.assert_science_comes_from(
+                args.science)
+        try:
+            chosen = pilot.units(args.arm, args.look, args.groups, args.block)
+        except pilot.PilotRefused as exc:
+            raise SystemExit(f"ПИЛОТ НЕ СОБРАН: {exc}")
+        manifest = pilot.manifest(chosen, groups=args.groups, block=args.block)
+        body = json.dumps(manifest, sort_keys=True)
+        record = provenance.collect(
+            inputs={},
+            manifest_digest=hashlib.sha256(body.encode()).hexdigest()[:16])
+        record["look"] = args.look
+        record["preflight"] = checks
+        manifest["provenance"] = record
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "manifest.json").write_text(json.dumps(manifest, sort_keys=True))
+        print(json.dumps({"shards": list(range(manifest["shards"])),
+                          "units": [u["task_id"] for u in manifest["units"]],
+                          "groups": args.groups, "block": args.block}))
+        return 0
+
+    if args.mode == "judge":
+        from . import pilot
+        if not args.parts:
+            raise SystemExit("вердикту нужен --parts")
+        verdict = pilot.judge(args.parts, look=args.look,
+                              science_sha=os.environ.get("SCIENCE_SHA", ""))
+        verdict["provenance"] = {
+            "science_sha": os.environ.get("SCIENCE_SHA", ""),
+            "execution_sha": os.environ.get("EXECUTION_SHA", ""),
+            "request_sha": os.environ.get("REQUEST_SHA", "")}
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "pilot-verdict.json").write_text(
+            json.dumps(verdict, sort_keys=True, ensure_ascii=False))
+        print(json.dumps(verdict, sort_keys=True, ensure_ascii=False, indent=1))
+        # красный прогон = FAIL: вердикт виден без чтения артефакта
+        return 0 if verdict["status"] == "PASS" else 1
 
     if args.mode == "plan":
         # PREFLIGHT. Порядок не косметический: всё, что может обрушиться
