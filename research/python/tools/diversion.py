@@ -1259,6 +1259,11 @@ DIVERSIONS = (
      '    except (_Killed, multirun.MultiRunRefused) as exc:\n',
      '    except _Killed as exc:\n',
      ['tests.test_s5b_multirun']),
+    ('64000-воркфлоу: закреплён слой со старым правилом повторов',
+     '../../.github/workflows/s5b-64000.yml',
+     'EXECUTION_SHA: "b465e9ffd6f4f261819b8e143db3188b0318dd3e"',
+     'EXECUTION_SHA: "ed00d4fb1d482d92cb6db8c7fb1349b40f500fff"',
+     ['tests.test_s5b_workflows']),
     ("отсечка инициации игнорируется", "coarsening/bounded.py",
      "    if initiation_end is None:\n        return start + horizon <= window_end\n"
      "    return start < initiation_end",

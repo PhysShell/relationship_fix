@@ -1197,7 +1197,7 @@ class MultiRunWorkflowTests(unittest.TestCase):
                 "fi\n"
                 f'exec {shutil.which("python3") or _s.executable} "$@"\n')
         for code, status in ((0, "PARTIAL"), (1, "PARTIAL"), (0, "COMPLETE"),
-                             (1, "STOP"), (1, "")):
+                             (1, "STOP"), (1, "KILL"), (1, "")):
             done, got = self._bash(self._progress_block(),
                                    env={"FAKE_CODE": str(code),
                                         "FAKE_STATUS": status},
@@ -1226,12 +1226,15 @@ class MultiRunWorkflowTests(unittest.TestCase):
         self.assertTrue(sha, "воркфлоу 64000 не закреплён")
         src = _source_at(sha, "execution/s5b_execution/multirun.py")
         self.assertIn("BATCH_CAP = 165", src)
-        self.assertIn("def select(", src)
+        self.assertIn("RETRY_CAP = RUN_MATRIX - BATCH_CAP", src,
+                      "закреплён слой со старым правилом «<= 165 за прогон»")
+        self.assertIn("    chosen = retries + nominal\n", src)
         self.assertIn("def progress(", src)
         self.assertIn("if look == dryplan.LOOK:", src)
         cli = _source_at(sha, "execution/s5b_execution/cli.py")
         self.assertIn('"select", "progress"', cli)
         self.assertIn("_anchor_checkpoint(args, data)", cli)
+        self.assertIn("class _Killed(Exception):", cli)
         guard = _source_at(sha, "execution/s5b_execution/guard.py")
         self.assertIn("if paths != [request_path]:", guard)
         dry = _source_at(sha, "execution/s5b_execution/dryplan.py")
