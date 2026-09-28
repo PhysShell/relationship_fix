@@ -1,59 +1,64 @@
-"""Локальный гейт многопрогонной ступени. ОДИН запуск, без Actions.
+"""Локальный гейт многопрогонной ступени, v2. ОДИН запуск, без Actions.
 
-Решение: GO на multi-run packaging 64000, local-only. До production
-workflow — ровно один дешёвый локальный гейт на синтетике; не проходит
-чисто — KILL многопрогонной стратегии.
+v1 (коммит ed00d4f) проверял правило «не больше 165 за прогон» — PASS.
+Правило заменено решением: повторы идут СВЕРХ номинальной партии, до
+потолка матрицы. v2 проверяет новое правило и три регрессии к нему.
 
-СИНТЕТИКА. Ступень 4000 всей сетки, 156 юнитов. `plan --multirun` — тот
-же поиск упаковки, что дал 495 заданий на 64000, — здесь даёт 11
-заданий; потолок партии 4 -> три номинальные партии 4 / 4 / 3. Счёт —
-настоящий `cli run` с подменённым `S.run_unit`: концы детерминированы
-научными координатами (рука, ключ, доля, просмотр), смесь достигнутых и
-недостигнутых. Наука здесь не проверяется, проверяется механика. Всё
-остальное — настоящие `plan`, `select`, `progress`, `reduce`.
+ПРАВИЛО. Номинальный прогон r (1..3) обязан продвинуть свою партию r
+целиком — ни одно её задание прежде не запускалось; сверх неё — до
+«матрица − партия» повторов (на 64000 256 − 165 = 91): заданий прошлых
+партий, чей результат отсутствует или неполон, потому что задание упало;
+не влезшие ждут дальше. Прогон 4 — единственный восстановительный: только
+повторы, не больше матрицы; больше перед ним или остаток после него —
+STOP, пятого нет. Выполненный юнит не пересчитывается. Приехавшая, но не
+принятая часть — KILL, а не повтор.
 
-«Артефакты» прогона — как их отдаёт воркфлоу: задание, упавшее до
+СИНТЕТИКА. Ступень 4000 всей сетки, 156 юнитов; `plan --multirun` даёт 11
+заданий; партия 4, матрица 6 — место для повторов 2, масштабный аналог
+91. Счёт — настоящий `cli run` с подменённым `S.run_unit`; остальное —
+настоящие `plan`, `select`, `progress`, `reduce`. Задание, упавшее до
 выгрузки, не оставляет ничего; каталог возобновления — части всех
 прошлых прогонов плюс манифест первого.
 
 СЦЕНАРИИ
-
-    REF  эталон: один прогон, все 11 заданий того же полного манифеста,
-         `reduce` без возобновления.
-    A    без падений: прогоны 1, 2, 3.
-    B    с падениями: в прогоне 1 первое выбранное задание падает на
-         первом же юните и не выгружает ничего; в прогоне 2 первое
-         задание текущей партии падает на последнем юните и выгружает
-         посчитанное до падения; прогоны 3 и 4 (восстановительный) без
-         падений.
+    REF  эталон: один прогон всех 11 заданий, `reduce` без возобновления.
+    A    без падений: прогоны 1-3.
+    B    падений не больше места: в прогоне 1 первое выбранное задание
+         падает на первом юните, второе — на последнем и выгружает
+         посчитанное; в прогоне 2 падает первое номинальное задание.
+    D    падений больше места: в прогоне 1 падают три задания из четырёх,
+         в прогоне 2 — два первых номинальных.
+    K1   в прогоне 1 выгруженная часть подменена: содержимое не сходится с
+         отпечатком.
+    K2   в прогоне 1 выгруженная часть несёт чужие ключи при честном
+         отпечатке — identity не та.
     C    неустранимое: один юнит падает в каждом прогоне.
+    E    переполнение: в прогонах 1-3 падают все выбранные задания.
 
-ОБЯЗАТЕЛЬНЫЕ ПРОВЕРКИ — любая неудача = KILL
-
-    R1  A: каждый task_id полного манифеста исполнен ровно один раз, иных
-        исполнений нет.
-    R2  B: задания, упавшие в прогоне r, выбраны в прогоне r + 1, и в
-        выборе каждое повторное идёт раньше любого нового; ни один юнит,
-        чья часть выгружена, не исполнен повторно; каждый task_id
-        выгружен ровно один раз.
-    R3  манифест каждого продолжения (A и B) побайтово равен манифесту
-        первого прогона, и `plan` продолжения совпал с ним, спланировав
-        ступень заново; контроль: продолжение с изменённым манифестом
-        цепочки `plan` отвергает.
-    R4  финальное сведение A и B против эталона: `cells` побайтово равны;
+ПРОВЕРКИ — любая неудача = KILL
+    R1  A: каждый task_id полного манифеста исполнен ровно раз.
+    R2  B и D: номинальный прогон берёт свою партию целиком, и ни одно её
+        задание прежде не запускалось; повторы — только из упавшего или
+        неполного, идут раньше новых, не больше места; выгруженный юнит не
+        исполнен повторно; каждый task_id выгружен ровно раз.
+    R3  манифест всех продолжений побайтово равен первому и эталону;
+        продолжение с изменённым манифестом цепочки `plan` отвергает.
+    R4  сведение A, B и D против эталона: `cells` побайтово равны;
         `reduced.json` и `checkpoint.json` побайтово равны после удаления
-        ОДНОГО поля `provenance.reused` — оно по построению записывает
-        происхождение переиспользованных частей и у эталона пусто.
-
-СОПУТСТВУЮЩИЕ — тоже KILL: «не получается чисто»
-
-    S1  итог прогона: PARTIAL без падений — код 0, не красный; упавшее
-        выбранное — код 1; COMPLETE — код 0.
-    S2  `reduce` незаконченной ступени отказывает — и без возобновления,
-        и с ним.
-    S3  C: после восстановительного прогона — STOP с кодом 1; пятый
-        прогон `select` отвергает.
-    S4  ни один выбор не больше потолка.
+        одного поля `provenance.reused`.
+    N1  B: падения не больше места закрываются в номинальных прогонах —
+        ступень COMPLETE в прогоне 3, четвёртого нет.
+    N2  D: больше места — остаток переносится: перенесено после прогонов
+        2 и 3 ровно по одному; восстановительный прогон 4 — только
+        повторы, COMPLETE.
+    N3  K1 и K2: итог прогона 1 — KILL с кодом 1, упавших заданий в нём
+        нет, то есть в повторы ничего не встало; `select` прогона 2
+        отказывает с KILL.
+    S1  коды итогов: A 0,0,0; B 1,1,0; D 1,1,0,0.
+    S2  `reduce` незаконченной ступени отказывает.
+    S3  C: STOP после восстановительного, код 1, пятый прогон отвергнут;
+        E: STOP уже в прогоне 3, код 1, `select` прогона 4 отвергает.
+    S4  каждый выбор не больше матрицы.
 
 Запуск: `python3 -B tools/s5b_multirun_gate.py <файл вердикта>`.
 """
@@ -87,6 +92,7 @@ from s5b_execution.scheduler import FRACTIONS                  # noqa: E402
 
 LOOK = 4000
 CAP = 4
+MATRIX = 6
 ENV = {"SCIENCE_SHA": "a" * 40, "EXECUTION_SHA": "b" * 40,
        "REQUEST_SHA": "c" * 40}
 
@@ -194,7 +200,7 @@ def reference(root) -> dict:
             "manifest_sha256": sha(run_dir / "plan" / "manifest.json")}
 
 
-def one_run(root, name, r, previous, crash_rule=None) -> dict:
+def one_run(root, name, r, previous, crash_rule=None, after=None) -> dict:
     """Прогон r сценария: скачать цепочку, plan, select, счёт, итог, сведение."""
     run_dir = root / name / f"run{r}"
     run_dir.mkdir(parents=True)
@@ -217,14 +223,16 @@ def one_run(root, name, r, previous, crash_rule=None) -> dict:
     rec["manifest_sha256"] = sha(run_dir / "plan" / "manifest.json")
     code, out, why = call(["select", "--look", str(LOOK), "--manifest",
                            "plan/manifest.json", "--run", str(r),
-                           "--batch-cap", str(CAP), "--out", "batch"] + resume,
+                           "--batch-cap", str(CAP), "--run-matrix",
+                           str(MATRIX), "--out", "batch"] + resume,
                           run_dir)
     rec["select_code"], rec["select_why"] = code, why
     if code:
         return rec
     batch = json.loads((run_dir / "batch" / "batch.json").read_text())
     sel = batch["selection"]
-    rec["selection"] = {k: sel[k] for k in ("shards", "retries", "batches",
+    rec["selection"] = {k: sel[k] for k in ("shards", "retries", "nominal",
+                                            "carried", "batches",
                                             "pending_shards_before")}
     rec["selection"]["units"] = len(sel["units"])
     rows = {s: sorted(u["task_id"] for u in batch["units"] if u["shard"] == s)
@@ -235,6 +243,8 @@ def one_run(root, name, r, previous, crash_rule=None) -> dict:
                            keep_partial=s in partial)
                    for s in sel["shards"]]
     STUB.crash = set()
+    if after:
+        rec["tampered"] = after(run_dir, sel, rows)
     target = run_dir / "out"
     target.mkdir()
     art = run_dir / "artifacts"
@@ -249,9 +259,12 @@ def one_run(root, name, r, previous, crash_rule=None) -> dict:
     if not (run_dir / "report" / "progress.json").exists():
         raise RuntimeError(f"{name} прогон {r}: итога нет — {why}")
     report = json.loads((run_dir / "report" / "progress.json").read_text())
-    rec["progress"] = {k: report[k] for k in
+    rec["progress"] = {k: report.get(k) for k in
                        ("status", "ok", "failed_shards", "failed_units",
-                        "arrived_units", "remaining_units", "remaining_shards")}
+                        "arrived_units", "remaining_units", "remaining_shards",
+                        "reason")}
+    if report["status"] == "KILL":
+        return rec
     if report["status"] == "COMPLETE":
         code, _, why = call(["reduce", "--look", str(LOOK), "--out", "out"]
                             + resume, run_dir)
@@ -269,32 +282,41 @@ def one_run(root, name, r, previous, crash_rule=None) -> dict:
     return rec
 
 
-def scenario(root, name, crash_rules, max_runs=4) -> list[dict]:
+def scenario(root, name, crash_rules, max_runs=4, after=None) -> list[dict]:
     runs, dirs = [], []
     for r in range(1, max_runs + 1):
-        rec = one_run(root, name, r, dirs, crash_rules.get(r))
+        rec = one_run(root, name, r, dirs, crash_rules.get(r),
+                      (after or {}).get(r))
         runs.append(rec)
         dirs.append(root / name / f"run{r}")
         if rec.get("plan_code") or rec.get("select_code"):
             break
-        if rec["progress"]["status"] in ("COMPLETE", "STOP"):
+        if rec["progress"]["status"] in ("COMPLETE", "STOP", "KILL"):
             break
     return runs
 
 
-def _no_crash(sel, rows):
-    return set(), set()
+def _fresh(sel):
+    return [s for s in sel["shards"] if s not in sel["retries"]]
 
 
 def b_rules():
     def run1(sel, rows):
-        first = sel["shards"][0]
-        return {rows[first][0]}, set()           # падает сразу, ничего не выгружено
+        first, second = sel["shards"][:2]
+        return {rows[first][0], rows[second][-1]}, {second}
 
     def run2(sel, rows):
-        fresh = [s for s in sel["shards"] if s not in sel["retries"]
-                 and len(rows[s]) >= 2][0]
-        return {rows[fresh][-1]}, {fresh}         # выгружено до падения
+        first = _fresh(sel)[0]
+        return {rows[first][0]}, set()
+    return {1: run1, 2: run2}
+
+
+def d_rules():
+    def run1(sel, rows):
+        return {rows[s][0] for s in sel["shards"][:3]}, set()
+
+    def run2(sel, rows):
+        return {rows[s][0] for s in _fresh(sel)[:2]}, set()
     return {1: run1, 2: run2}
 
 
@@ -305,6 +327,39 @@ def c_rules(victim):
                 return {victim}, set()
         return set(), set()
     return {r: rule for r in range(1, 5)}
+
+
+def e_rules():
+    def rule(sel, rows):
+        return {ids[0] for ids in rows.values()}, set()
+    return {r: rule for r in range(1, 4)}
+
+
+def _one_part(run_dir, sel):
+    shard = sel["shards"][0]
+    return sorted((run_dir / "artifacts" / f"shard-{shard}").glob("*.json"))[0]
+
+
+def tamper_content(run_dir, sel, rows):
+    """K1: содержимое части подменено, отпечаток оставлен прежним."""
+    path = _one_part(run_dir, sel)
+    data = json.loads(path.read_text())
+    data["endpoints"][0]["point"] += 1.0
+    path.write_text(json.dumps(data, sort_keys=True))
+    return path.stem
+
+
+def tamper_identity(run_dir, sel, rows):
+    """K2: часть несёт чужие ключи, отпечаток пересчитан честно."""
+    from s5b_execution.identity import recompute_digest
+    path = _one_part(run_dir, sel)
+    data = json.loads(path.read_text())
+    data["keys"] = data["keys"][:-1]
+    data["endpoints"] = [e for e in data["endpoints"]
+                         if e["key"] in data["keys"]]
+    data["digest"] = recompute_digest(data)
+    path.write_text(json.dumps(data, sort_keys=True))
+    return path.stem
 
 
 def stripped(path) -> str:
@@ -357,7 +412,7 @@ def tampered_continuation(root, first_run_dir) -> dict:
 def main(target) -> int:
     started = time.time()
     checks: dict[str, bool] = {}
-    evidence: dict = {"look": LOOK, "cap": CAP,
+    evidence: dict = {"look": LOOK, "cap": CAP, "matrix": MATRIX,
                       "python": platform.python_version()}
     try:
         _gate(checks, evidence)
@@ -379,6 +434,40 @@ def main(target) -> int:
     return 0 if evidence["verdict"] == "PASS" else 1
 
 
+def _attempted_before(runs, i):
+    return {s for rec in runs[:i] for s in rec.get("selection", {})
+            .get("shards", [])}
+
+
+def _r2(runs, log, name):
+    """Номинальная партия целиком и впервые; повторы — упавшее, первыми,
+    не больше места; выгруженное не исполнено повторно."""
+    ok, recomputed, uploaded_before = True, [], set()
+    room = MATRIX - CAP
+    for i, rec in enumerate(runs):
+        sel = rec["selection"]
+        plan = sel["batches"]
+        if rec["run"] <= 3:
+            ok &= sel["nominal"] == (plan[rec["run"] - 1]
+                                     if rec["run"] <= len(plan) else [])
+            ok &= not set(sel["nominal"]) & _attempted_before(runs, i)
+            ok &= len(sel["retries"]) <= room
+        else:
+            ok &= sel["nominal"] == []
+        ok &= set(sel["retries"]) <= _attempted_before(runs, i)
+        ok &= sel["shards"] == sel["retries"] + sel["nominal"]
+        if i:
+            owed = set(runs[i - 1]["progress"]["remaining_shards"]) \
+                & _attempted_before(runs, i)
+            ok &= set(sel["retries"]) <= owed
+            ok &= len(sel["retries"]) + sel["carried"] == len(owed)
+        ran = [t for w, t in log if w == f"{name}{rec['run']}"]
+        recomputed += sorted(set(ran) & uploaded_before)
+        uploaded_before |= {u for j in rec["jobs"] for u in j["uploaded"]}
+    uploaded = [u for rec in runs for j in rec["jobs"] for u in j["uploaded"]]
+    return ok, recomputed, uploaded
+
+
 def _gate(checks, evidence) -> None:
     with tempfile.TemporaryDirectory() as tmp, \
             mock.patch.dict(os.environ, ENV), \
@@ -391,78 +480,73 @@ def _gate(checks, evidence) -> None:
         evidence["reference"] = {"shards": ref["shards"], "units": len(ids),
                                  "shard_seconds": manifest["shard_seconds"],
                                  "manifest_sha256": ref["manifest_sha256"]}
-
-        STUB.log.clear()
-        a = scenario(root, "A", {})
-        log_a = [t for w, t in STUB.log if w.startswith("A")]
-        STUB.log.clear()
-        b = scenario(root, "B", b_rules())
-        log_b = [(w, t) for w, t in STUB.log if w.startswith("B")]
-        STUB.log.clear()
-        victim = ids[0]
-        c = scenario(root, "C", c_rules(victim))
+        logs = {}
+        runs = {}
+        for name, rules, after in (
+                ("A", {}, None), ("B", b_rules(), None),
+                ("D", d_rules(), None),
+                ("K1", {}, {1: tamper_content}),
+                ("K2", {}, {1: tamper_identity}),
+                ("C", c_rules(ids[0]), None), ("E", e_rules(), None)):
+            STUB.log.clear()
+            runs[name] = scenario(root, name, rules, after=after)
+            logs[name] = [(w, t) for w, t in STUB.log if w.startswith(name)]
+            evidence[name] = runs[name]
+        a, b, d, c, e = (runs[k] for k in "ABDCE")
+        k_next = {k: one_run(root, k, 2, [root / k / "run1"])
+                  for k in ("K1", "K2")}
         fifth = one_run(root, "C", 5, [root / "C" / f"run{r}"
                                        for r in range(1, 5)])
+        e_fourth = one_run(root, "E", 4, [root / "E" / f"run{r}"
+                                          for r in range(1, 4)])
         tamper = tampered_continuation(root, root / "A" / "run1")
-        evidence["A"], evidence["B"], evidence["C"] = a, b, c
+        evidence["K_next_select"] = k_next
         evidence["C_fifth_run"] = fifth
+        evidence["E_fourth_run"] = e_fourth
         evidence["R3_control"] = tamper
 
         # R1
+        log_a = [t for _, t in logs["A"]]
         counts = {t: log_a.count(t) for t in set(log_a)}
-        checks["R1 A: каждый task_id исполнен ровно один раз"] = (
+        checks["R1 A: каждый task_id исполнен ровно раз"] = (
             sorted(counts) == ids and set(counts.values()) == {1})
         evidence["R1"] = {"executions": len(log_a), "distinct": len(counts)}
 
         # R2
-        uploaded_b = [u for rec in b for j in rec["jobs"] for u in j["uploaded"]]
-        retry_ok, uploaded_before = True, set()
-        recomputed = []
-        for i, rec in enumerate(b):
-            label = f"B{rec['run']}"
-            ran = [t for w, t in log_b if w == label]
-            recomputed += sorted(set(ran) & uploaded_before)
-            if i:
-                failed = set(b[i - 1]["progress"]["failed_shards"])
-                shards = rec["selection"]["shards"]
-                retries = rec["selection"]["retries"]
-                if not failed <= set(retries):
-                    retry_ok = False
-                cut = [shards.index(s) for s in shards if s not in retries]
-                if cut and any(shards.index(s) > min(cut) for s in retries):
-                    retry_ok = False
-            uploaded_before |= {u for j in rec["jobs"] for u in j["uploaded"]}
-        once = (sorted(uploaded_b) == ids)
-        checks["R2 B: упавшее повторено первым, выгруженное не пересчитано, "
-               "каждый выгружен ровно один раз"] = (
-            retry_ok and not recomputed and once
-            and bool(b[0]["progress"]["failed_shards"])
-            and bool(b[1]["progress"]["failed_shards"]))
-        evidence["R2"] = {"retry_priority": retry_ok,
-                          "recomputed_after_upload": recomputed,
-                          "uploaded": len(uploaded_b),
-                          "executions": len(log_b),
-                          "failed_by_run": [rec["progress"]["failed_shards"]
-                                            for rec in b]}
+        r2 = {}
+        for name, runs_of in (("B", b), ("D", d)):
+            ok, recomputed, uploaded = _r2(runs_of, logs[name], name)
+            r2[name] = {"rule": ok, "recomputed_after_upload": recomputed,
+                        "uploaded": len(uploaded),
+                        "uploaded_once": sorted(uploaded) == ids,
+                        "executions": len(logs[name]),
+                        "failed_by_run": [x["progress"]["failed_shards"]
+                                          for x in runs_of]}
+        evidence["R2"] = r2
+        checks["R2 B и D: партия целиком и впервые, повторы — упавшее, "
+               "первыми, в пределах места; выгруженное не пересчитано"] = all(
+            v["rule"] and not v["recomputed_after_upload"]
+            and v["uploaded_once"] and any(v["failed_by_run"])
+            for v in r2.values())
 
         # R3
-        first = {"A": a[0]["manifest_sha256"], "B": b[0]["manifest_sha256"]}
+        first = {k: runs[k][0]["manifest_sha256"] for k in "ABD"}
         same = all(rec.get("plan_code") == 0
-                   and rec.get("manifest_sha256") == first[n]
-                   for n, runs in (("A", a), ("B", b)) for rec in runs)
+                   and rec.get("manifest_sha256") == first[k]
+                   for k in "ABD" for rec in runs[k])
         checks["R3 манифест продолжений побайтово равен первому; "
                "чужой отвергнут"] = (
-            same and first["A"] == first["B"] == ref["manifest_sha256"]
-            and tamper["code"] != 0
-            and "спланирована иначе" in tamper["why"])
+            same and set(first.values()) == {ref["manifest_sha256"]}
+            and tamper["code"] != 0 and "спланирована иначе" in tamper["why"])
         evidence["R3"] = {"first": first, "reference": ref["manifest_sha256"],
-                          "runs_A": [r.get("manifest_sha256") for r in a],
-                          "runs_B": [r.get("manifest_sha256") for r in b]}
+                          "runs": {k: [r.get("manifest_sha256")
+                                       for r in runs[k]] for k in "ABD"}}
 
         # R4
-        cmp_a = compare_to_reference(ref["dir"], root / "A" / f"run{len(a)}")
-        cmp_b = compare_to_reference(ref["dir"], root / "B" / f"run{len(b)}")
-        evidence["R4"] = {"A": cmp_a, "B": cmp_b}
+        cmp = {k: compare_to_reference(ref["dir"],
+                                       root / k / f"run{len(runs[k])}")
+               for k in "ABD"}
+        evidence["R4"] = cmp
 
         def r4(c):
             return (c["cells_bytes_equal"]
@@ -473,39 +557,72 @@ def _gate(checks, evidence) -> None:
                     and bool(c["reduced.json_reused_got"])
                     and c["ledger_digest"][0] == c["ledger_digest"][1]
                     and c["output_digest"][0] == c["output_digest"][1])
-        checks["R4 сведение A и B = эталон (без поля reused — побайтово)"] = (
-            a[-1].get("reduce_code") == 0 and b[-1].get("reduce_code") == 0
-            and r4(cmp_a) and r4(cmp_b))
+        checks["R4 сведение A, B, D = эталон (без поля reused — "
+               "побайтово)"] = all(
+            runs[k][-1].get("reduce_code") == 0 and r4(cmp[k]) for k in "ABD")
+
+        # N1
+        checks["N1 B: падения в пределах места закрыты номинальными "
+               "прогонами, четвёртого нет"] = (
+            len(b) == 3 and b[-1]["progress"]["status"] == "COMPLETE"
+            and sum(len(x["progress"]["failed_shards"]) for x in b[:1])
+            == MATRIX - CAP)
+
+        # N2
+        checks["N2 D: сверх места остаток перенесён, восстановительный — "
+               "только повторы"] = (
+            len(d) == 4 and d[-1]["progress"]["status"] == "COMPLETE"
+            and [x["selection"]["carried"] for x in d] == [0, 1, 1, 0]
+            and d[-1]["selection"]["nominal"] == []
+            and set(d[-1]["selection"]["shards"])
+            <= _attempted_before(d, 3))
+
+        # N3
+        n3 = True
+        for k in ("K1", "K2"):
+            first_run = runs[k][0]
+            n3 &= (len(runs[k]) == 1
+                   and first_run["progress"]["status"] == "KILL"
+                   and first_run["progress_code"] == 1
+                   and not first_run["progress"]["failed_shards"]
+                   and "не принята" in (first_run["progress"]["reason"]
+                                         or "")
+                   and k_next[k].get("select_code") == 1
+                   and "KILL" in k_next[k].get("select_why", ""))
+        checks["N3 K1 и K2: приехавшее, но не принятое — KILL, не повтор"] = n3
 
         # S1
-        s1 = (
-            [r["progress"]["status"] for r in a] == ["PARTIAL", "PARTIAL",
-                                                      "COMPLETE"]
-            and [r["progress_code"] for r in a] == [0, 0, 0]
-            and [r["progress_code"] for r in b][:2] == [1, 1]
-            and all(r["progress_code"] == 0 for r in b[2:])
-            and b[-1]["progress"]["status"] == "COMPLETE" and len(b) == 4)
-        checks["S1 PARTIAL без падений зелёный, падение красное"] = s1
+        codes = {k: [x["progress_code"] for x in runs[k]] for k in "ABD"}
+        evidence["S1"] = codes
+        checks["S1 коды итогов: PARTIAL зелёный, падение красное"] = (
+            codes == {"A": [0, 0, 0], "B": [1, 1, 0], "D": [1, 1, 0, 0]}
+            and [x["progress"]["status"] for x in a]
+            == ["PARTIAL", "PARTIAL", "COMPLETE"])
 
         # S2
-        partial = [r for r in a + b if r["progress"]["status"] != "COMPLETE"]
+        partial = [x for k in "ABD" for x in runs[k]
+                   if x["progress"]["status"] != "COMPLETE"]
         checks["S2 сведение незаконченной ступени отказывает"] = (
             bool(partial)
-            and all(r.get("partial_reduce_code", 0) != 0 for r in partial)
-            and any(r["run"] == 1 for r in partial)
-            and any(r["run"] > 1 for r in partial))
+            and all(x.get("partial_reduce_code", 0) != 0 for x in partial)
+            and any(x["run"] == 1 for x in partial)
+            and any(x["run"] > 1 for x in partial))
 
         # S3
-        checks["S3 C: STOP после восстановительного, пятый отвергнут"] = (
+        checks["S3 STOP: после восстановительного и до него; пятого нет"] = (
             len(c) == 4 and c[-1]["progress"]["status"] == "STOP"
             and c[-1]["progress_code"] == 1
             and fifth.get("select_code") == 1
-            and "STOP" in fifth.get("select_why", ""))
+            and "STOP" in fifth.get("select_why", "")
+            and len(e) == 3 and e[-1]["progress"]["status"] == "STOP"
+            and e[-1]["progress_code"] == 1
+            and e_fourth.get("select_code") == 1
+            and "STOP" in e_fourth.get("select_why", ""))
 
         # S4
-        checks["S4 ни один выбор не больше потолка"] = all(
-            len(r["selection"]["shards"]) <= CAP
-            for r in a + b + c if "selection" in r)
+        checks["S4 ни один выбор не больше матрицы"] = all(
+            len(x["selection"]["shards"]) <= MATRIX
+            for k in runs for x in runs[k] if "selection" in x)
 
 
 if __name__ == "__main__":

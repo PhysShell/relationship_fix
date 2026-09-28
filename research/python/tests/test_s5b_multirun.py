@@ -100,14 +100,51 @@ class TheSelectorTests(unittest.TestCase):
         self.assertEqual(set(sel["units"]), _ids(self.m, self.plan[0]))
         self.assertEqual(sel["retries"], [])
 
-    def test_a_failed_shard_goes_first_and_nothing_done_is_redone(self):
+    def test_a_nominal_run_takes_its_whole_batch_and_retries_on_top(self):
         failed = self.plan[0][1]
         done = _ids(self.m, set(self.plan[0]) - {failed})
-        sel = M.select(self.m, done, run=2, cap=4)
-        self.assertEqual(sel["shards"][0], failed)
+        sel = M.select(self.m, done, run=2, cap=4, matrix=6)
         self.assertEqual(sel["retries"], [failed])
-        self.assertEqual(sel["shards"][1:], list(self.plan[1][:3]))
+        self.assertEqual(sel["nominal"], list(self.plan[1]))
+        self.assertEqual(sel["shards"], [failed] + list(self.plan[1]),
+                         "повтор идёт раньше новой партии")
+        self.assertEqual(sel["carried"], 0)
         self.assertFalse(set(sel["units"]) & done)
+
+    def test_retries_beyond_the_room_are_carried_not_squeezed_in(self):
+        lost = list(self.plan[0][:3])
+        done = _ids(self.m, set(self.plan[0]) - set(lost))
+        sel = M.select(self.m, done, run=2, cap=4, matrix=6)
+        self.assertEqual(sel["retries"], lost[:2])
+        self.assertEqual(sel["carried"], 1)
+        self.assertEqual(sel["nominal"], list(self.plan[1]),
+                         "повторы урезали номинальную партию")
+        done |= _ids(self.m, set(lost[:2]) | set(self.plan[1]))
+        nxt = M.select(self.m, done, run=3, cap=4, matrix=6)
+        self.assertEqual(nxt["retries"], lost[2:])
+        self.assertEqual(nxt["nominal"], list(self.plan[2]))
+
+    def test_the_recovery_run_holds_only_retries_up_to_the_matrix(self):
+        every = {r["task_id"] for r in self.m["units"]}
+        lost = [self.plan[2][0], self.plan[0][2], self.plan[1][3]]
+        done = every - _ids(self.m, set(lost))
+        sel = M.select(self.m, done, run=M.MAX_RUNS, cap=4, matrix=6)
+        order = [s for b in self.plan for s in b]
+        self.assertEqual(sel["shards"], sorted(lost, key=order.index))
+        self.assertEqual((sel["nominal"], sel["carried"]), ([], 0))
+
+    def test_results_in_a_batch_never_launched_are_refused(self):
+        done = _ids(self.m, set(self.plan[0]) | {self.plan[1][0]})
+        with self.assertRaises(M.MultiRunRefused) as caught:
+            M.select(self.m, done, run=2, cap=4, matrix=6)
+        self.assertIn("не та, что номер прогона", str(caught.exception))
+
+    def test_the_retry_room_is_the_matrix_minus_the_batch(self):
+        with self.assertRaises(M.MultiRunRefused):
+            M.select(self.m, set(), run=1, cap=4, matrix=4)
+        with self.assertRaises(M.MultiRunRefused):
+            M.select(self.m, set(), run=1, cap=4,
+                     matrix=S.GITHUB_MATRIX_MAX_JOBS + 1)
 
     def test_only_the_missing_units_of_a_partial_shard_are_selected(self):
         shard = self.plan[0][0]
@@ -118,9 +155,9 @@ class TheSelectorTests(unittest.TestCase):
         self.assertIn(ids[-1], sel["units"])
         self.assertFalse(set(ids[:-1]) & set(sel["units"]))
 
-    def test_the_recovery_run_must_close_the_stage(self):
+    def test_the_recovery_run_must_be_able_to_close_the_stage(self):
         with self.assertRaises(M.MultiRunRefused) as caught:
-            M.select(self.m, set(), run=M.MAX_RUNS, cap=4)
+            M.select(self.m, set(), run=M.MAX_RUNS, cap=4, matrix=6)
         self.assertIn("STOP", str(caught.exception))
 
     def test_there_is_no_fifth_run(self):
@@ -134,8 +171,9 @@ class TheSelectorTests(unittest.TestCase):
 
     def test_nothing_pending_is_a_refusal_not_an_empty_run(self):
         done = {r["task_id"] for r in self.m["units"]}
-        with self.assertRaises(M.MultiRunRefused):
-            M.select(self.m, done, run=2, cap=4)
+        with self.assertRaises(M.MultiRunRefused) as caught:
+            M.select(self.m, done, run=M.MAX_RUNS, cap=4)
+        self.assertIn("остатка нет", str(caught.exception))
 
     def test_done_units_outside_the_manifest_are_refused(self):
         with self.assertRaises(M.MultiRunRefused):
@@ -180,6 +218,16 @@ class TheProgressTests(unittest.TestCase):
         sel = dict(self.sel)
         got = M.progress(self.m, sel, done, set(self.sel["units"]))
         self.assertEqual((got["status"], got["ok"]), (M.COMPLETE, True))
+
+    def test_the_last_nominal_run_that_overflows_the_recovery_is_a_stop(self):
+        every = {r["task_id"] for r in self.m["units"]}
+        left = _ids(self.m, {0, 1, 2})
+        sel = dict(self.sel, run=M.NOMINAL_RUNS, matrix=2,
+                   units=sorted(every - left))
+        got = M.progress(self.m, sel, set(), every - left)
+        self.assertEqual((got["status"], got["ok"]), (M.STOP, False))
+        got = M.progress(self.m, dict(sel, matrix=3), set(), every - left)
+        self.assertEqual((got["status"], got["ok"]), (M.PARTIAL, True))
 
     def test_the_recovery_run_that_leaves_work_is_a_stop(self):
         sel = dict(self.sel, run=M.MAX_RUNS)
@@ -246,6 +294,7 @@ class TheConstantsAreTheDecisionTests(unittest.TestCase):
     def test_three_nominal_runs_of_165_and_one_recovery(self):
         self.assertEqual((M.BATCH_CAP, M.NOMINAL_RUNS, M.RECOVERY_RUNS,
                           M.MAX_RUNS, M.MAX_PREVIOUS_RUNS), (165, 3, 1, 4, 3))
+        self.assertEqual((M.RUN_MATRIX, M.RETRY_CAP), (256, 91))
         self.assertIsNone(cost.UNDIVIDED_SHARE)
 
 
@@ -303,7 +352,8 @@ class TheRecordedGateReproducesTests(unittest.TestCase):
         recorded = json.loads((ROOT / "docs/research/s5b-multirun-gate.json")
                               .read_text())
         self.assertEqual(recorded["verdict"], "PASS")
-        checks, evidence = {}, {"look": G.LOOK, "cap": G.CAP}
+        checks, evidence = {}, {"look": G.LOOK, "cap": G.CAP,
+                                "matrix": G.MATRIX}
         G._gate(checks, evidence)
         self.assertEqual(checks, recorded["checks"])
         for key in evidence:
@@ -475,3 +525,28 @@ class TheCheckpointBranchChainTests(unittest.TestCase):
                 .hexdigest(),
                 hashlib.sha256((d / "plan/manifest.json").read_bytes())
                 .hexdigest())
+
+
+class AViolationIsAKillReportTests(unittest.TestCase):
+    """Нарушение итога — не трассировка, а KILL с причиной и кодом 1."""
+
+    def test_an_unselected_part_in_the_run_is_a_kill(self):
+        with tempfile.TemporaryDirectory() as tmp, _stubbed():
+            tmp = pathlib.Path(tmp)
+            _ok(["plan", "--look", "4000", "--multirun", "--out", "plan"], tmp)
+            _ok(["select", "--look", "4000", "--manifest", "plan/manifest.json",
+                 "--run", "1", "--batch-cap", "4", "--run-matrix", "6",
+                 "--out", "batch"], tmp)
+            sel = json.loads((tmp / "batch/batch.json").read_text())
+            other = [s for s in range(11)
+                     if s not in sel["selection"]["shards"]][0]
+            _ok(["run", "--look", "4000", "--manifest", "plan/manifest.json",
+                 "--shard", str(other), "--out", "out"], tmp)
+            shutil.copy(tmp / "plan/manifest.json", tmp / "out/manifest.json")
+            code, _, _ = G.call(["progress", "--look", "4000", "--parts", "out",
+                                 "--batch", "batch/batch.json", "--out", "r"],
+                                tmp)
+            report = json.loads((tmp / "r/progress.json").read_text())
+        self.assertEqual(code, 1)
+        self.assertEqual((report["status"], report["ok"]), (M.KILL, False))
+        self.assertIn("невыбранные", report["reason"])

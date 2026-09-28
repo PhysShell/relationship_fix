@@ -10,9 +10,10 @@
 
     plan --multirun [--resume D]       ОДИН полный манифест; продолжение
                                        обязано спланировать тот же
-    select --run R [--resume D]        задания этого прогона, <= потолка
+    select --run R [--resume D]        партия прогона целиком и повторы
+                                       сверх неё, до потолка матрицы
     progress --parts D --batch F       итог прогона: PARTIAL / COMPLETE /
-                                       STOP; наука не сводится
+                                       STOP / KILL; наука не сводится
 
 `reduce` — не «слияние ради полноты». Он строит реестр по ВОСХОДЯЩИМ
 ступеням и отдаёт каждый конец на его собственном `tau`.
@@ -34,7 +35,7 @@ from simulation import s5b_shard as S
 
 from . import (calibrate, cost, guard, multirun, provenance, reduction,
                resume, scheduler)
-from .identity import NOT_PART_FILES, load_unit_payloads
+from .identity import NOT_PART_FILES, ArtifactRefused, load_unit_payloads
 from .ledger import Ledger
 
 LOOKS = tuple(P.LOOKS) if hasattr(P, "LOOKS") else None
@@ -271,34 +272,66 @@ def _plan_multirun(args, out, checks, ledger, inputs) -> int:
     return 0
 
 
+class _Killed(Exception):
+    """Научный вход не принят: KILL, а не повтор.
+
+    Повтор положен только заданию, чей результат отсутствует или неполон,
+    потому что оно упало. Часть, которая приехала, но не проходит приёмку
+    (отпечаток, identity, наука, манифест), — не упавшее задание, а
+    испорченный вход: пересчитать его значило бы спрятать порчу.
+    """
+
+
+#: Чем отказывает приёмка части. ValueError — и непарсящийся JSON.
+_REFUSALS = (resume.ResumeRefused, ArtifactRefused, ValueError)
+
+
 def _chain_done(args, manifest: dict) -> set[str]:
     """Выполненные юниты цепочки. Манифест цепочки — тот же, что у прогона."""
     science = os.environ.get("SCIENCE_SHA", "")
     was = (manifest.get("provenance") or {}).get("science_sha", "")
     if was != science:
-        raise SystemExit(
+        raise _Killed(
             f"манифест ступени под SCIENCE_SHA {was!r}, прогон под "
             f"{science!r} — это разные вычисления")
     if not args.resume:
         return set()
     chain = resume.load_manifest(args.resume)
     if multirun.body(chain) != multirun.body(manifest):
-        raise SystemExit(
+        raise _Killed(
             f"{args.resume}: манифест цепочки не тот, что у этого прогона")
-    return set(resume.completed(args.resume, look=args.look,
-                                science_sha=science))
+    return _accepted(pathlib.Path(args.resume), args.look,
+                     "часть прошлого прогона")
+
+
+def _accepted(parts, look: int, whose: str) -> set[str]:
+    """Принятые части каталога. Ни одной — пусто: прогон, где упало всё,
+    законен и значит «выполнено ничего». Не принята — KILL."""
+    names = [p for p in parts.glob("*.json") if p.name not in NOT_PART_FILES]
+    if not names:
+        return set()
+    try:
+        return set(resume.completed(
+            parts, look=look, science_sha=os.environ.get("SCIENCE_SHA", "")))
+    except _REFUSALS as exc:
+        raise _Killed(f"{whose} не принята: {exc}")
 
 
 def _select(args, out) -> int:
-    """Задания этого прогона: не больше потолка, упавшее раньше — первым."""
+    """Задания этого прогона: его партия целиком и повторы сверх неё."""
     manifest = json.loads(pathlib.Path(args.manifest).read_text())
     if manifest["look"] != args.look:
         raise SystemExit(f"манифест на ступень {manifest['look']}, "
                          f"запрошена {args.look}")
-    done = _chain_done(args, manifest)
     try:
-        selection = multirun.select(manifest, done, run=args.run,
-                                    cap=args.batch_cap or multirun.BATCH_CAP)
+        done = _chain_done(args, manifest)
+    except _Killed as exc:
+        raise SystemExit(f"KILL: {exc}")
+    try:
+        selection = multirun.select(
+            manifest, done, run=args.run,
+            cap=args.batch_cap or multirun.BATCH_CAP,
+            matrix=args.run_matrix or multirun.RUN_MATRIX)
         batch = multirun.batch_manifest(manifest, selection)
     except multirun.MultiRunRefused as exc:
         raise SystemExit(f"ВЫБОР НЕ СДЕЛАН: {exc}")
@@ -309,8 +342,8 @@ def _select(args, out) -> int:
     print(json.dumps({"shards": selection["shards"], "run": selection["run"],
                       "units": len(selection["units"]),
                       "retries": selection["retries"],
-                      "pending_shards_before":
-                          selection["pending_shards_before"]},
+                      "nominal": len(selection["nominal"]),
+                      "carried": selection["carried"]},
                      sort_keys=True))
     return 0
 
@@ -319,7 +352,8 @@ def _progress(args, out) -> int:
     """Итог прогона. Наука не сводится: только сделано, упало, осталось.
 
     Незаконченная ступень — PARTIAL и зелёный прогон. Красный — упавшее
-    выбранное задание или STOP: восстановительный прогон не закрыл ступень.
+    выбранное задание, STOP (восстановительный прогон ступень не закроет
+    или не закрыл) и KILL (научный вход не принят).
     """
     if not args.parts or not args.batch:
         raise SystemExit("итогу прогона нужны --parts и --batch")
@@ -328,26 +362,23 @@ def _progress(args, out) -> int:
     if manifest["look"] != args.look:
         raise SystemExit(f"манифест на ступень {manifest['look']}, "
                          f"запрошена {args.look}")
-    batch = json.loads(pathlib.Path(args.batch).read_text())
-    done = _chain_done(args, manifest)
-    names = [p for p in parts.glob("*.json")
-             if p.name not in NOT_PART_FILES]
-    arrived = set(resume.completed(
-        parts, look=args.look,
-        science_sha=os.environ.get("SCIENCE_SHA", ""))) if names else set()
+    selection = json.loads(pathlib.Path(args.batch).read_text())["selection"]
     try:
-        report = multirun.progress(manifest, batch["selection"], done, arrived)
-    except multirun.MultiRunRefused as exc:
-        raise SystemExit(f"ИТОГ ПРОГОНА НЕ ПРИНЯТ: {exc}")
+        done = _chain_done(args, manifest)
+        arrived = _accepted(parts, args.look, "часть этого прогона")
+        report = multirun.progress(manifest, selection, done, arrived)
+    except (_Killed, multirun.MultiRunRefused) as exc:
+        report = multirun.killed(str(exc), selection["run"])
+        report["manifest_digest"] = multirun.body_digest(manifest)
     report["provenance"] = provenance.collect(
         inputs={}, manifest_digest=report["manifest_digest"])
     out.mkdir(parents=True, exist_ok=True)
     (out / "progress.json").write_text(
         json.dumps(report, sort_keys=True, ensure_ascii=False))
-    print(json.dumps({k: report[k] for k in
-                      ("run", "status", "ok", "selected_units",
+    print(json.dumps({k: report.get(k) for k in
+                      ("run", "status", "ok", "reason", "selected_units",
                        "arrived_units", "failed_shards", "done_units",
-                       "remaining_units")}, sort_keys=True))
+                       "remaining_units")}, sort_keys=True, ensure_ascii=False))
     return 0 if report["ok"] else 1
 
 
@@ -406,8 +437,11 @@ def main(argv=None) -> int:
     parser.add_argument("--run", type=int, default=0,
                         help="select: номер прогона ступени, 1 + число прошлых")
     parser.add_argument("--batch-cap", type=int, default=0,
-                        help="select: потолок заданий прогона; по умолчанию "
+                        help="select: номинальная партия; по умолчанию "
                              "multirun.BATCH_CAP")
+    parser.add_argument("--run-matrix", type=int, default=0,
+                        help="select: потолок матрицы прогона; по умолчанию "
+                             "multirun.RUN_MATRIX")
     parser.add_argument("--batch", default="",
                         help="progress: файл выбора этого прогона")
     args = parser.parse_args(argv)

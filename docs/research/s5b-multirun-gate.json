@@ -98,6 +98,7 @@
     "failed_shards": [],
     "failed_units": [],
     "ok": true,
+    "reason": null,
     "remaining_shards": [
      0,
      2,
@@ -134,6 +135,13 @@
       0,
       4
      ]
+    ],
+    "carried": 0,
+    "nominal": [
+     3,
+     8,
+     1,
+     5
     ],
     "pending_shards_before": 11,
     "retries": [],
@@ -244,6 +252,7 @@
     "failed_shards": [],
     "failed_units": [],
     "ok": true,
+    "reason": null,
     "remaining_shards": [
      0,
      4,
@@ -276,6 +285,13 @@
       0,
       4
      ]
+    ],
+    "carried": 0,
+    "nominal": [
+     7,
+     9,
+     2,
+     10
     ],
     "pending_shards_before": 7,
     "retries": [],
@@ -362,6 +378,7 @@
     "failed_shards": [],
     "failed_units": [],
     "ok": true,
+    "reason": null,
     "remaining_shards": [],
     "remaining_units": 0,
     "status": "COMPLETE"
@@ -393,6 +410,12 @@
       4
      ]
     ],
+    "carried": 0,
+    "nominal": [
+     6,
+     0,
+     4
+    ],
     "pending_shards_before": 3,
     "retries": [],
     "shards": [
@@ -414,7 +437,7 @@
      "why": "Crash: 209d5c8dbe624f2d"
     },
     {
-     "code": 0,
+     "code": 1,
      "shard": 8,
      "uploaded": [
       "0d38d6a30d53c5b7",
@@ -430,10 +453,9 @@
       "aa4a7ed1e261e06b",
       "c02396bf4f82fda0",
       "cf7e15a2904059f1",
-      "d925eabdeb276b8f",
-      "f14958b24cc034ed"
+      "d925eabdeb276b8f"
      ],
-     "why": ""
+     "why": "Crash: f14958b24cc034ed"
     },
     {
      "code": 0,
@@ -484,9 +506,10 @@
    "plan_code": 0,
    "plan_why": "",
    "progress": {
-    "arrived_units": 43,
+    "arrived_units": 42,
     "failed_shards": [
-     3
+     3,
+     8
     ],
     "failed_units": [
      "209d5c8dbe624f2d",
@@ -502,9 +525,11 @@
      "c06532d7e3657861",
      "cb575840f7075280",
      "dab01f3217a8ed08",
-     "e8f2656654cae3db"
+     "e8f2656654cae3db",
+     "f14958b24cc034ed"
     ],
     "ok": false,
+    "reason": null,
     "remaining_shards": [
      0,
      2,
@@ -512,10 +537,11 @@
      4,
      6,
      7,
+     8,
      9,
      10
     ],
-    "remaining_units": 113,
+    "remaining_units": 114,
     "status": "PARTIAL"
    },
    "progress_code": 1,
@@ -542,6 +568,13 @@
       0,
       4
      ]
+    ],
+    "carried": 0,
+    "nominal": [
+     3,
+     8,
+     1,
+     5
     ],
     "pending_shards_before": 11,
     "retries": [],
@@ -578,25 +611,18 @@
      "why": ""
     },
     {
+     "code": 0,
+     "shard": 8,
+     "uploaded": [
+      "f14958b24cc034ed"
+     ],
+     "why": ""
+    },
+    {
      "code": 1,
      "shard": 7,
-     "uploaded": [
-      "14e07bb00af5b01b",
-      "2b9a98e5a7294d09",
-      "2eadb0ea4333d0db",
-      "3630c5d822a872f6",
-      "42bff917c3263b63",
-      "49427d254e0e79a2",
-      "685fb93dd45a0115",
-      "751e7df4ff3ff261",
-      "8c0af8e6c82d0bd0",
-      "9974f2c67fa90b45",
-      "b1582b897cfe1024",
-      "b61410d491c49e86",
-      "cbc2e418306ec911",
-      "e6eca7626b3898d2"
-     ],
-     "why": "Crash: ee9a6c8947ead704"
+     "uploaded": [],
+     "why": "Crash: 14e07bb00af5b01b"
     },
     {
      "code": 0,
@@ -639,28 +665,63 @@
       "f91770515abe1987"
      ],
      "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 10,
+     "uploaded": [
+      "0e618fbc366ca7f4",
+      "27175963554bf575",
+      "35f7f9700fbe3064",
+      "421054f0cbcdd417",
+      "4a38db25aab85cb1",
+      "680073b3c04c713d",
+      "9403d0c2972183c4",
+      "9d3b75bafdf71a1b",
+      "a4650bb90d296f2e",
+      "afa02141b500aecf",
+      "bac42f4beac8ea9e",
+      "ed42608a7ff04046",
+      "f82498da1faf2dec",
+      "fcdab3caab608f20"
+     ],
+     "why": ""
     }
    ],
    "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
    "partial_reduce_code": 1,
-   "partial_reduce_why": "out: приехавшие руки не совпали с запланированными; нет ['r1.5:c1.0:R0:m1.0', 'r1.5:c1.0:R1:m2.0', 'r1.5:c1.0:R2:m1.0'], лишние []",
+   "partial_reduce_why": "out: приехавшие руки не совпали с запланированными; нет ['r1.5:c1.0:R1:m2.0', 'r1.5:c1.0:R2:m1.0', 'r1.5:c1.0:R2:m2.0'], лишние []",
    "plan_code": 0,
    "plan_why": "",
    "progress": {
-    "arrived_units": 56,
+    "arrived_units": 57,
     "failed_shards": [
      7
     ],
     "failed_units": [
+     "14e07bb00af5b01b",
+     "2b9a98e5a7294d09",
+     "2eadb0ea4333d0db",
+     "3630c5d822a872f6",
+     "42bff917c3263b63",
+     "49427d254e0e79a2",
+     "685fb93dd45a0115",
+     "751e7df4ff3ff261",
+     "8c0af8e6c82d0bd0",
+     "9974f2c67fa90b45",
+     "b1582b897cfe1024",
+     "b61410d491c49e86",
+     "cbc2e418306ec911",
+     "e6eca7626b3898d2",
      "ee9a6c8947ead704"
     ],
     "ok": false,
+    "reason": null,
     "remaining_shards": [
      0,
      4,
      6,
-     7,
-     10
+     7
     ],
     "remaining_units": 57,
     "status": "PARTIAL"
@@ -690,17 +751,27 @@
       4
      ]
     ],
-    "pending_shards_before": 8,
+    "carried": 0,
+    "nominal": [
+     7,
+     9,
+     2,
+     10
+    ],
+    "pending_shards_before": 9,
     "retries": [
-     3
+     3,
+     8
     ],
     "shards": [
      3,
+     8,
      7,
      9,
-     2
+     2,
+     10
     ],
-    "units": 57
+    "units": 72
    }
   },
   {
@@ -709,28 +780,21 @@
      "code": 0,
      "shard": 7,
      "uploaded": [
+      "14e07bb00af5b01b",
+      "2b9a98e5a7294d09",
+      "2eadb0ea4333d0db",
+      "3630c5d822a872f6",
+      "42bff917c3263b63",
+      "49427d254e0e79a2",
+      "685fb93dd45a0115",
+      "751e7df4ff3ff261",
+      "8c0af8e6c82d0bd0",
+      "9974f2c67fa90b45",
+      "b1582b897cfe1024",
+      "b61410d491c49e86",
+      "cbc2e418306ec911",
+      "e6eca7626b3898d2",
       "ee9a6c8947ead704"
-     ],
-     "why": ""
-    },
-    {
-     "code": 0,
-     "shard": 10,
-     "uploaded": [
-      "0e618fbc366ca7f4",
-      "27175963554bf575",
-      "35f7f9700fbe3064",
-      "421054f0cbcdd417",
-      "4a38db25aab85cb1",
-      "680073b3c04c713d",
-      "9403d0c2972183c4",
-      "9d3b75bafdf71a1b",
-      "a4650bb90d296f2e",
-      "afa02141b500aecf",
-      "bac42f4beac8ea9e",
-      "ed42608a7ff04046",
-      "f82498da1faf2dec",
-      "fcdab3caab608f20"
      ],
      "why": ""
     },
@@ -775,65 +839,7 @@
       "ffde0d7ef752ded1"
      ],
      "why": ""
-    }
-   ],
-   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
-   "partial_reduce_code": 1,
-   "partial_reduce_why": "out: приехавшие руки не совпали с запланированными; нет ['r1.5:c1.0:R1:m2.0', 'r1.5:c1.0:R2:m1.0', 'r1.5:c1.1:R1:m1.0'], лишние []",
-   "plan_code": 0,
-   "plan_why": "",
-   "progress": {
-    "arrived_units": 43,
-    "failed_shards": [],
-    "failed_units": [],
-    "ok": true,
-    "remaining_shards": [
-     4
-    ],
-    "remaining_units": 14,
-    "status": "PARTIAL"
-   },
-   "progress_code": 0,
-   "progress_why": "",
-   "run": 3,
-   "select_code": 0,
-   "select_why": "",
-   "selection": {
-    "batches": [
-     [
-      3,
-      8,
-      1,
-      5
-     ],
-     [
-      7,
-      9,
-      2,
-      10
-     ],
-     [
-      6,
-      0,
-      4
-     ]
-    ],
-    "pending_shards_before": 5,
-    "retries": [
-     7,
-     10
-    ],
-    "shards": [
-     7,
-     10,
-     6,
-     0
-    ],
-    "units": 43
-   }
-  },
-  {
-   "jobs": [
+    },
     {
      "code": 0,
      "shard": 4,
@@ -860,10 +866,11 @@
    "plan_code": 0,
    "plan_why": "",
    "progress": {
-    "arrived_units": 14,
+    "arrived_units": 57,
     "failed_shards": [],
     "failed_units": [],
     "ok": true,
+    "reason": null,
     "remaining_shards": [],
     "remaining_units": 0,
     "status": "COMPLETE"
@@ -872,7 +879,7 @@
    "progress_why": "",
    "reduce_code": 0,
    "reduce_why": "",
-   "run": 4,
+   "run": 3,
    "select_code": 0,
    "select_why": "",
    "selection": {
@@ -895,14 +902,23 @@
       4
      ]
     ],
-    "pending_shards_before": 1,
-    "retries": [
+    "carried": 0,
+    "nominal": [
+     6,
+     0,
      4
+    ],
+    "pending_shards_before": 4,
+    "retries": [
+     7
     ],
     "shards": [
+     7,
+     6,
+     0,
      4
     ],
-    "units": 14
+    "units": 57
    }
   }
  ],
@@ -1005,6 +1021,7 @@
     "failed_shards": [],
     "failed_units": [],
     "ok": true,
+    "reason": null,
     "remaining_shards": [
      0,
      2,
@@ -1041,6 +1058,13 @@
       0,
       4
      ]
+    ],
+    "carried": 0,
+    "nominal": [
+     3,
+     8,
+     1,
+     5
     ],
     "pending_shards_before": 11,
     "retries": [],
@@ -1151,6 +1175,7 @@
     "failed_shards": [],
     "failed_units": [],
     "ok": true,
+    "reason": null,
     "remaining_shards": [
      0,
      4,
@@ -1183,6 +1208,13 @@
       0,
       4
      ]
+    ],
+    "carried": 0,
+    "nominal": [
+     7,
+     9,
+     2,
+     10
     ],
     "pending_shards_before": 7,
     "retries": [],
@@ -1273,6 +1305,7 @@
      "ffde0d7ef752ded1"
     ],
     "ok": false,
+    "reason": null,
     "remaining_shards": [
      0
     ],
@@ -1303,6 +1336,12 @@
       0,
       4
      ]
+    ],
+    "carried": 0,
+    "nominal": [
+     6,
+     0,
+     4
     ],
     "pending_shards_before": 3,
     "retries": [],
@@ -1350,6 +1389,7 @@
      "ffde0d7ef752ded1"
     ],
     "ok": false,
+    "reason": null,
     "remaining_shards": [
      0
     ],
@@ -1381,6 +1421,8 @@
       4
      ]
     ],
+    "carried": 0,
+    "nominal": [],
     "pending_shards_before": 1,
     "retries": [
      0
@@ -1400,43 +1442,1562 @@
   "select_code": 1,
   "select_why": "ВЫБОР НЕ СДЕЛАН: STOP: прогон 5 — допустимы 1..4 (3 номинальных и 1 восстановительный)"
  },
+ "D": [
+  {
+   "jobs": [
+    {
+     "code": 1,
+     "shard": 3,
+     "uploaded": [],
+     "why": "Crash: 209d5c8dbe624f2d"
+    },
+    {
+     "code": 1,
+     "shard": 8,
+     "uploaded": [],
+     "why": "Crash: 0d38d6a30d53c5b7"
+    },
+    {
+     "code": 1,
+     "shard": 1,
+     "uploaded": [],
+     "why": "Crash: 0441a0096a36a4c7"
+    },
+    {
+     "code": 0,
+     "shard": 5,
+     "uploaded": [
+      "3b4882b8cf015785",
+      "3fb21ce9f551b706",
+      "85214692c8dc2f2a",
+      "8c4f40f4d800a82e",
+      "99cffd821105bba6",
+      "bb8d9dad4162789c",
+      "c2ec717f079fa591",
+      "d7f8457131077594",
+      "d93a6012fa120667",
+      "e2ab5f61dcd4cd81",
+      "eff3c69e856646cd",
+      "f1c556da57fb8773",
+      "fb0460877c614309"
+     ],
+     "why": ""
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "partial_reduce_code": 1,
+   "partial_reduce_why": "out: приехавшие руки не совпали с запланированными; нет ['r1.5:c1.0:R0:m1.0', 'r1.5:c1.0:R1:m0.5', 'r1.5:c1.0:R1:m1.0'], лишние []",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": 13,
+    "failed_shards": [
+     1,
+     3,
+     8
+    ],
+    "failed_units": [
+     "0441a0096a36a4c7",
+     "0d38d6a30d53c5b7",
+     "1012217e196d843e",
+     "209d5c8dbe624f2d",
+     "243b78087164e70d",
+     "266f46ec36559e78",
+     "27670a264c8482b7",
+     "2b94d6254eac999c",
+     "2ca4102f9c760bd7",
+     "32ea7c9886c45dc9",
+     "3498c3006c7ee973",
+     "34d503b7f0fb0464",
+     "36db81bc73e4730f",
+     "42cf97205c85db72",
+     "447e7fd2e6bc98bb",
+     "455cd542ec3e4b5b",
+     "478f78449b1601f8",
+     "4a15e0b373535aa0",
+     "4c1a4b96138f447d",
+     "4c870bcf9163f9dd",
+     "600446cc7e823a79",
+     "6133dc6b46f70cf3",
+     "6a8b0998dd0a2030",
+     "6e8601c61a58b836",
+     "7506b43db9474982",
+     "8a7321ee09a592d2",
+     "8ce56cdbe9885976",
+     "99c116ccbd8b9b85",
+     "9e0560f60b4e3d4e",
+     "aa4a7ed1e261e06b",
+     "ad019ebb9e837a72",
+     "bc0599f4f3a9c4ae",
+     "c02396bf4f82fda0",
+     "c06532d7e3657861",
+     "c95891659335b7ef",
+     "cb575840f7075280",
+     "ce1c0c376e30fe7d",
+     "cf7e15a2904059f1",
+     "d90171d17eed50e4",
+     "d925eabdeb276b8f",
+     "dab01f3217a8ed08",
+     "e8f2656654cae3db",
+     "eeb403ddb25147f3",
+     "f14958b24cc034ed"
+    ],
+    "ok": false,
+    "reason": null,
+    "remaining_shards": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "remaining_units": 143,
+    "status": "PARTIAL"
+   },
+   "progress_code": 1,
+   "progress_why": "",
+   "run": 1,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 0,
+    "nominal": [
+     3,
+     8,
+     1,
+     5
+    ],
+    "pending_shards_before": 11,
+    "retries": [],
+    "shards": [
+     3,
+     8,
+     1,
+     5
+    ],
+    "units": 57
+   }
+  },
+  {
+   "jobs": [
+    {
+     "code": 0,
+     "shard": 3,
+     "uploaded": [
+      "209d5c8dbe624f2d",
+      "266f46ec36559e78",
+      "27670a264c8482b7",
+      "2b94d6254eac999c",
+      "2ca4102f9c760bd7",
+      "455cd542ec3e4b5b",
+      "4c870bcf9163f9dd",
+      "6133dc6b46f70cf3",
+      "9e0560f60b4e3d4e",
+      "bc0599f4f3a9c4ae",
+      "c06532d7e3657861",
+      "cb575840f7075280",
+      "dab01f3217a8ed08",
+      "e8f2656654cae3db"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 8,
+     "uploaded": [
+      "0d38d6a30d53c5b7",
+      "243b78087164e70d",
+      "3498c3006c7ee973",
+      "34d503b7f0fb0464",
+      "447e7fd2e6bc98bb",
+      "4a15e0b373535aa0",
+      "7506b43db9474982",
+      "8a7321ee09a592d2",
+      "8ce56cdbe9885976",
+      "99c116ccbd8b9b85",
+      "aa4a7ed1e261e06b",
+      "c02396bf4f82fda0",
+      "cf7e15a2904059f1",
+      "d925eabdeb276b8f",
+      "f14958b24cc034ed"
+     ],
+     "why": ""
+    },
+    {
+     "code": 1,
+     "shard": 7,
+     "uploaded": [],
+     "why": "Crash: 14e07bb00af5b01b"
+    },
+    {
+     "code": 1,
+     "shard": 9,
+     "uploaded": [],
+     "why": "Crash: 0ca983d83734f0a1"
+    },
+    {
+     "code": 0,
+     "shard": 2,
+     "uploaded": [
+      "0ab1bf635522c4a0",
+      "1e0f11345f0491db",
+      "24e105d519769814",
+      "359734f13ba7d514",
+      "67745de792fb31ca",
+      "727667cc579c316a",
+      "75039dfafac8d9e5",
+      "7b8a69a6a1ace0d4",
+      "7fc674356854416e",
+      "ac7f547bbb090138",
+      "c874c35c37a53581",
+      "e17a1c2a6ad73d46",
+      "f91770515abe1987"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 10,
+     "uploaded": [
+      "0e618fbc366ca7f4",
+      "27175963554bf575",
+      "35f7f9700fbe3064",
+      "421054f0cbcdd417",
+      "4a38db25aab85cb1",
+      "680073b3c04c713d",
+      "9403d0c2972183c4",
+      "9d3b75bafdf71a1b",
+      "a4650bb90d296f2e",
+      "afa02141b500aecf",
+      "bac42f4beac8ea9e",
+      "ed42608a7ff04046",
+      "f82498da1faf2dec",
+      "fcdab3caab608f20"
+     ],
+     "why": ""
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "partial_reduce_code": 1,
+   "partial_reduce_why": "out: приехавшие руки не совпали с запланированными; нет ['r1.5:c1.0:R1:m0.5', 'r1.5:c1.0:R1:m2.0', 'r1.5:c1.0:R2:m1.0'], лишние []",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": 56,
+    "failed_shards": [
+     7,
+     9
+    ],
+    "failed_units": [
+     "0ca983d83734f0a1",
+     "10e4d4d39ad6e6e4",
+     "13549990c906d944",
+     "14e07bb00af5b01b",
+     "28db0408c3f96712",
+     "2b9a98e5a7294d09",
+     "2eadb0ea4333d0db",
+     "3630c5d822a872f6",
+     "42bff917c3263b63",
+     "4787bb7fd8fba714",
+     "49427d254e0e79a2",
+     "54542a333ea3a4a2",
+     "685fb93dd45a0115",
+     "71cb424bc290dec4",
+     "751e7df4ff3ff261",
+     "7d383ec92269b2b1",
+     "8763b86125bfa55e",
+     "8c0af8e6c82d0bd0",
+     "8ccf4a3a089c71c1",
+     "9974f2c67fa90b45",
+     "afc0fc0cf78ac351",
+     "b1582b897cfe1024",
+     "b22b0e1663a88189",
+     "b61410d491c49e86",
+     "cbc2e418306ec911",
+     "cc11aea689fd5e6b",
+     "dc93a9ba9576596c",
+     "e2ff86bb2bfa5eb3",
+     "e6eca7626b3898d2",
+     "ee9a6c8947ead704"
+    ],
+    "ok": false,
+    "reason": null,
+    "remaining_shards": [
+     0,
+     1,
+     4,
+     6,
+     7,
+     9
+    ],
+    "remaining_units": 87,
+    "status": "PARTIAL"
+   },
+   "progress_code": 1,
+   "progress_why": "",
+   "run": 2,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 1,
+    "nominal": [
+     7,
+     9,
+     2,
+     10
+    ],
+    "pending_shards_before": 10,
+    "retries": [
+     3,
+     8
+    ],
+    "shards": [
+     3,
+     8,
+     7,
+     9,
+     2,
+     10
+    ],
+    "units": 86
+   }
+  },
+  {
+   "jobs": [
+    {
+     "code": 0,
+     "shard": 1,
+     "uploaded": [
+      "0441a0096a36a4c7",
+      "1012217e196d843e",
+      "32ea7c9886c45dc9",
+      "36db81bc73e4730f",
+      "42cf97205c85db72",
+      "478f78449b1601f8",
+      "4c1a4b96138f447d",
+      "600446cc7e823a79",
+      "6a8b0998dd0a2030",
+      "6e8601c61a58b836",
+      "ad019ebb9e837a72",
+      "c95891659335b7ef",
+      "ce1c0c376e30fe7d",
+      "d90171d17eed50e4",
+      "eeb403ddb25147f3"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 7,
+     "uploaded": [
+      "14e07bb00af5b01b",
+      "2b9a98e5a7294d09",
+      "2eadb0ea4333d0db",
+      "3630c5d822a872f6",
+      "42bff917c3263b63",
+      "49427d254e0e79a2",
+      "685fb93dd45a0115",
+      "751e7df4ff3ff261",
+      "8c0af8e6c82d0bd0",
+      "9974f2c67fa90b45",
+      "b1582b897cfe1024",
+      "b61410d491c49e86",
+      "cbc2e418306ec911",
+      "e6eca7626b3898d2",
+      "ee9a6c8947ead704"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 6,
+     "uploaded": [
+      "11bc20d806b32f04",
+      "128c38f7df99d712",
+      "1727edfe012769e0",
+      "5c26ff5714981e06",
+      "72ef218ddf7494a7",
+      "795b54f391ddb4cc",
+      "7e4c2581375c133a",
+      "9bd9deae111a1f88",
+      "9c2ef3f84a3f319a",
+      "b79aeb7bda2d51a6",
+      "b8d40b0f3a8fdfc9",
+      "c2df6454fb68e65c",
+      "cb1244d05790e2a4",
+      "ecb5de328ed9b423"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 0,
+     "uploaded": [
+      "032c9ec7ce7953ef",
+      "04a0a8f5347f8cf5",
+      "1128412bb2cbfce2",
+      "1adad3628b14e180",
+      "3502f2b093842588",
+      "6da56585c95034b2",
+      "6f4f2eae0dd0dcd3",
+      "7cdb32586e5b5955",
+      "820f02837086f275",
+      "c0dfb7c2088d1668",
+      "ccd9c7f1ecc0d250",
+      "eaa4f31c22324a51",
+      "eddf9d7bea9e316a",
+      "ffde0d7ef752ded1"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 4,
+     "uploaded": [
+      "06b35e271310894b",
+      "19dc634000d00afe",
+      "2979cf3ba4c26eb3",
+      "324daefea8009262",
+      "32998dbb1eb3c562",
+      "7665a75096edbd58",
+      "8036b6cb706813db",
+      "8734faeaf5291cfd",
+      "8a8a2b23f06cbd26",
+      "ad5b4c14c16fbb20",
+      "bb69119cd11f00a4",
+      "c232ed68ab3080ab",
+      "dc62faf5c871eee7",
+      "fda197128606c5e1"
+     ],
+     "why": ""
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "partial_reduce_code": 1,
+   "partial_reduce_why": "out: приехавшие руки не совпали с запланированными; нет ['r1.5:c1.0:R1:m0.5', 'r1.5:c1.1:R4:m0.5', 'r1.5:c1.25:R3:m2.0'], лишние []",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": 72,
+    "failed_shards": [],
+    "failed_units": [],
+    "ok": true,
+    "reason": null,
+    "remaining_shards": [
+     9
+    ],
+    "remaining_units": 15,
+    "status": "PARTIAL"
+   },
+   "progress_code": 0,
+   "progress_why": "",
+   "run": 3,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 1,
+    "nominal": [
+     6,
+     0,
+     4
+    ],
+    "pending_shards_before": 6,
+    "retries": [
+     1,
+     7
+    ],
+    "shards": [
+     1,
+     7,
+     6,
+     0,
+     4
+    ],
+    "units": 72
+   }
+  },
+  {
+   "jobs": [
+    {
+     "code": 0,
+     "shard": 9,
+     "uploaded": [
+      "0ca983d83734f0a1",
+      "10e4d4d39ad6e6e4",
+      "13549990c906d944",
+      "28db0408c3f96712",
+      "4787bb7fd8fba714",
+      "54542a333ea3a4a2",
+      "71cb424bc290dec4",
+      "7d383ec92269b2b1",
+      "8763b86125bfa55e",
+      "8ccf4a3a089c71c1",
+      "afc0fc0cf78ac351",
+      "b22b0e1663a88189",
+      "cc11aea689fd5e6b",
+      "dc93a9ba9576596c",
+      "e2ff86bb2bfa5eb3"
+     ],
+     "why": ""
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": 15,
+    "failed_shards": [],
+    "failed_units": [],
+    "ok": true,
+    "reason": null,
+    "remaining_shards": [],
+    "remaining_units": 0,
+    "status": "COMPLETE"
+   },
+   "progress_code": 0,
+   "progress_why": "",
+   "reduce_code": 0,
+   "reduce_why": "",
+   "run": 4,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 0,
+    "nominal": [],
+    "pending_shards_before": 1,
+    "retries": [
+     9
+    ],
+    "shards": [
+     9
+    ],
+    "units": 15
+   }
+  }
+ ],
+ "E": [
+  {
+   "jobs": [
+    {
+     "code": 1,
+     "shard": 3,
+     "uploaded": [],
+     "why": "Crash: 209d5c8dbe624f2d"
+    },
+    {
+     "code": 1,
+     "shard": 8,
+     "uploaded": [],
+     "why": "Crash: 0d38d6a30d53c5b7"
+    },
+    {
+     "code": 1,
+     "shard": 1,
+     "uploaded": [],
+     "why": "Crash: 0441a0096a36a4c7"
+    },
+    {
+     "code": 1,
+     "shard": 5,
+     "uploaded": [],
+     "why": "Crash: 3b4882b8cf015785"
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "partial_reduce_code": 1,
+   "partial_reduce_why": "ArtifactRefused: out: part-файлов нет вовсе",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": 0,
+    "failed_shards": [
+     1,
+     3,
+     5,
+     8
+    ],
+    "failed_units": [
+     "0441a0096a36a4c7",
+     "0d38d6a30d53c5b7",
+     "1012217e196d843e",
+     "209d5c8dbe624f2d",
+     "243b78087164e70d",
+     "266f46ec36559e78",
+     "27670a264c8482b7",
+     "2b94d6254eac999c",
+     "2ca4102f9c760bd7",
+     "32ea7c9886c45dc9",
+     "3498c3006c7ee973",
+     "34d503b7f0fb0464",
+     "36db81bc73e4730f",
+     "3b4882b8cf015785",
+     "3fb21ce9f551b706",
+     "42cf97205c85db72",
+     "447e7fd2e6bc98bb",
+     "455cd542ec3e4b5b",
+     "478f78449b1601f8",
+     "4a15e0b373535aa0",
+     "4c1a4b96138f447d",
+     "4c870bcf9163f9dd",
+     "600446cc7e823a79",
+     "6133dc6b46f70cf3",
+     "6a8b0998dd0a2030",
+     "6e8601c61a58b836",
+     "7506b43db9474982",
+     "85214692c8dc2f2a",
+     "8a7321ee09a592d2",
+     "8c4f40f4d800a82e",
+     "8ce56cdbe9885976",
+     "99c116ccbd8b9b85",
+     "99cffd821105bba6",
+     "9e0560f60b4e3d4e",
+     "aa4a7ed1e261e06b",
+     "ad019ebb9e837a72",
+     "bb8d9dad4162789c",
+     "bc0599f4f3a9c4ae",
+     "c02396bf4f82fda0",
+     "c06532d7e3657861",
+     "c2ec717f079fa591",
+     "c95891659335b7ef",
+     "cb575840f7075280",
+     "ce1c0c376e30fe7d",
+     "cf7e15a2904059f1",
+     "d7f8457131077594",
+     "d90171d17eed50e4",
+     "d925eabdeb276b8f",
+     "d93a6012fa120667",
+     "dab01f3217a8ed08",
+     "e2ab5f61dcd4cd81",
+     "e8f2656654cae3db",
+     "eeb403ddb25147f3",
+     "eff3c69e856646cd",
+     "f14958b24cc034ed",
+     "f1c556da57fb8773",
+     "fb0460877c614309"
+    ],
+    "ok": false,
+    "reason": null,
+    "remaining_shards": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "remaining_units": 156,
+    "status": "PARTIAL"
+   },
+   "progress_code": 1,
+   "progress_why": "",
+   "run": 1,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 0,
+    "nominal": [
+     3,
+     8,
+     1,
+     5
+    ],
+    "pending_shards_before": 11,
+    "retries": [],
+    "shards": [
+     3,
+     8,
+     1,
+     5
+    ],
+    "units": 57
+   }
+  },
+  {
+   "jobs": [
+    {
+     "code": 1,
+     "shard": 3,
+     "uploaded": [],
+     "why": "Crash: 209d5c8dbe624f2d"
+    },
+    {
+     "code": 1,
+     "shard": 8,
+     "uploaded": [],
+     "why": "Crash: 0d38d6a30d53c5b7"
+    },
+    {
+     "code": 1,
+     "shard": 7,
+     "uploaded": [],
+     "why": "Crash: 14e07bb00af5b01b"
+    },
+    {
+     "code": 1,
+     "shard": 9,
+     "uploaded": [],
+     "why": "Crash: 0ca983d83734f0a1"
+    },
+    {
+     "code": 1,
+     "shard": 2,
+     "uploaded": [],
+     "why": "Crash: 0ab1bf635522c4a0"
+    },
+    {
+     "code": 1,
+     "shard": 10,
+     "uploaded": [],
+     "why": "Crash: 0e618fbc366ca7f4"
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "partial_reduce_code": 1,
+   "partial_reduce_why": "ArtifactRefused: resumed: part-файлов нет вовсе",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": 0,
+    "failed_shards": [
+     2,
+     3,
+     7,
+     8,
+     9,
+     10
+    ],
+    "failed_units": [
+     "0ab1bf635522c4a0",
+     "0ca983d83734f0a1",
+     "0d38d6a30d53c5b7",
+     "0e618fbc366ca7f4",
+     "10e4d4d39ad6e6e4",
+     "13549990c906d944",
+     "14e07bb00af5b01b",
+     "1e0f11345f0491db",
+     "209d5c8dbe624f2d",
+     "243b78087164e70d",
+     "24e105d519769814",
+     "266f46ec36559e78",
+     "27175963554bf575",
+     "27670a264c8482b7",
+     "28db0408c3f96712",
+     "2b94d6254eac999c",
+     "2b9a98e5a7294d09",
+     "2ca4102f9c760bd7",
+     "2eadb0ea4333d0db",
+     "3498c3006c7ee973",
+     "34d503b7f0fb0464",
+     "359734f13ba7d514",
+     "35f7f9700fbe3064",
+     "3630c5d822a872f6",
+     "421054f0cbcdd417",
+     "42bff917c3263b63",
+     "447e7fd2e6bc98bb",
+     "455cd542ec3e4b5b",
+     "4787bb7fd8fba714",
+     "49427d254e0e79a2",
+     "4a15e0b373535aa0",
+     "4a38db25aab85cb1",
+     "4c870bcf9163f9dd",
+     "54542a333ea3a4a2",
+     "6133dc6b46f70cf3",
+     "67745de792fb31ca",
+     "680073b3c04c713d",
+     "685fb93dd45a0115",
+     "71cb424bc290dec4",
+     "727667cc579c316a",
+     "75039dfafac8d9e5",
+     "7506b43db9474982",
+     "751e7df4ff3ff261",
+     "7b8a69a6a1ace0d4",
+     "7d383ec92269b2b1",
+     "7fc674356854416e",
+     "8763b86125bfa55e",
+     "8a7321ee09a592d2",
+     "8c0af8e6c82d0bd0",
+     "8ccf4a3a089c71c1",
+     "8ce56cdbe9885976",
+     "9403d0c2972183c4",
+     "9974f2c67fa90b45",
+     "99c116ccbd8b9b85",
+     "9d3b75bafdf71a1b",
+     "9e0560f60b4e3d4e",
+     "a4650bb90d296f2e",
+     "aa4a7ed1e261e06b",
+     "ac7f547bbb090138",
+     "afa02141b500aecf",
+     "afc0fc0cf78ac351",
+     "b1582b897cfe1024",
+     "b22b0e1663a88189",
+     "b61410d491c49e86",
+     "bac42f4beac8ea9e",
+     "bc0599f4f3a9c4ae",
+     "c02396bf4f82fda0",
+     "c06532d7e3657861",
+     "c874c35c37a53581",
+     "cb575840f7075280",
+     "cbc2e418306ec911",
+     "cc11aea689fd5e6b",
+     "cf7e15a2904059f1",
+     "d925eabdeb276b8f",
+     "dab01f3217a8ed08",
+     "dc93a9ba9576596c",
+     "e17a1c2a6ad73d46",
+     "e2ff86bb2bfa5eb3",
+     "e6eca7626b3898d2",
+     "e8f2656654cae3db",
+     "ed42608a7ff04046",
+     "ee9a6c8947ead704",
+     "f14958b24cc034ed",
+     "f82498da1faf2dec",
+     "f91770515abe1987",
+     "fcdab3caab608f20"
+    ],
+    "ok": false,
+    "reason": null,
+    "remaining_shards": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "remaining_units": 156,
+    "status": "PARTIAL"
+   },
+   "progress_code": 1,
+   "progress_why": "",
+   "run": 2,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 2,
+    "nominal": [
+     7,
+     9,
+     2,
+     10
+    ],
+    "pending_shards_before": 11,
+    "retries": [
+     3,
+     8
+    ],
+    "shards": [
+     3,
+     8,
+     7,
+     9,
+     2,
+     10
+    ],
+    "units": 86
+   }
+  },
+  {
+   "jobs": [
+    {
+     "code": 1,
+     "shard": 3,
+     "uploaded": [],
+     "why": "Crash: 209d5c8dbe624f2d"
+    },
+    {
+     "code": 1,
+     "shard": 8,
+     "uploaded": [],
+     "why": "Crash: 0d38d6a30d53c5b7"
+    },
+    {
+     "code": 1,
+     "shard": 6,
+     "uploaded": [],
+     "why": "Crash: 11bc20d806b32f04"
+    },
+    {
+     "code": 1,
+     "shard": 0,
+     "uploaded": [],
+     "why": "Crash: 032c9ec7ce7953ef"
+    },
+    {
+     "code": 1,
+     "shard": 4,
+     "uploaded": [],
+     "why": "Crash: 06b35e271310894b"
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "partial_reduce_code": 1,
+   "partial_reduce_why": "ArtifactRefused: resumed: part-файлов нет вовсе",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": 0,
+    "failed_shards": [
+     0,
+     3,
+     4,
+     6,
+     8
+    ],
+    "failed_units": [
+     "032c9ec7ce7953ef",
+     "04a0a8f5347f8cf5",
+     "06b35e271310894b",
+     "0d38d6a30d53c5b7",
+     "1128412bb2cbfce2",
+     "11bc20d806b32f04",
+     "128c38f7df99d712",
+     "1727edfe012769e0",
+     "19dc634000d00afe",
+     "1adad3628b14e180",
+     "209d5c8dbe624f2d",
+     "243b78087164e70d",
+     "266f46ec36559e78",
+     "27670a264c8482b7",
+     "2979cf3ba4c26eb3",
+     "2b94d6254eac999c",
+     "2ca4102f9c760bd7",
+     "324daefea8009262",
+     "32998dbb1eb3c562",
+     "3498c3006c7ee973",
+     "34d503b7f0fb0464",
+     "3502f2b093842588",
+     "447e7fd2e6bc98bb",
+     "455cd542ec3e4b5b",
+     "4a15e0b373535aa0",
+     "4c870bcf9163f9dd",
+     "5c26ff5714981e06",
+     "6133dc6b46f70cf3",
+     "6da56585c95034b2",
+     "6f4f2eae0dd0dcd3",
+     "72ef218ddf7494a7",
+     "7506b43db9474982",
+     "7665a75096edbd58",
+     "795b54f391ddb4cc",
+     "7cdb32586e5b5955",
+     "7e4c2581375c133a",
+     "8036b6cb706813db",
+     "820f02837086f275",
+     "8734faeaf5291cfd",
+     "8a7321ee09a592d2",
+     "8a8a2b23f06cbd26",
+     "8ce56cdbe9885976",
+     "99c116ccbd8b9b85",
+     "9bd9deae111a1f88",
+     "9c2ef3f84a3f319a",
+     "9e0560f60b4e3d4e",
+     "aa4a7ed1e261e06b",
+     "ad5b4c14c16fbb20",
+     "b79aeb7bda2d51a6",
+     "b8d40b0f3a8fdfc9",
+     "bb69119cd11f00a4",
+     "bc0599f4f3a9c4ae",
+     "c02396bf4f82fda0",
+     "c06532d7e3657861",
+     "c0dfb7c2088d1668",
+     "c232ed68ab3080ab",
+     "c2df6454fb68e65c",
+     "cb1244d05790e2a4",
+     "cb575840f7075280",
+     "ccd9c7f1ecc0d250",
+     "cf7e15a2904059f1",
+     "d925eabdeb276b8f",
+     "dab01f3217a8ed08",
+     "dc62faf5c871eee7",
+     "e8f2656654cae3db",
+     "eaa4f31c22324a51",
+     "ecb5de328ed9b423",
+     "eddf9d7bea9e316a",
+     "f14958b24cc034ed",
+     "fda197128606c5e1",
+     "ffde0d7ef752ded1"
+    ],
+    "ok": false,
+    "reason": null,
+    "remaining_shards": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "remaining_units": 156,
+    "status": "STOP"
+   },
+   "progress_code": 1,
+   "progress_why": "",
+   "run": 3,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 6,
+    "nominal": [
+     6,
+     0,
+     4
+    ],
+    "pending_shards_before": 11,
+    "retries": [
+     3,
+     8
+    ],
+    "shards": [
+     3,
+     8,
+     6,
+     0,
+     4
+    ],
+    "units": 71
+   }
+  }
+ ],
+ "E_fourth_run": {
+  "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+  "plan_code": 0,
+  "plan_why": "",
+  "run": 4,
+  "select_code": 1,
+  "select_why": "ВЫБОР НЕ СДЕЛАН: STOP: восстановительный прогон не закроет ступень — повторов 11 при потолке матрицы 6"
+ },
+ "K1": [
+  {
+   "jobs": [
+    {
+     "code": 0,
+     "shard": 3,
+     "uploaded": [
+      "209d5c8dbe624f2d",
+      "266f46ec36559e78",
+      "27670a264c8482b7",
+      "2b94d6254eac999c",
+      "2ca4102f9c760bd7",
+      "455cd542ec3e4b5b",
+      "4c870bcf9163f9dd",
+      "6133dc6b46f70cf3",
+      "9e0560f60b4e3d4e",
+      "bc0599f4f3a9c4ae",
+      "c06532d7e3657861",
+      "cb575840f7075280",
+      "dab01f3217a8ed08",
+      "e8f2656654cae3db"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 8,
+     "uploaded": [
+      "0d38d6a30d53c5b7",
+      "243b78087164e70d",
+      "3498c3006c7ee973",
+      "34d503b7f0fb0464",
+      "447e7fd2e6bc98bb",
+      "4a15e0b373535aa0",
+      "7506b43db9474982",
+      "8a7321ee09a592d2",
+      "8ce56cdbe9885976",
+      "99c116ccbd8b9b85",
+      "aa4a7ed1e261e06b",
+      "c02396bf4f82fda0",
+      "cf7e15a2904059f1",
+      "d925eabdeb276b8f",
+      "f14958b24cc034ed"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 1,
+     "uploaded": [
+      "0441a0096a36a4c7",
+      "1012217e196d843e",
+      "32ea7c9886c45dc9",
+      "36db81bc73e4730f",
+      "42cf97205c85db72",
+      "478f78449b1601f8",
+      "4c1a4b96138f447d",
+      "600446cc7e823a79",
+      "6a8b0998dd0a2030",
+      "6e8601c61a58b836",
+      "ad019ebb9e837a72",
+      "c95891659335b7ef",
+      "ce1c0c376e30fe7d",
+      "d90171d17eed50e4",
+      "eeb403ddb25147f3"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 5,
+     "uploaded": [
+      "3b4882b8cf015785",
+      "3fb21ce9f551b706",
+      "85214692c8dc2f2a",
+      "8c4f40f4d800a82e",
+      "99cffd821105bba6",
+      "bb8d9dad4162789c",
+      "c2ec717f079fa591",
+      "d7f8457131077594",
+      "d93a6012fa120667",
+      "e2ab5f61dcd4cd81",
+      "eff3c69e856646cd",
+      "f1c556da57fb8773",
+      "fb0460877c614309"
+     ],
+     "why": ""
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": null,
+    "failed_shards": null,
+    "failed_units": null,
+    "ok": false,
+    "reason": "часть этого прогона не принята: 209d5c8dbe624f2d.json: отпечаток содержимого fc7b7e97b0d75f56, в файле 69c9c69bde63502e — содержимое не то, что заявлено",
+    "remaining_shards": null,
+    "remaining_units": null,
+    "status": "KILL"
+   },
+   "progress_code": 1,
+   "progress_why": "",
+   "run": 1,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 0,
+    "nominal": [
+     3,
+     8,
+     1,
+     5
+    ],
+    "pending_shards_before": 11,
+    "retries": [],
+    "shards": [
+     3,
+     8,
+     1,
+     5
+    ],
+    "units": 57
+   },
+   "tampered": "209d5c8dbe624f2d"
+  }
+ ],
+ "K2": [
+  {
+   "jobs": [
+    {
+     "code": 0,
+     "shard": 3,
+     "uploaded": [
+      "209d5c8dbe624f2d",
+      "266f46ec36559e78",
+      "27670a264c8482b7",
+      "2b94d6254eac999c",
+      "2ca4102f9c760bd7",
+      "455cd542ec3e4b5b",
+      "4c870bcf9163f9dd",
+      "6133dc6b46f70cf3",
+      "9e0560f60b4e3d4e",
+      "bc0599f4f3a9c4ae",
+      "c06532d7e3657861",
+      "cb575840f7075280",
+      "dab01f3217a8ed08",
+      "e8f2656654cae3db"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 8,
+     "uploaded": [
+      "0d38d6a30d53c5b7",
+      "243b78087164e70d",
+      "3498c3006c7ee973",
+      "34d503b7f0fb0464",
+      "447e7fd2e6bc98bb",
+      "4a15e0b373535aa0",
+      "7506b43db9474982",
+      "8a7321ee09a592d2",
+      "8ce56cdbe9885976",
+      "99c116ccbd8b9b85",
+      "aa4a7ed1e261e06b",
+      "c02396bf4f82fda0",
+      "cf7e15a2904059f1",
+      "d925eabdeb276b8f",
+      "f14958b24cc034ed"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 1,
+     "uploaded": [
+      "0441a0096a36a4c7",
+      "1012217e196d843e",
+      "32ea7c9886c45dc9",
+      "36db81bc73e4730f",
+      "42cf97205c85db72",
+      "478f78449b1601f8",
+      "4c1a4b96138f447d",
+      "600446cc7e823a79",
+      "6a8b0998dd0a2030",
+      "6e8601c61a58b836",
+      "ad019ebb9e837a72",
+      "c95891659335b7ef",
+      "ce1c0c376e30fe7d",
+      "d90171d17eed50e4",
+      "eeb403ddb25147f3"
+     ],
+     "why": ""
+    },
+    {
+     "code": 0,
+     "shard": 5,
+     "uploaded": [
+      "3b4882b8cf015785",
+      "3fb21ce9f551b706",
+      "85214692c8dc2f2a",
+      "8c4f40f4d800a82e",
+      "99cffd821105bba6",
+      "bb8d9dad4162789c",
+      "c2ec717f079fa591",
+      "d7f8457131077594",
+      "d93a6012fa120667",
+      "e2ab5f61dcd4cd81",
+      "eff3c69e856646cd",
+      "f1c556da57fb8773",
+      "fb0460877c614309"
+     ],
+     "why": ""
+    }
+   ],
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "plan_code": 0,
+   "plan_why": "",
+   "progress": {
+    "arrived_units": null,
+    "failed_shards": null,
+    "failed_units": null,
+    "ok": false,
+    "reason": "часть этого прогона не принята: 209d5c8dbe624f2d: научные координаты части не совпадают с манифестом",
+    "remaining_shards": null,
+    "remaining_units": null,
+    "status": "KILL"
+   },
+   "progress_code": 1,
+   "progress_why": "",
+   "run": 1,
+   "select_code": 0,
+   "select_why": "",
+   "selection": {
+    "batches": [
+     [
+      3,
+      8,
+      1,
+      5
+     ],
+     [
+      7,
+      9,
+      2,
+      10
+     ],
+     [
+      6,
+      0,
+      4
+     ]
+    ],
+    "carried": 0,
+    "nominal": [
+     3,
+     8,
+     1,
+     5
+    ],
+    "pending_shards_before": 11,
+    "retries": [],
+    "shards": [
+     3,
+     8,
+     1,
+     5
+    ],
+    "units": 57
+   },
+   "tampered": "209d5c8dbe624f2d"
+  }
+ ],
+ "K_next_select": {
+  "K1": {
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "plan_code": 0,
+   "plan_why": "",
+   "run": 2,
+   "select_code": 1,
+   "select_why": "KILL: часть прошлого прогона не принята: 209d5c8dbe624f2d.json: отпечаток содержимого fc7b7e97b0d75f56, в файле 69c9c69bde63502e — содержимое не то, что заявлено"
+  },
+  "K2": {
+   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "plan_code": 0,
+   "plan_why": "",
+   "run": 2,
+   "select_code": 1,
+   "select_why": "KILL: часть прошлого прогона не принята: 209d5c8dbe624f2d: научные координаты части не совпадают с манифестом"
+  }
+ },
  "R1": {
   "distinct": 156,
   "executions": 156
  },
  "R2": {
-  "executions": 158,
-  "failed_by_run": [
-   [
-    3
+  "B": {
+   "executions": 159,
+   "failed_by_run": [
+    [
+     3,
+     8
+    ],
+    [
+     7
+    ],
+    []
    ],
-   [
-    7
+   "recomputed_after_upload": [],
+   "rule": true,
+   "uploaded": 156,
+   "uploaded_once": true
+  },
+  "D": {
+   "executions": 161,
+   "failed_by_run": [
+    [
+     1,
+     3,
+     8
+    ],
+    [
+     7,
+     9
+    ],
+    [],
+    []
    ],
-   [],
-   []
-  ],
-  "recomputed_after_upload": [],
-  "retry_priority": true,
-  "uploaded": 156
+   "recomputed_after_upload": [],
+   "rule": true,
+   "uploaded": 156,
+   "uploaded_once": true
+  }
  },
  "R3": {
   "first": {
    "A": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
-   "B": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0"
+   "B": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+   "D": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0"
   },
   "reference": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
-  "runs_A": [
-   "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
-   "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
-   "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0"
-  ],
-  "runs_B": [
-   "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
-   "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
-   "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
-   "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0"
-  ]
+  "runs": {
+   "A": [
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0"
+   ],
+   "B": [
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0"
+   ],
+   "D": [
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
+    "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0"
+   ]
+  }
  },
  "R3_control": {
   "code": 1,
@@ -1488,9 +3049,9 @@
     "from_execution_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "from_request_sha": "cccccccccccccccccccccccccccccccccccccccc",
     "from_science_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "parts_digest": "7adca6d114c3048f",
-    "reused": 142,
-    "task_ids_digest": "d3d687e70069504e"
+    "parts_digest": "53f6cb3fcf005b07",
+    "reused": 99,
+    "task_ids_digest": "73e8b95f48228212"
    },
    "checkpoint.json_reused_ref": {},
    "ledger_digest": [
@@ -1507,25 +3068,82 @@
     "from_execution_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "from_request_sha": "cccccccccccccccccccccccccccccccccccccccc",
     "from_science_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "parts_digest": "7adca6d114c3048f",
-    "reused": 142,
-    "task_ids_digest": "d3d687e70069504e"
+    "parts_digest": "53f6cb3fcf005b07",
+    "reused": 99,
+    "task_ids_digest": "73e8b95f48228212"
+   },
+   "reduced.json_reused_ref": {}
+  },
+  "D": {
+   "cells": 15552,
+   "cells_bytes_equal": true,
+   "cells_evaluable": 6398,
+   "checkpoint.json_equal_without_reused": true,
+   "checkpoint.json_raw_equal": false,
+   "checkpoint.json_reused_got": {
+    "from_execution_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "from_request_sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "from_science_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "parts_digest": "41d4966514a9e11e",
+    "reused": 141,
+    "task_ids_digest": "8e2fee6cbb682cdc"
+   },
+   "checkpoint.json_reused_ref": {},
+   "ledger_digest": [
+    "ba4722b3ad8ec19a",
+    "ba4722b3ad8ec19a"
+   ],
+   "output_digest": [
+    "737274d2ec456f12",
+    "737274d2ec456f12"
+   ],
+   "reduced.json_equal_without_reused": true,
+   "reduced.json_raw_equal": false,
+   "reduced.json_reused_got": {
+    "from_execution_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "from_request_sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "from_science_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "parts_digest": "41d4966514a9e11e",
+    "reused": 141,
+    "task_ids_digest": "8e2fee6cbb682cdc"
    },
    "reduced.json_reused_ref": {}
   }
  },
+ "S1": {
+  "A": [
+   0,
+   0,
+   0
+  ],
+  "B": [
+   1,
+   1,
+   0
+  ],
+  "D": [
+   1,
+   1,
+   0,
+   0
+  ]
+ },
  "cap": 4,
  "checks": {
-  "R1 A: каждый task_id исполнен ровно один раз": true,
-  "R2 B: упавшее повторено первым, выгруженное не пересчитано, каждый выгружен ровно один раз": true,
+  "N1 B: падения в пределах места закрыты номинальными прогонами, четвёртого нет": true,
+  "N2 D: сверх места остаток перенесён, восстановительный — только повторы": true,
+  "N3 K1 и K2: приехавшее, но не принятое — KILL, не повтор": true,
+  "R1 A: каждый task_id исполнен ровно раз": true,
+  "R2 B и D: партия целиком и впервые, повторы — упавшее, первыми, в пределах места; выгруженное не пересчитано": true,
   "R3 манифест продолжений побайтово равен первому; чужой отвергнут": true,
-  "R4 сведение A и B = эталон (без поля reused — побайтово)": true,
-  "S1 PARTIAL без падений зелёный, падение красное": true,
+  "R4 сведение A, B, D = эталон (без поля reused — побайтово)": true,
+  "S1 коды итогов: PARTIAL зелёный, падение красное": true,
   "S2 сведение незаконченной ступени отказывает": true,
-  "S3 C: STOP после восстановительного, пятый отвергнут": true,
-  "S4 ни один выбор не больше потолка": true
+  "S3 STOP: после восстановительного и до него; пятого нет": true,
+  "S4 ни один выбор не больше матрицы": true
  },
  "look": 4000,
+ "matrix": 6,
  "python": "3.11.15",
  "reference": {
   "manifest_sha256": "ebb04cae9f0aa0bb67bdde2e0c26dffc1c54dce6f752ecf9d76bf1aaa2339fe0",
@@ -1545,6 +3163,6 @@
   "shards": 11,
   "units": 156
  },
- "seconds": 20.1,
+ "seconds": 28.6,
  "verdict": "PASS"
 }

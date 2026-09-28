@@ -12,14 +12,22 @@
     задания раскладываются по партиям LPT второго уровня с потолком
         `BATCH_CAP` заданий на партию — чтобы суммы CPU партий были
         близки, а не «первые 165, следующие 165»;
-    каждый прогон берёт не больше `BATCH_CAP` ещё не выполненных заданий
-        в порядке партий, поэтому упавшее раньше идёт первым;
+    номинальный прогон r ОБЯЗАН продвинуть свою партию r целиком: её
+        задания ещё ни разу не запускались; сверх неё он берёт до
+        `RETRY_CAP` = 256 - 165 = 91 повторов — заданий прошлых партий,
+        чей результат отсутствует или неполон, потому что задание упало;
+        не влезшие повторы переносятся дальше, упавшее раньше — первым;
+    после третьего номинального все задания запускались хотя бы раз;
+        четвёртый прогон — единственный восстановительный, только
+        повторы, до `RUN_MATRIX` = 256; больше 256 перед ним или остаток
+        после него — STOP, пятого нет;
+    выполненный юнит не считается повторно ни при каком исходе; часть,
+        которая приехала, но не принята (наука, провенанс, identity), —
+        KILL, а не повтор;
     продолжение получает цепочку прошлых прогонов, планирует ступень
         заново и обязано получить ТОТ ЖЕ манифест — иначе отказ;
     научное сведение — только когда остаток пуст; промежуточный прогон
-        кончается отчётом о ходе, а не частичной наукой;
-    `NOMINAL_RUNS` номинальных прогонов и `RECOVERY_RUNS`
-        восстановительный; не закрыл ступень — STOP.
+        кончается отчётом о ходе, а не частичной наукой.
 
 Партия — исполнительное понятие. В `task_id` и в манифест она не входит:
 раскладка по партиям выводится из манифеста детерминированно, заново в
@@ -36,9 +44,14 @@ from simulation import s5b_shard as S
 
 from . import cost, dryplan, scheduler
 
-#: Потолок заданий одного прогона. 495 / 3 = 165 ровно; до потолка
-#: матрицы 256 остаётся запас.
+#: Номинальная партия: 495 / 3 = 165 ровно.
 BATCH_CAP = 165
+
+#: Потолок матрицы одного прогона — платформенный, 256.
+RUN_MATRIX = S.GITHUB_MATRIX_MAX_JOBS
+
+#: Повторы сверх номинальной партии: до потолка матрицы остаётся 91.
+RETRY_CAP = RUN_MATRIX - BATCH_CAP
 
 #: Номинальные прогоны и один восстановительный. Воркфлоу принимает не
 #: больше трёх прошлых прогонов, поэтому четвёртый — последний возможный.
@@ -50,6 +63,8 @@ MAX_PREVIOUS_RUNS = MAX_RUNS - 1
 COMPLETE = "COMPLETE"
 PARTIAL = "PARTIAL"
 STOP = "STOP"
+#: Приехавшее, но не принятое — не повтор: научный вход испорчен
+KILL = "KILL"
 
 #: Партии задают только порядок исполнения замороженных юнитов
 BATCHES_ARE_EXECUTION_ONLY = True
@@ -180,19 +195,26 @@ def check(manifest: dict) -> dict[int, list[dict]]:
 
 
 def select(manifest: dict, done: set[str], *, run: int,
-           cap: int = BATCH_CAP) -> dict:
-    """Задания этого прогона: не больше `cap` ещё не выполненных.
+           cap: int = BATCH_CAP, matrix: int = RUN_MATRIX) -> dict:
+    """Задания этого прогона: номинальная партия и повторы сверх неё.
 
-    Порядок — партия за партией, внутри партии тяжёлые вперёд. Всё, что
-    осталось от прошлых партий (упавшее или не влезшее), поэтому идёт
-    раньше текущей партии. Задание берётся, если в нём есть хоть один
-    не выполненный юнит, и исполняются ТОЛЬКО такие юниты: выполненное не
-    считается повторно ни при каком исходе.
+    Номинальный прогон r (1..3) берёт партию r ЦЕЛИКОМ — её задания ещё
+    не запускались, и хоть один выполненный юнит в ней значит, что
+    цепочка не та, что номер прогона. Сверх неё — до `matrix - cap`
+    повторов: задания прошлых партий с отсутствующим или неполным
+    результатом, партия за партией, тяжёлые вперёд; не влезшие ждут
+    следующего прогона. Восстановительный прогон (4) — только повторы,
+    не больше `matrix`; иначе STOP. Исполняются лишь невыполненные юниты
+    задания: выполненное не считается повторно ни при каком исходе.
     """
     if not 1 <= run <= MAX_RUNS:
         raise MultiRunRefused(
             f"STOP: прогон {run} — допустимы 1..{MAX_RUNS} "
             f"({NOMINAL_RUNS} номинальных и {RECOVERY_RUNS} восстановительный)")
+    if not 1 <= cap < matrix <= S.GITHUB_MATRIX_MAX_JOBS:
+        raise MultiRunRefused(
+            f"партия {cap} и матрица {matrix}: нужно 1 <= партия < матрица "
+            f"<= {S.GITHUB_MATRIX_MAX_JOBS}")
     by_shard = check(manifest)
     declared = {r["task_id"] for rows in by_shard.values() for r in rows}
     stray = sorted(done - declared)
@@ -203,28 +225,45 @@ def select(manifest: dict, done: set[str], *, run: int,
         raise MultiRunRefused(
             f"{len(plan)} партий при потолке {cap}: в {NOMINAL_RUNS} "
             f"номинальных прогона ступень не укладывается")
-    batch_of = {s: b for b, members in enumerate(plan) for s in members}
-    order = [s for members in plan for s in members]
-    pending = [s for s in order
-               if any(r["task_id"] not in done for r in by_shard[s])]
-    if not pending:
-        raise MultiRunRefused("остатка нет: считать нечего, сразу сведение")
-    if run == MAX_RUNS and len(pending) > cap:
+
+    def pending(s):
+        return any(r["task_id"] not in done for r in by_shard[s])
+
+    attempted = [s for b in plan[:run - 1] for s in b]
+    untouched = [s for b in plan[run - 1:] for s in b]
+    early = [s for s in untouched
+             if any(r["task_id"] in done for r in by_shard[s])]
+    if early:
         raise MultiRunRefused(
-            f"STOP: восстановительный прогон не закроет ступень — осталось "
-            f"{len(pending)} заданий при потолке {cap}")
-    chosen = pending[:cap]
+            f"задания {early[:3]} ещё не запускались по номеру прогона {run}, "
+            f"а результаты у них есть: цепочка не та, что номер прогона")
+    owed = [s for s in attempted if pending(s)]
+    if run <= NOMINAL_RUNS:
+        nominal = list(plan[run - 1]) if run - 1 < len(plan) else []
+        retries = owed[:matrix - cap]
+    else:
+        nominal = []
+        if len(owed) > matrix:
+            raise MultiRunRefused(
+                f"STOP: восстановительный прогон не закроет ступень — "
+                f"повторов {len(owed)} при потолке матрицы {matrix}")
+        retries = owed
+    chosen = retries + nominal
+    if not chosen:
+        raise MultiRunRefused("остатка нет: считать нечего, сразу сведение")
     units = sorted(r["task_id"] for s in chosen for r in by_shard[s]
                    if r["task_id"] not in done)
-    return {"run": run, "cap": cap,
+    return {"run": run, "cap": cap, "matrix": matrix,
             "manifest_digest": body_digest(manifest),
             "batches": [list(b) for b in plan],
             "shards": chosen,
-            "retries": [s for s in chosen if batch_of[s] < run - 1],
+            "retries": retries,
+            "nominal": nominal,
+            "carried": len(owed) - len(retries),
             "units": units,
             "done_before": len(done),
             "pending_units_before": len(declared) - len(done),
-            "pending_shards_before": len(pending)}
+            "pending_shards_before": len(owed) + len(untouched)}
 
 
 def batch_manifest(manifest: dict, selection: dict) -> dict:
@@ -272,10 +311,14 @@ def progress(manifest: dict, selection: dict, done_before: set[str],
         raise MultiRunRefused(f"приехали невыбранные юниты: {stray[:3]}")
     failed = chosen - arrived
     remaining = declared - done_before - arrived
+    owed = {shard_of[t] for t in remaining}
     run = selection["run"]
     if not remaining:
         status = COMPLETE
     elif run >= MAX_RUNS:
+        status = STOP
+    elif run == NOMINAL_RUNS and len(owed) > selection["matrix"]:
+        # восстановительный прогон этого уже не вместит
         status = STOP
     else:
         status = PARTIAL
@@ -290,4 +333,9 @@ def progress(manifest: dict, selection: dict, done_before: set[str],
             "failed_shards": sorted({shard_of[t] for t in failed}),
             "done_units": len(done_before | arrived),
             "remaining_units": len(remaining),
-            "remaining_shards": sorted({shard_of[t] for t in remaining})}
+            "remaining_shards": sorted(owed)}
+
+
+def killed(reason: str, run: int) -> dict:
+    """Итог прогона, чей научный вход не принят. Не повтор — KILL."""
+    return {"run": run, "status": KILL, "ok": False, "reason": reason}
